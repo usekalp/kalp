@@ -23,13 +23,14 @@
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
-    "@antfu/ni": "^24.4.0",
-    "@clack/prompts": "^0.9.1",
+    "@antfu/ni": "24.4.0",
+    "@clack/prompts": "0.9.1",
     "@kalphq/sdk": "workspace:*",
-    "citty": "^0.1.6",
-    "esbuild": "^0.25.0",
-    "picocolors": "^1.1.1",
-    "zod": "^3.25.76"
+    "citty": "0.1.6",
+    "esbuild": "0.25.0",
+    "picocolors": "1.1.1",
+    "zod": "3.25.76",
+    "zod-to-json-schema": "3.25.2"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
