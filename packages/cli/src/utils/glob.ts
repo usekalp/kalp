@@ -1,13 +1,10 @@
 import { readdir, stat } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 
-/**
- * Minimal glob for patterns like `some/path/* /index.ts`.
- * Matches one directory level then a fixed filename.
- */
 export async function glob(pattern: string): Promise<string[]> {
-  const dir = dirname(dirname(pattern));
-  const filename = pattern.split("/").pop() ?? pattern.split("\\").pop() ?? "";
+  const normalized = pattern.replace(/\\/g, "/");
+  const dir = dirname(dirname(normalized));
+  const filename = normalized.split("/").pop() ?? "";
 
   const results: string[] = [];
 

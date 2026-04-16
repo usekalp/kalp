@@ -1,9 +1,0 @@
-{
-  "name": "__PROJECT_NAME__",
-  "version": "0.0.1",
-  "private": true,
-  "devDependencies": {
-    "@kalphq/cli": "latest",
-    "@kalphq/sdk": "latest"
-  }
-}

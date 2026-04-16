@@ -9,5 +9,8 @@
   "dependencies": {
     "@kalphq/sdk": "latest",
     "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@kalphq/cli": "latest"
   }
 }

@@ -1,12 +1,34 @@
 import { writeFile, readFile, readdir, cp } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
+import { format } from "prettier";
 import { getTemplateMeta, type TemplateId } from "./templates/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export const TEMPLATES_DIR = join(__dirname, "..", "templates");
+
+async function formatGeneratedFile(
+  filePath: string,
+  content: string,
+): Promise<string> {
+  if (!filePath.endsWith(".ts") && !filePath.endsWith(".tsx")) {
+    return content;
+  }
+
+  try {
+    return await format(content, {
+      parser: "typescript",
+      semi: true,
+      singleQuote: false,
+      trailingComma: "all",
+      printWidth: 80,
+    });
+  } catch {
+    return content;
+  }
+}
 
 async function replacePlaceholders(
   dir: string,
@@ -27,7 +49,10 @@ async function replacePlaceholders(
             changed = true;
           }
         }
-        if (changed) await writeFile(fp, src, "utf-8");
+        if (changed) {
+          const formatted = await formatGeneratedFile(fp, src);
+          await writeFile(fp, formatted, "utf-8");
+        }
       } catch {
         // binary file — skip
       }
@@ -37,11 +62,17 @@ async function replacePlaceholders(
 
 export async function scaffoldProject(opts: {
   projectName: string;
-  cwd: string;
+  targetDir: string;
 }): Promise<void> {
-  const { projectName, cwd } = opts;
+  const { projectName, targetDir } = opts;
 
-  // ── kalp.config.ts at root ─────────────────────────────────────────────
+  // ── Copy project template (flat) to target directory ──────────────────
+  await cp(join(TEMPLATES_DIR, "project"), targetDir, {
+    recursive: true,
+    force: true,
+  });
+
+  // ── kalp.config.ts ────────────────────────────────────────────────────
   const kalpConfig = `import { defineConfig } from "@kalphq/sdk";
 
 export default defineConfig({
@@ -49,22 +80,10 @@ export default defineConfig({
   secrets: [],
 });
 `;
-  await writeFile(join(cwd, "kalp.config.ts"), kalpConfig, "utf-8");
+  await writeFile(join(targetDir, "kalp.config.ts"), kalpConfig, "utf-8");
 
-  // ── Root package.json (resolves @kalphq/sdk for kalp.config.ts) ──────
-  await cp(join(TEMPLATES_DIR, "project-root"), cwd, {
-    recursive: true,
-    force: true,
-  });
-  await replacePlaceholders(cwd, { __PROJECT_NAME__: projectName });
-
-  // ── kalp/ sub-package via fs.cp ───────────────────────────────────────
-  const kalpDir = join(cwd, "kalp");
-  await cp(join(TEMPLATES_DIR, "project"), kalpDir, {
-    recursive: true,
-    force: true,
-  });
-  await replacePlaceholders(kalpDir, { __PROJECT_NAME__: projectName });
+  // ── Replace placeholders across the whole target ──────────────────────
+  await replacePlaceholders(targetDir, { __PROJECT_NAME__: projectName });
 }
 
 export async function scaffoldAgent(opts: {
@@ -74,7 +93,7 @@ export async function scaffoldAgent(opts: {
 }): Promise<void> {
   const { agentName, templateId, cwd } = opts;
   const meta = getTemplateMeta(templateId);
-  const agentDir = join(cwd, "kalp", "agents", agentName);
+  const agentDir = join(cwd, "agents", agentName);
 
   // ── Agent files via fs.cp ─────────────────────────────────────────────
   await cp(join(TEMPLATES_DIR, "agents", templateId), agentDir, {

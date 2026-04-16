@@ -11,6 +11,17 @@ export interface TemplateMeta {
   secrets: string[];
 }
 
+export interface TemplateFile {
+  path: string;
+  content: string;
+}
+
+export interface Template {
+  id: TemplateId;
+  secrets: string[];
+  files: (agent: string) => TemplateFile[];
+}
+
 export const TEMPLATES: TemplateMeta[] = [
   {
     id: "customer-support",

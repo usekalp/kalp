@@ -9,7 +9,8 @@
     "check-types": "turbo run check-types",
     "change": "changeset",
     "version-packages": "changeset version",
-    "release": "turbo build && changeset publish"
+    "release": "turbo build && changeset publish",
+    "dev-release": "node scripts/dev-release.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.30.0",

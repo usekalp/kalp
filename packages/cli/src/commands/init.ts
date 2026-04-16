@@ -1,9 +1,14 @@
-import { join } from "node:path";
-import { access } from "node:fs/promises";
+import { resolve, basename } from "node:path";
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { scaffoldProject } from "../scaffold.js";
+import { promptProjectName } from "../utils/ui.js";
+import {
+  ensureDirectory,
+  installDeps,
+  isProjectInitialized,
+} from "../utils/fs.js";
 
 const LOGO = "🦋";
 
@@ -14,55 +19,61 @@ export default defineCommand({
 
     p.intro(`${LOGO} ${pc.bold("kalp init")}`);
 
+    const projectInputName = await promptProjectName({
+      message: "What is the name of your project?",
+      placeholder: "my-agent",
+      allowCurrentDir: true,
+    });
+
+    const isCurrentDir = projectInputName === ".";
+    const targetDir = isCurrentDir ? cwd : resolve(cwd, projectInputName);
+    const projectName = isCurrentDir ? basename(cwd) : projectInputName;
+
     // ── Guard: already initialized ───────────────────────────────────────
-    try {
-      await access(join(cwd, "kalp.config.ts"));
+    if (await isProjectInitialized(targetDir)) {
       p.log.error(
-        `${pc.cyan("kalp.config.ts")} already exists. Run ${pc.cyan("kalp create")} to add an agent.`,
+        `${pc.cyan("kalp.config.ts")} already exists in this directory. Run ${pc.cyan("kalp create")} to add an agent.`,
       );
       process.exit(1);
-    } catch {
-      // expected: file doesn't exist yet
     }
 
-    const answers = await p.group(
-      {
-        name: () =>
-          p.text({
-            message: "What is the name of your project?",
-            placeholder: "my-project",
-            validate: (v) => {
-              if (!v.trim()) return "Project name is required.";
-              if (!/^[a-z0-9-]+$/.test(v))
-                return "Use lowercase letters, numbers, and dashes only.";
-            },
-          }),
-      },
-      {
-        onCancel: () => {
-          p.cancel("Setup cancelled.");
-          process.exit(0);
-        },
-      },
-    );
+    // ── Create target directory if needed ─────────────────────────────────
+    if (!isCurrentDir) {
+      await ensureDirectory(targetDir);
+    }
 
     const s = p.spinner();
+
     s.start("Creating project structure");
-    await scaffoldProject({ projectName: answers.name, cwd });
+    await scaffoldProject({ projectName, targetDir });
     s.stop("Project structure created");
 
-    p.note(
-      [
-        `${pc.dim("•")} ${pc.cyan("kalp.config.ts")} ${pc.dim("— project config")}`,
-        `${pc.dim("•")} ${pc.cyan("kalp/")} ${pc.dim("— agents sub-package")}`,
-        ``,
-        `${pc.dim("Next steps:")}`,
-        `  ${pc.cyan("cd kalp && npm install")}`,
-        `  ${pc.cyan("kalp create")} ${pc.dim("— add your first agent")}`,
-      ].join("\n"),
-      "Created",
-    );
+    s.start("Installing dependencies");
+    try {
+      await installDeps(targetDir);
+      s.stop("Dependencies installed");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      s.stop(pc.yellow("Install failed"));
+      p.log.warn(
+        `Run ${pc.cyan("npx --no-install nci")} (or ${pc.cyan("npm install")}) manually in ${isCurrentDir ? "this directory" : projectInputName + "/"}`,
+      );
+      p.log.info(pc.dim(msg.split("\n")[0] ?? "Unknown error"));
+    }
 
-    p.outro(`${LOGO} ${pc.green("Project initialized.")}`);
+    p.log.success("Project scaffolded");
+    p.log.info(`${pc.cyan("kalp.config.ts")} — project config`);
+    p.log.info(`${pc.cyan("package.json")} — dependencies`);
+    p.log.info(`${pc.cyan("agents/")} — your agents live here`);
+    console.log("");
+    p.log.info(pc.bold("Next"));
+    if (!isCurrentDir) {
+      p.log.info(`1. ${pc.cyan(`cd ${projectInputName}`)}`);
+      p.log.info(`2. ${pc.cyan("kalp create")} — add your first agent`);
+    } else {
+      p.log.info(`1. ${pc.cyan("kalp create")} — add your first agent`);
+    }
+
+    p.outro(pc.green("Kalp initialized successfully."));
   },
 });
