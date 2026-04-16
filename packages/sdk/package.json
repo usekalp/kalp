@@ -1,0 +1,57 @@
+{
+  "name": "@kalphq/sdk",
+  "version": "0.1.0",
+  "description": "The official SDK for building Kalp agents",
+  "type": "module",
+  "license": "MIT",
+  "author": "Kalp HQ",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kalphq/kalp"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "zod": "^3.23.0"
+  },
+  "peerDependencies": {
+    "drizzle-orm": ">=0.30.0",
+    "lucide-react": ">=0.300.0"
+  },
+  "peerDependenciesMeta": {
+    "drizzle-orm": {
+      "optional": true
+    },
+    "lucide-react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "drizzle-orm": "^0.44.0",
+    "lucide-react": "^0.400.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.0.0",
+    "@types/node": "^22.0.0"
+  }
+}
