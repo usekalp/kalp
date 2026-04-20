@@ -1,5 +1,16 @@
 # @kalphq/cli
 
+## 0.1.0
+
+### Minor Changes
+
+- feat: restructure project topology, implement global auth, and introduce unified HandlerContext with type-safe secrets
+
+### Patch Changes
+
+- Updated dependencies
+  - @kalphq/sdk@0.2.0
+
 ## 0.0.0-dev-20260420023403
 
 ### Patch Changes
