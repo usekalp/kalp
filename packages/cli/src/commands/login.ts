@@ -1,7 +1,7 @@
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 

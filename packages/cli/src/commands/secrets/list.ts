@@ -3,7 +3,7 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getAuthToken } from "../../utils/auth.js";
+import { getAuthToken } from "@/utils/auth";
 
 const LOGO = "🦋";
 

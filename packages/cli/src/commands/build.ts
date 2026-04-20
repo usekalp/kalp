@@ -3,11 +3,8 @@ import { join } from "node:path";
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { ensureConfig } from "../utils/fs.js";
-import {
-  readAgentManifest,
-  writeVersionedManifest,
-} from "../utils/manifest.js";
+import { ensureConfig } from "@/utils/fs";
+import { readAgentManifest, writeVersionedManifest } from "@/utils/manifest";
 
 const LOGO = "🦋";
 

@@ -18,9 +18,10 @@ export default defineCommand({
     },
   },
   subCommands: {
-    list: () => import("./list.js").then((r) => r.default),
-    add: () => import("./add.js").then((r) => r.default),
-    delete: () => import("./delete.js").then((r) => r.default),
+    list: () => import("./list").then((r) => r.default),
+    add: () => import("./add").then((r) => r.default),
+    delete: () => import("./delete").then((r) => r.default),
+    sync: () => import("./sync").then((r) => r.default),
   },
   run({ args }) {
     if (!args.help) {
@@ -32,6 +33,9 @@ export default defineCommand({
     p.log.message(`  ${pc.cyan("list")}   List secrets from Kalp Cloud`);
     p.log.message(`  ${pc.cyan("add")}    Add a secret to Kalp Cloud`);
     p.log.message(`  ${pc.cyan("delete")} Delete a secret from Kalp Cloud`);
+    p.log.message(
+      `  ${pc.cyan("sync")}   Sync secrets from Kalp Cloud to local config`,
+    );
     p.log.message("");
     p.log.message(
       `Run ${pc.cyan("kalp secrets <subcommand> --help")} for more info.`,

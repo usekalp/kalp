@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-// ─── Global Secrets Registry (Module Augmentation) ──────────────────────────────
-
 /**
  * Global registry for project secrets.
  *
@@ -17,8 +15,9 @@ import { z } from "zod";
  * }
  * ```
  */
+/** Global registry for project secrets */
 export interface SecretsRegistry {
-  keys: string[];
+  keys: readonly string[];
 }
 
 /** Inferred secret keys from the global registry */
@@ -85,7 +84,13 @@ export type KalpModelId =
   | LocalModelId;
 
 export interface AIParams {
+  /**
+   * The user prompt/message. The runtime automatically manages conversation history.
+   */
   prompt: string;
+  /**
+   * System instructions for the AI.
+   */
   system?: string;
   /**
    * Model in `provider/model` format. Example: `openai/gpt-4o`.
@@ -144,9 +149,22 @@ export interface KalpMemory {
   summarize: () => Promise<string>;
 }
 
-export type SecretKey<TSecrets extends string[]> = TSecrets[number];
+// Helper to detect if TSecrets has specific literal keys (from codegen) or is generic string[]
+type IsGenericStringArray<T> = T extends readonly string[]
+  ? string extends T[number]
+    ? true // Array contains generic `string`, not specific literals
+    : false // Array contains specific literal strings
+  : false;
 
-export interface KalpVault<TSecrets extends string[] = RegisteredSecrets> {
+// Extract literal keys if registered via codegen, fallback to string
+export type SecretKey<TSecrets extends readonly string[]> =
+  IsGenericStringArray<TSecrets> extends true
+    ? string & Record<never, never> // Allow any string, but preserve autocomplete
+    : TSecrets[number]; // Use specific literals from codegen
+
+export interface KalpVault<
+  TSecrets extends readonly string[] = RegisteredSecrets,
+> {
   get: (key: SecretKey<TSecrets>) => Promise<string>;
 }
 
@@ -170,7 +188,7 @@ export interface KalpAuth {
 }
 
 export interface KalpContextState<
-  TSecrets extends string[] = RegisteredSecrets,
+  TSecrets extends readonly string[] = RegisteredSecrets,
 > {
   memory: KalpMemory;
   vault: KalpVault<TSecrets>;
@@ -210,7 +228,7 @@ export interface KalpActions<
  * Contains `ctx` for state access and `actions` for calling other components.
  */
 export interface HandlerContext<
-  TSecrets extends string[] = RegisteredSecrets,
+  TSecrets extends readonly string[] = RegisteredSecrets,
   TSteps extends Step<any, any, any, any, any, any, any>[] = [],
   TTools extends Tool<any, any, any, any, any, any>[] = [],
   TFlows extends Flow<any>[] = [],
@@ -225,7 +243,7 @@ export interface HandlerContext<
  */
 export interface BaseContext<
   TUserSchema extends object = object,
-  TSecrets extends string[] = RegisteredSecrets,
+  TSecrets extends readonly string[] = RegisteredSecrets,
   TSteps extends Step<any, any, any, any, any, any, any>[] = [],
   TTools extends Tool<any, any, any, any, any, any>[] = [],
   TFlows extends Flow<any>[] = [],
@@ -238,7 +256,7 @@ export interface AgentActions<
 > extends KalpActions<TSteps, TTools, TFlows> {}
 
 export interface AgentContextState<
-  TSecrets extends string[] = RegisteredSecrets,
+  TSecrets extends readonly string[] = RegisteredSecrets,
 > extends KalpContextState<TSecrets> {
   history: KalpHistoryMessage[];
   state: Record<string, unknown>;
@@ -252,7 +270,7 @@ export interface AgentContext<
   TTools extends Tool<any, any, any, any, any, any>[] = [],
   TFlows extends Flow<any>[] = [],
   TUserSchema extends object = object,
-  TSecrets extends string[] = RegisteredSecrets,
+  TSecrets extends readonly string[] = RegisteredSecrets,
 > extends HandlerContext<TSecrets, TSteps, TTools, TFlows> {
   ctx: AgentContextState<TSecrets>;
 }
@@ -261,7 +279,7 @@ export interface Step<
   I extends z.ZodTypeAny,
   O extends z.ZodTypeAny,
   TUserSchema extends object = object,
-  TSecrets extends string[] = RegisteredSecrets,
+  TSecrets extends readonly string[] = RegisteredSecrets,
   TSteps extends Step<any, any, any, any, any, any, any>[] = [],
   TTools extends Tool<any, any, any, any, any, any>[] = [],
   TFlows extends Flow<any>[] = [],
@@ -281,7 +299,7 @@ export interface Tool<
   I extends z.ZodTypeAny,
   R = unknown,
   TUserSchema extends object = object,
-  TSecrets extends string[] = RegisteredSecrets,
+  TSecrets extends readonly string[] = RegisteredSecrets,
   TSteps extends Step<any, any, any, any, any, any, any>[] = [],
   TTools extends Tool<any, any, any, any, any, any>[] = [],
   TFlows extends Flow<any>[] = [],
@@ -300,7 +318,7 @@ export interface Route<
   I extends z.ZodTypeAny | undefined = undefined,
   R = unknown,
   TUserSchema extends object = object,
-  TSecrets extends string[] = RegisteredSecrets,
+  TSecrets extends readonly string[] = RegisteredSecrets,
   TSteps extends Step<any, any, any, any, any, any, any>[] = [],
   TTools extends Tool<any, any, any, any, any, any>[] = [],
   TFlows extends Flow<any>[] = [],

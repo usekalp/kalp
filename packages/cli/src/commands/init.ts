@@ -2,13 +2,9 @@ import { resolve, basename } from "node:path";
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { scaffoldProject } from "../scaffold.js";
-import { promptProjectName } from "../utils/ui.js";
-import {
-  ensureDirectory,
-  installDeps,
-  isProjectInitialized,
-} from "../utils/fs.js";
+import { scaffoldProject } from "@/scaffold";
+import { promptProjectName } from "@/utils/ui";
+import { ensureDirectory, installDeps, isProjectInitialized } from "@/utils/fs";
 
 const LOGO = "🦋";
 

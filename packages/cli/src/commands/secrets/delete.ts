@@ -3,7 +3,8 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getAuthToken } from "../../utils/auth.js";
+import { getAuthToken } from "@/utils/auth";
+import { generateTypes } from "@/utils/codegen";
 
 const LOGO = "🦋";
 
@@ -68,43 +69,9 @@ async function removeSecretFromLocalConfig(
   await writeFile(configPath, content, "utf-8");
 }
 
-async function removeSecretFromTypes(cwd: string, key: string): Promise<void> {
-  const dtsPath = join(cwd, "kalp.d.ts");
-  let content: string;
-
-  try {
-    content = await readFile(dtsPath, "utf-8");
-  } catch {
-    // File doesn't exist, nothing to do
-    return;
-  }
-
-  // Check if key exists
-  if (!content.includes(`"${key}"`)) {
-    return; // Not there, skip
-  }
-
-  // Remove key from the keys tuple
-  const match = content.match(/keys:\s*\[([^\]]*)\]/);
-  if (!match) {
-    return; // No keys array found
-  }
-
-  const currentArray = match[1];
-  if (!currentArray) {
-    return;
-  }
-
-  // Remove the key and clean up commas
-  let newArray = currentArray
-    .replace(new RegExp(`["']${key}["']\\s*,?\\s*`), "")
-    .trim();
-  // Remove trailing comma if any
-  newArray = newArray.replace(/,\s*$/, "");
-
-  content = content.replace(/keys:\s*\[([^\]]*)\]/, `keys: [${newArray}]`);
-
-  await writeFile(dtsPath, content, "utf-8");
+async function regenerateTypes(cwd: string): Promise<void> {
+  // Regenerate .kalp/types.d.ts based on kalp.config.ts
+  await generateTypes(cwd);
 }
 
 export default defineCommand({
@@ -196,8 +163,8 @@ export default defineCommand({
       // Remove from local config
       await removeSecretFromLocalConfig(cwd, key);
 
-      // Remove from types
-      await removeSecretFromTypes(cwd, key);
+      // Regenerate types from config
+      await regenerateTypes(cwd);
 
       s.stop(`Secret ${pc.cyan(key)} deleted successfully`);
       p.outro("Done");

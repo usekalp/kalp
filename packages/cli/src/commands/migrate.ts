@@ -3,11 +3,13 @@ import { join } from "node:path";
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { ensureConfig } from "../utils/fs.js";
+import { ensureConfig } from "@/utils/fs";
 import {
   readAgentManifest,
   writeVersionedManifest,
-} from "../utils/manifest.js";
+  readLatestVersionedManifest,
+  getManifestHash,
+} from "@/utils/manifest";
 
 const LOGO = "🦋";
 
@@ -59,6 +61,22 @@ export default defineCommand({
 
     try {
       const manifest = await readAgentManifest({ cwd, agentName });
+
+      // Check if there's an existing migration with the same hash
+      const latestManifest = await readLatestVersionedManifest({
+        cwd,
+        agentName,
+      });
+      const currentHash = getManifestHash(manifest);
+
+      if (latestManifest && latestManifest.hash === currentHash) {
+        s.stop(pc.yellow("No changes detected"));
+        p.outro(
+          `${LOGO} ${pc.dim("Nothing to migrate — agent is up to date")}`,
+        );
+        return;
+      }
+
       const version = await writeVersionedManifest({
         cwd,
         agentName,

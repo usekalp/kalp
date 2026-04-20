@@ -30,7 +30,7 @@ export function defineAgent<
   TFlows extends Flow<any>[] = [],
   TRoutes extends Route<any, any, any, any, any, any, any>[] = [],
   TUserSchema extends object = object,
-  TSecrets extends string[] = RegisteredSecrets,
+  TSecrets extends readonly string[] = RegisteredSecrets,
 >(config: {
   /** Unique identifier for this agent. Use {@link asAgentId} to cast a string. */
   id: AgentId;

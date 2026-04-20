@@ -1,6 +1,10 @@
 import { defineCommand, runMain } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json");
 
 const LOGO = "🦋";
 
@@ -31,7 +35,7 @@ function printHelp(): void {
 const main = defineCommand({
   meta: {
     name: "kalp",
-    version: "0.0.1",
+    version: pkg.version,
     description: "🦋 Zero-config agent infrastructure",
   },
   args: {
@@ -43,14 +47,14 @@ const main = defineCommand({
     },
   },
   subCommands: {
-    init: () => import("./commands/init.js").then((r) => r.default),
-    create: () => import("./commands/create.js").then((r) => r.default),
-    migrate: () => import("./commands/migrate.js").then((r) => r.default),
-    push: () => import("./commands/push.js").then((r) => r.default),
-    link: () => import("./commands/link.js").then((r) => r.default),
-    secrets: () => import("./commands/secrets/index.js").then((r) => r.default),
-    login: () => import("./commands/login.js").then((r) => r.default),
-    logout: () => import("./commands/logout.js").then((r) => r.default),
+    init: () => import("./commands/init").then((r) => r.default),
+    create: () => import("./commands/create").then((r) => r.default),
+    migrate: () => import("./commands/migrate").then((r) => r.default),
+    push: () => import("./commands/push").then((r) => r.default),
+    link: () => import("./commands/link").then((r) => r.default),
+    secrets: () => import("./commands/secrets").then((r) => r.default),
+    login: () => import("./commands/login").then((r) => r.default),
+    logout: () => import("./commands/logout").then((r) => r.default),
   },
   run({ args }) {
     const firstArg = process.argv[2];

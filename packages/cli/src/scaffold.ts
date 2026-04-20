@@ -9,6 +9,7 @@ import {
 import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
 import { format } from "prettier";
+import { generateTypes, updateKalpDts, updateTsconfig } from "@/utils/codegen";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -108,22 +109,16 @@ export async function scaffoldProject(opts: {
   // ── kalp.config.ts ────────────────────────────────────────────────────
   const kalpConfig = `import { defineConfig } from "@kalphq/sdk";
 
-  export default defineConfig({
-    secrets: [],
-  });
+export default defineConfig({
+  secrets: [],
+});
 `;
   await writeFile(join(targetDir, "kalp.config.ts"), kalpConfig, "utf-8");
 
-  // ── kalp.d.ts ───────────────────────────────────────────────────────────
-  const kalpDts = `import "@kalphq/sdk";
-
-  declare module "@kalphq/sdk" {
-    interface SecretsRegistry {
-      keys: [];
-    }
-  }
-`;
-  await writeFile(join(targetDir, "kalp.d.ts"), kalpDts, "utf-8");
+  // ── Generate types and kalp.d.ts ──────────────────────────────────────
+  await generateTypes(targetDir);
+  await updateKalpDts(targetDir);
+  await updateTsconfig(targetDir);
 
   // ── Replace placeholders across the whole target ──────────────────────
   await replacePlaceholders(targetDir, { __PROJECT_NAME__: projectName });
@@ -142,135 +137,128 @@ export async function scaffoldAgent(opts: {
   await mkdir(join(agentDir, "flows"), { recursive: true });
 
   const agentIndex = `import { asAgentId, defineAgent } from "@kalphq/sdk";
-    import { processQuery } from "./steps/process-query.js";
-    import { formatResponse } from "./steps/format-response.js";
-    import { searchTool } from "./tools/search.js";
-    import { healthRoute } from "./routes/health.js";
-    import { chatFlow } from "./flows/chat-flow.js";
+import { processQuery } from "@/${agentName}/steps/process-query";
+import { formatResponse } from "@/${agentName}/steps/format-response";
+import { searchTool } from "@/${agentName}/tools/search";
+import { healthRoute } from "@/${agentName}/routes/health";
+import { chatFlow } from "@/${agentName}/flows/chat-flow";
 
-    export default defineAgent({
-      id: asAgentId("${agentName}"),
-      name: "${agentName}",
-      description: "A helpful AI assistant",
-      steps: [processQuery, formatResponse],
-      tools: [searchTool],
-      routes: [healthRoute],
-      flows: [chatFlow],
+export default defineAgent({
+  id: asAgentId("${agentName}"),
+  name: "${agentName}",
+  description: "A helpful AI assistant",
+  steps: [processQuery, formatResponse],
+  tools: [searchTool],
+  routes: [healthRoute],
+  flows: [chatFlow],
 
-      async onMessage({ message, ctx, actions }) {
-        // Stream AI response
-        const stream = await actions.ai.stream({
-          model: "openai/gpt-4o-mini",
-          system: "You are a helpful assistant.",
-          messages: [
-            { role: "user", content: message.text },
-          ],
-        });
+  async onMessage({ message, ctx, actions }) {
+    const stream = actions.ai.stream({
+      model: "openai/gpt-4o-mini",
+      system: "You are a helpful assistant.",
+      prompt: message.text,
+    });
 
-        return stream;
-      },
-    });`;
+    return stream;
+  },
+});`;
 
   const stepProcessFile = `import { createStep } from "@kalphq/sdk";
-    import { z } from "zod";
+import { z } from "zod";
 
-    export const processQuery = createStep({
-      id: "process_query",
-      description: "Analyze and enhance user query",
-      input: z.object({ query: z.string() }),
-      output: z.object({
-        enhanced: z.string(),
-        intent: z.string(),
-        needsSearch: z.boolean(),
-      }),
-      async run({ query }) {
-        // Simple intent detection
-        const intent = query.includes("?") ? "question" : "statement";
-        const needsSearch = query.toLowerCase().includes("search") || query.includes("?");
+export const processQuery = createStep({
+  id: "process_query",
+  description: "Analyze and enhance user query",
+  input: z.object({ query: z.string() }),
+  output: z.object({
+    enhanced: z.string(),
+    intent: z.string(),
+    needsSearch: z.boolean(),
+  }),
+  async run({ query }) {
+    // Simple intent detection
+    const intent = query.includes("?") ? "question" : "statement";
+    const needsSearch = query.toLowerCase().includes("search") || query.includes("?");
 
-        return {
-          enhanced: query.trim(),
-          intent,
-          needsSearch,
-        };
-      },
-    });`;
+    return {
+      enhanced: query.trim(),
+      intent,
+      needsSearch,
+    };
+  },
+});`;
 
   const stepFormatFile = `import { createStep } from "@kalphq/sdk";
-    import { z } from "zod";
+import { z } from "zod";
 
-    export const formatResponse = createStep({
-      id: "format_response",
-      description: "Format final response with metadata",
-      input: z.object({
-        text: z.string(),
-        sources: z.array(z.string()).optional(),
-      }),
-      output: z.object({
-        formatted: z.string(),
-        meta: z.object({ timestamp: z.number(), version: z.string() }),
-      }),
-      async run({ text, sources }) {
-        const formatted = sources?.length
-          ? \`\${text}\\n\\nSources: \${sources.join(", ")}\`
-          : text;
+export const formatResponse = createStep({
+  id: "format_response",
+  description: "Format final response with metadata",
+  input: z.object({
+    text: z.string(),
+    sources: z.array(z.string()).optional(),
+  }),
+  output: z.object({
+    formatted: z.string(),
+    meta: z.object({ timestamp: z.number(), version: z.string() }),
+  }),
+  async run({ text, sources }) {
+    const formatted = sources?.length
+      ? \`\${text}\\n\\nSources: \${sources.join(", ")}\`
+      : text;
 
-        return {
-          formatted,
-          meta: {
-            timestamp: Date.now(),
-            version: "1.0.0",
-          },
-        };
+    return {
+      formatted,
+      meta: {
+        timestamp: Date.now(),
+        version: "1.0.0",
       },
-    });`;
+    };
+  },
+});`;
 
   const toolFile = `import { createTool } from "@kalphq/sdk";
-    import { z } from "zod";
+import { z } from "zod";
 
-    export const searchTool = createTool({
-      id: "search",
-      description: "Search for relevant information",
-      input: z.object({ query: z.string(), limit: z.number().default(3) }),
-      output: z.object({
-        results: z.array(z.object({ title: z.string(), snippet: z.string() })),
-        total: z.number(),
-      }),
-      async execute({ query, limit }) {
-        // Simulated search - replace with real API call
-        const results = [
-          { title: "Result 1", snippet: \`Info about: \${query}\` },
-          { title: "Result 2", snippet: "More relevant content..." },
-        ].slice(0, limit);
+export const searchTool = createTool({
+  id: "search",
+  description: "Search for relevant information",
+  input: z.object({ query: z.string(), limit: z.number().default(3) }),
+  async execute({ query, limit }) {
+    // Simulated search - replace with real API call
+    const results = [
+      { title: "Result 1", snippet: \`Info about: \${query}\` },
+      { title: "Result 2", snippet: "More relevant content..." },
+    ].slice(0, limit);
 
-        return { results, total: results.length };
-      },
-    });`;
+    return { results, total: results.length };
+  },
+});`;
 
   const routeFile = `import { defineRoute } from "@kalphq/sdk";
 
-    export const healthRoute = defineRoute({
-      id: "health",
-      method: "GET",
-      path: "/health",
-      handler: async (_req, res, { ctx }) => {
-        res.json({
-          status: "ok",
-          agent: "${agentName}",
-          timestamp: new Date().toISOString(),
-        });
-      },
-    });`;
+export const healthRoute = defineRoute({
+  id: "health",
+  method: "GET",
+  path: "/health",
+  handler: async (_req, res, { ctx }) => {
+    res.json({
+      status: "ok",
+      agent: "${agentName}",
+      timestamp: new Date().toISOString(),
+    });
+  },
+});`;
 
   const flowFile = `import { defineFlow } from "@kalphq/sdk";
-    import { processQuery } from "../steps/process-query.js";
-    import { formatResponse } from "../steps/format-response.js";
+import { processQuery } from "@/${agentName}/steps/process-query";
+import { formatResponse } from "@/${agentName}/steps/format-response";
 
-    export const chatFlow = defineFlow({
-      id: "chat_flow",
-      description: "Process user message through query analysis and formatting",
-      steps: [processQuery, formatResponse],
-    });`;
+export const chatFlow = defineFlow({
+  id: "chat_flow",
+  description: "Process user message through query analysis and formatting",
+  steps: [processQuery, formatResponse],
+});`;
 
   await writeFile(join(agentDir, "index.ts"), agentIndex, "utf-8");
   await writeFile(

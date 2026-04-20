@@ -7,10 +7,10 @@
     "build": "kalp build"
   },
   "dependencies": {
-    "@kalphq/sdk": "latest",
-    "zod": "^3.25.76"
+    "@kalphq/sdk": "^0.2.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@kalphq/cli": "latest"
+    "@kalphq/cli": "^0.1.0"
   }
 }

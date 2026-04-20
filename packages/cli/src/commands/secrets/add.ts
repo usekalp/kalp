@@ -3,7 +3,8 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getAuthToken } from "../../utils/auth.js";
+import { generateTypes } from "@/utils/codegen";
+import { getAuthToken } from "@/utils/auth";
 
 const LOGO = "🦋";
 
@@ -44,50 +45,9 @@ async function addSecretToLocalConfig(cwd: string, key: string): Promise<void> {
   await writeFile(configPath, content, "utf-8");
 }
 
-async function addSecretToTypes(cwd: string, key: string): Promise<void> {
-  const dtsPath = join(cwd, "kalp.d.ts");
-  let content: string;
-
-  try {
-    content = await readFile(dtsPath, "utf-8");
-  } catch {
-    // If file doesn't exist, create it
-    content = `import "@kalphq/sdk";
-
-    declare module "@kalphq/sdk" {
-      interface SecretsRegistry {
-        keys: [];
-      }
-    }
-    `;
-  }
-
-  // Check if key already exists in types
-  if (content.includes(`"${key}"`)) {
-    return; // Already there, skip
-  }
-
-  // Add key to the keys tuple
-  const match = content.match(/keys:\s*\[([^\]]*)\]/);
-  if (!match) {
-    throw new Error("Could not find keys array in kalp.d.ts");
-  }
-
-  const currentArray = match[1]?.trim();
-
-  if (!currentArray || currentArray.length === 0) {
-    // Empty array, add first element
-    content = content.replace(/keys:\s*\[\s*\]/, `keys: ["${key}"]`);
-  } else {
-    // Add to existing array
-    const newKey = `, "${key}"`;
-    content = content.replace(
-      /keys:\s*\[([^\]]*)\]/,
-      `keys: [${currentArray}${newKey}]`,
-    );
-  }
-
-  await writeFile(dtsPath, content, "utf-8");
+async function regenerateTypes(cwd: string): Promise<void> {
+  // Regenerate .kalp/types.d.ts based on kalp.config.ts
+  await generateTypes(cwd);
 }
 
 export default defineCommand({
@@ -177,8 +137,8 @@ export default defineCommand({
       // Add to local config
       await addSecretToLocalConfig(cwd, key);
 
-      // Add to types
-      await addSecretToTypes(cwd, key);
+      // Regenerate types from config
+      await regenerateTypes(cwd);
 
       s.stop(`Secret ${pc.cyan(key)} added successfully`);
       p.outro("Done");

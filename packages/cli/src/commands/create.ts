@@ -1,9 +1,9 @@
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { scaffoldProject, scaffoldAgent } from "../scaffold.js";
-import { installDeps, isProjectInitialized } from "../utils/fs.js";
-import { promptAgentDetails, promptProjectName } from "../utils/ui.js";
+import { scaffoldProject, scaffoldAgent } from "@/scaffold";
+import { installDeps, isProjectInitialized } from "@/utils/fs";
+import { promptAgentDetails, promptProjectName } from "@/utils/ui";
 
 const LOGO = "🦋";
 
