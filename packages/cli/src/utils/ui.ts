@@ -1,6 +1,4 @@
 import * as p from "@clack/prompts";
-import pc from "picocolors";
-import { TEMPLATES, type TemplateId } from "../templates/index.js";
 
 export async function promptProjectName(opts?: {
   message?: string;
@@ -36,7 +34,6 @@ export async function promptProjectName(opts?: {
 
 export async function promptAgentDetails(): Promise<{
   name: string;
-  templateId: TemplateId;
 }> {
   const answers = await p.group(
     {
@@ -51,15 +48,6 @@ export async function promptAgentDetails(): Promise<{
             }
           },
         }),
-      template: () =>
-        p.select<TemplateId>({
-          message: "Choose a template",
-          options: TEMPLATES.map((t) => ({
-            value: t.id,
-            label: t.label,
-            hint: pc.dim(t.hint),
-          })),
-        }),
     },
     {
       onCancel: () => {
@@ -71,6 +59,5 @@ export async function promptAgentDetails(): Promise<{
 
   return {
     name: answers.name,
-    templateId: answers.template as TemplateId,
   };
 }

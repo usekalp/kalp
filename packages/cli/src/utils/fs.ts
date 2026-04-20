@@ -1,6 +1,9 @@
 import { access, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { execSync } from "node:child_process";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
+
+const execAsync = promisify(exec);
 
 export async function isProjectInitialized(cwd: string): Promise<boolean> {
   try {
@@ -24,14 +27,8 @@ export async function ensureDirectory(path: string): Promise<void> {
 
 export async function installDeps(cwd: string): Promise<void> {
   try {
-    execSync("npx --no-install nci", {
-      cwd,
-      stdio: "pipe",
-    });
+    await execAsync("npx --no-install nci", { cwd });
   } catch {
-    execSync("npm install", {
-      cwd,
-      stdio: "pipe",
-    });
+    await execAsync("npm install", { cwd });
   }
 }

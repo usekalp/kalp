@@ -7,8 +7,10 @@ const LOGO = "🦋";
 const COMMANDS = [
   ["init", "Create a new Kalp project"],
   ["create", "Add a new agent"],
+  ["migrate", "Migrate agent schema"],
   ["push", "Push agent to Kalp"],
   ["link", "Link project to Kalp cloud"],
+  ["secrets", "Manage secrets"],
   ["login", "Authenticate with Kalp"],
   ["logout", "Sign out from Kalp"],
 ] as const;
@@ -43,8 +45,10 @@ const main = defineCommand({
   subCommands: {
     init: () => import("./commands/init.js").then((r) => r.default),
     create: () => import("./commands/create.js").then((r) => r.default),
+    migrate: () => import("./commands/migrate.js").then((r) => r.default),
     push: () => import("./commands/push.js").then((r) => r.default),
     link: () => import("./commands/link.js").then((r) => r.default),
+    secrets: () => import("./commands/secrets/index.js").then((r) => r.default),
     login: () => import("./commands/login.js").then((r) => r.default),
     logout: () => import("./commands/logout.js").then((r) => r.default),
   },
@@ -62,7 +66,6 @@ const main = defineCommand({
       return;
     }
 
-    // Default: show commands (same as help)
     p.intro(`${LOGO} ${pc.bold("kalp")}`);
     printHelp();
     p.outro("Happy coding 🦋");

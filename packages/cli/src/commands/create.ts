@@ -40,16 +40,12 @@ export default defineCommand({
       await scaffoldProject({ projectName, targetDir: cwd });
       s.stop("Project structure created");
 
-      s.start("Installing dependencies");
+      s.start("Installing Dependencies");
       try {
         await installDeps(cwd);
         s.stop("Dependencies installed");
       } catch {
-        s.stop(
-          pc.yellow(
-            "Install failed — run npx --no-install nci (or npm install) manually.",
-          ),
-        );
+        s.stop(pc.yellow("Install failed — run npm install manually."));
       }
     }
 
@@ -57,7 +53,6 @@ export default defineCommand({
     s.start(`Scaffolding agent ${pc.cyan(agentAnswers.name)}`);
     await scaffoldAgent({
       agentName: agentAnswers.name,
-      templateId: agentAnswers.templateId,
       cwd,
     });
     s.stop("Agent created");
@@ -67,6 +62,8 @@ export default defineCommand({
         `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/index.ts`)}`,
         `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/steps/`)}`,
         `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/tools/`)}`,
+        `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/routes/`)}`,
+        `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/flows/`)}`,
       ].join("\n"),
       "Created",
     );

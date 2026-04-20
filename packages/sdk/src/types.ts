@@ -1,396 +1,328 @@
 import { z } from "zod";
 
-// ─── Branded IDs ─────────────────────────────────────────────────────────────
-
-/** Compile-time branded string for agent identifiers. Zero runtime overhead. */
-export type AgentId = string & { readonly __brand: "AgentId" };
-/** Compile-time branded string for user identifiers. Zero runtime overhead. */
-export type UserId = string & { readonly __brand: "UserId" };
-/** Compile-time branded string for organization identifiers. Zero runtime overhead. */
-export type OrgId = string & { readonly __brand: "OrgId" };
-
-/** Asserts a plain string as {@link AgentId}. Identity function — no runtime cost. */
-export const asAgentId = (s: string): AgentId => s as AgentId;
-/** Asserts a plain string as {@link UserId}. Identity function — no runtime cost. */
-export const asUserId = (s: string): UserId => s as UserId;
-/** Asserts a plain string as {@link OrgId}. Identity function — no runtime cost. */
-export const asOrgId = (s: string): OrgId => s as OrgId;
-
-// ─── Icons ───────────────────────────────────────────────────────────────────
+// ─── Global Secrets Registry (Module Augmentation) ──────────────────────────────
 
 /**
- * Icon descriptor for the Kalp Dashboard.
- * Use any valid Lucide icon name (https://lucide.dev/icons).
+ * Global registry for project secrets.
+ *
+ * To enable type-safe vault access, create a `kalp.d.ts` file in your project root:
+ *
+ * ```ts
+ * import "@kalphq/sdk";
+ *
+ * declare module "@kalphq/sdk" {
+ *   interface SecretsRegistry {
+ *     keys: ["STRIPE_SECRET_KEY", "OPENAI_API_KEY"];
+ *   }
+ * }
+ * ```
  */
-export interface IconConfig {
-  provider: "lucide";
-  /** A valid Lucide icon name, e.g. `"Bot"`, `"Zap"`, `"Brain"`. */
-  name: string;
+export interface SecretsRegistry {
+  keys: string[];
 }
 
-// ─── Retry Policy ────────────────────────────────────────────────────────────
+/** Inferred secret keys from the global registry */
+export type RegisteredSecrets = SecretsRegistry["keys"];
 
-/**
- * Controls how the engine retries a failed {@link Step} or {@link Tool}.
- * Executed by the Kalp runtime — the agent code remains unchanged.
- */
-export interface RetryPolicy {
-  /** Total number of attempts (including the first). */
-  attempts: number;
-  /** Delay strategy between retries. */
-  backoff: "fixed" | "exponential";
-}
+// ─── Model Map ───────────────────────────────────────────────────────────────
 
-// ─── Database Contract ───────────────────────────────────────────────────────
+export type ModelMap = {
+  openai:
+    | "gpt-5.4"
+    | "gpt-5.4-nano"
+    | "gpt-5-mini"
+    | "gpt-5.1-thinking"
+    | "gpt-4o"
+    | "gpt-4o-mini"
+    | "gpt-4-turbo"
+    | "gpt-4"
+    | "gpt-3.5-turbo";
 
-/** Opaque brand token for engine-reserved SQLite tables. Cannot be recreated externally. */
-declare const __systemTable: unique symbol;
-export type SystemTable = { readonly [__systemTable]: true };
+  anthropic:
+    | "claude-opus-4.7"
+    | "claude-opus-4.6"
+    | "claude-sonnet-4.6"
+    | "claude-sonnet-4.5"
+    | "claude-haiku-4.5";
 
-/** The engine's built-in schema. Table names are protected by {@link ValidateUserSchema}. */
-export type SystemSchema = {
-  readonly _kalp_messages: SystemTable;
-  readonly _kalp_state: SystemTable;
-  readonly _kalp_metrics: SystemTable;
+  google:
+    | "gemini-3-flash"
+    | "gemini-3.1-pro-preview"
+    | "gemini-3.1-flash-lite-preview"
+    | "gemini-2.5-flash"
+    | "gemini-1.5-pro"
+    | "gemini-1.5-flash"
+    | "gemini-1.0-pro";
+
+  groq:
+    | "llama-3-70b-8192"
+    | "llama-3-8b-8192"
+    | "mixtral-8x7b-32768"
+    | "gemma-7b-it"
+    | "grok-4.1-fast-non-reasoning";
+
+  mistral:
+    | "mistral-large-latest"
+    | "mistral-medium-latest"
+    | "mistral-small-latest";
+
+  perplexity: "llama-3-sonar-large-32k-online" | "llama-3-sonar-small-32k-chat";
+
+  moonshot: "kimi-k2.5";
+
+  openai_other: "gpt-oss-120b" | "gpt-5.3-codex";
+
+  voyage: "voyage-4-lite";
 };
 
-/**
- * Guards a user-defined schema against reserved `_kalp_` prefixed table names.
- * Resolves to `never` if any key violates the constraint, producing a compile error.
- */
-export type ValidateUserSchema<T> = keyof T & `_kalp_${string}` extends never
-  ? T
-  : never;
+export type ProviderName = keyof ModelMap;
+export type LocalModelId = `local/${string}`;
 
-/**
- * Merges the engine's {@link SystemSchema} with a validated user schema.
- * Produces `never` if the user schema contains reserved key names.
- */
-export type MergeSchema<S, U> = S & ValidateUserSchema<U>;
+export type KalpModelId =
+  | {
+      [P in ProviderName]: `${P}/${ModelMap[P]}`;
+    }[ProviderName]
+  | LocalModelId;
 
-/**
- * A typed stub for the Durable Object's SQLite database.
- * The concrete Drizzle instance is injected by the Kalp engine at runtime.
- */
-export interface KalpDatabase<TSchema> {
-  /** Direct table references for constructing typed queries. */
-  readonly tables: TSchema;
-  /** Execute a SQL statement and return affected row count. */
-  run: (sql: string, bindings?: unknown[]) => Promise<{ rowsAffected: number }>;
-  /** Execute a SQL query and return typed rows. */
-  all: <T = unknown>(sql: string, bindings?: unknown[]) => Promise<T[]>;
-}
-
-// ─── AI Contract ─────────────────────────────────────────────────────────────
-
-/** Parameters for {@link KalpAI.generateText}. */
-export interface GenerateTextParams {
+export interface AIParams {
   prompt: string;
-  /** System message override — prepended before the user prompt. */
   system?: string;
-  /** Semantic model tier. The engine maps this to the configured provider model. */
-  model?: "fast" | "smart" | "vision";
+  /**
+   * Model in `provider/model` format. Example: `openai/gpt-4o`.
+   */
+  model: KalpModelId;
   temperature?: number;
   maxTokens?: number;
   stopSequences?: string[];
-  toolChoice?: "auto" | "required" | "none";
 }
 
-/** Parameters for {@link KalpAI.generateObject}. */
-export interface GenerateObjectParams<T extends z.ZodTypeAny> {
-  prompt: string;
-  /** Zod schema used to parse and validate the structured output. */
-  schema: T;
-  model?: "smart";
-}
-
-/**
- * Provider-agnostic AI interface. Injected by the engine — agent code never
- * imports or instantiates an AI SDK directly.
- */
 export interface KalpAI {
-  /** Generate a text completion from a prompt. */
-  generateText: (params: GenerateTextParams) => Promise<string>;
-  /** Generate and parse a structured object validated against a Zod schema. */
-  generateObject: <T extends z.ZodTypeAny>(
-    params: GenerateObjectParams<T>,
-  ) => Promise<z.infer<T>>;
+  generate: <T extends z.ZodTypeAny = never>(
+    params: AIParams & { schema?: T },
+  ) => Promise<T extends z.ZodTypeAny ? z.infer<T> : string>;
+  stream: <T extends z.ZodTypeAny = never>(
+    params: AIParams & { schema?: T },
+  ) => T extends z.ZodTypeAny
+    ? AsyncIterable<Partial<z.infer<T>>>
+    : AsyncIterable<string>;
 }
 
-// ─── UI Contract ─────────────────────────────────────────────────────────────
-
-/**
- * Real-time UI bridge for sending signals to the Kalp Dashboard and CLI.
- * All methods are fire-and-forward — they do not block agent execution.
- */
-export interface KalpUI {
-  /** Send a structured alert to the Dashboard. */
-  sendAlert: (
-    message: string,
-    level?: "info" | "warning" | "error",
-  ) => Promise<void>;
-  /** Emit a named event with optional payload to the Dashboard. */
-  sendEvent: (event: string, data?: unknown) => Promise<void>;
-  /** Stream a text token to the client for real-time output. */
-  stream: (token: string) => Promise<void>;
-}
-
-// ─── Auth & Identity ─────────────────────────────────────────────────────────
-
-/** Authenticated user, populated from the verified JWT by the auth middleware. */
-export interface KalpUser {
-  id: UserId;
-  email?: string;
-  name?: string;
-  /** Application-defined role string (e.g. "admin", "member"). */
-  role?: string;
-  metadata: Record<string, unknown>;
-}
-
-/** Organization context, present in B2B and multi-tenant deployments. */
-export interface KalpOrg {
-  id: OrgId;
-  name?: string;
-  metadata: Record<string, unknown>;
-}
-
-// ─── History ─────────────────────────────────────────────────────────────────
-
-/** A single entry in the agent's conversation history, injected by the engine. */
 export interface KalpHistoryMessage {
   role: "user" | "assistant" | "system";
   content: string;
-  /** Unix timestamp in milliseconds. */
   timestamp: number;
 }
 
-// ─── Logging & Observability ─────────────────────────────────────────────────
-
-type LogMethod = (message: string, data?: Record<string, unknown>) => void;
-
-/**
- * Structured logger. Output is forwarded to the Kalp Dashboard and `kalp dev` CLI.
- * Prefer this over `console.*` for observable, searchable logs.
- */
-export interface KalpLogger {
-  info: LogMethod;
-  warn: LogMethod;
-  error: LogMethod;
-  debug: LogMethod;
+export interface MemoryListParams {
+  limit?: number;
+  cursor?: string;
+  order?: "asc" | "desc";
 }
 
-/** Minimal tracing interface for annotating performance-critical spans. */
-export interface KalpTelemetry {
-  /** Open a named span. Call `end()` when the operation completes. */
-  span: (name: string) => { end: () => void };
+export interface MemoryListResult {
+  items: KalpHistoryMessage[];
+  nextCursor?: string;
 }
 
-// ─── Suspension (Durable Object Alarms) ──────────────────────────────────────
+export type AgentId = string & { readonly __brand: "AgentId" };
+export type UserId = string & { readonly __brand: "UserId" };
 
-/**
- * Describes why a suspended agent was resumed.
- * Returned by {@link BaseContext.wait} after the agent wakes up.
- */
+export const asAgentId = (s: string): AgentId => s as AgentId;
+export const asUserId = (s: string): UserId => s as UserId;
+
 export type WakeReason =
   | { type: "timeout" }
-  | { type: "interrupt"; from: UserId | AgentId }
-  | { type: "signal"; name: string; data: unknown };
+  | { type: "interrupt"; from: UserId | AgentId };
 
-// ─── Contexts ────────────────────────────────────────────────────────────────
+export interface KalpMemory {
+  list: (params?: MemoryListParams) => Promise<MemoryListResult>;
+  append: (message: Omit<KalpHistoryMessage, "timestamp">) => Promise<void>;
+  /**
+   * Runtime summary snapshot of long conversation history.
+   * Kalp can auto-compact prior messages and expose the condensed context here.
+   */
+  summarize: () => Promise<string>;
+}
+
+export type SecretKey<TSecrets extends string[]> = TSecrets[number];
+
+export interface KalpVault<TSecrets extends string[] = RegisteredSecrets> {
+  get: (key: SecretKey<TSecrets>) => Promise<string>;
+}
 
 /**
- * The foundational context available to every {@link Step}, {@link Tool},
- * lifecycle hook, and signal handler. Injected by the Kalp engine at runtime.
- *
- * @typeParam TUserSchema - The agent's user-defined Drizzle table schema.
- *   Defaults to an empty schema (system tables only).
+ * Authentication context for the current request/execution.
+ * Populated by the runtime from JWT, session, or API key.
  */
-export interface BaseContext<TUserSchema extends object = object> {
-  /** Durable Object key-value storage. Values survive worker restarts. */
+export interface KalpAuth {
+  /** Unique user identifier (matches message.senderId in onMessage) */
+  userId: UserId;
+  /** User's email if available */
+  email?: string;
+  /** User's display name */
+  name?: string;
+  /** Raw JWT or session token for external API calls */
+  token?: string;
+  /** Custom claims from auth provider (roles, permissions, etc.) */
+  claims: Record<string, unknown>;
+  /** Check if user has a specific permission */
+  hasPermission: (permission: string) => boolean;
+}
+
+export interface KalpContextState<
+  TSecrets extends string[] = RegisteredSecrets,
+> {
+  memory: KalpMemory;
+  vault: KalpVault<TSecrets>;
   storage: {
     get: <T = unknown>(key: string) => Promise<T | null>;
     put: (key: string, value: unknown) => Promise<void>;
+    delete: (key: string) => Promise<void>;
   };
-  /** Encrypted secret store. Values are never logged or exposed to the Dashboard. */
-  vault: {
-    get: (key: string) => Promise<string>;
-  };
-  /** Kalp AI interface — provider and model are configured per project. */
+  /** Authentication context for the current user/request */
+  auth: KalpAuth;
+}
+
+export interface KalpActions<
+  TSteps extends Step<any, any>[] = [],
+  TTools extends Tool<any, any>[] = [],
+  TFlows extends Flow<any>[] = [],
+> {
   ai: KalpAI;
-  /** SQLite database combining the engine's system schema and the agent's user schema. */
-  db: KalpDatabase<MergeSchema<SystemSchema, TUserSchema>>;
-  /** Real-time UI bridge to the Dashboard and connected clients. */
-  ui: KalpUI;
-  /** Authenticated user, populated from the verified JWT. */
-  user: KalpUser;
-  /** Organization context (populated in multi-tenant deployments). */
-  org: KalpOrg;
-  /** Structured logger forwarded to the Dashboard and CLI. */
-  logger: KalpLogger;
-  /** Tracing interface for performance instrumentation. */
-  telemetry: KalpTelemetry;
-  /**
-   * Suspends the agent using the Durable Object Alarms API.
-   * State is persisted to SQLite and the worker is deallocated until the alarm fires.
-   * Returns a {@link WakeReason} describing how the agent was resumed.
-   */
   wait: (duration: string | number) => Promise<WakeReason>;
-}
-
-// ─── Signals ─────────────────────────────────────────────────────────────────
-
-/**
- * A typed inter-agent signal. Declares a Zod schema for its payload,
- * enabling engine-level validation and full type inference at the call site.
- */
-export interface Signal<I extends z.ZodTypeAny, R = void> {
-  id: string;
-  input: I;
-  handler: (input: z.infer<I>, ctx: BaseContext) => Promise<R>;
-}
-
-// ─── DSL Primitives ──────────────────────────────────────────────────────────
-
-/**
- * A discrete, reusable unit of work with typed input and output schemas.
- *
- * @typeParam I - Zod schema for the step's input.
- * @typeParam O - Zod schema for the step's output.
- * @typeParam TUserSchema - The agent's database schema, forwarded to {@link BaseContext}.
- */
-export interface Step<
-  I extends z.ZodTypeAny,
-  O extends z.ZodTypeAny,
-  TUserSchema extends object = object,
-> {
-  kind: "step";
-  id: string;
-  description?: string;
-  icon?: IconConfig;
-  retryPolicy?: RetryPolicy;
-  input: I;
-  output: O;
-  run: (
-    input: z.infer<I>,
-    ctx: BaseContext<TUserSchema>,
-  ) => Promise<z.infer<O>>;
-}
-
-/**
- * An action the agent can invoke, typically to interact with external services.
- * All registered tools are surfaced to the LLM via {@link ExtractToolMetadata}.
- *
- * @typeParam I - Zod schema for the tool's input.
- * @typeParam R - The return type of the tool's execution.
- * @typeParam TUserSchema - The agent's database schema, forwarded to {@link BaseContext}.
- */
-export interface Tool<
-  I extends z.ZodTypeAny,
-  R = unknown,
-  TUserSchema extends object = object,
-> {
-  kind: "tool";
-  id: string;
-  description?: string;
-  icon?: IconConfig;
-  retryPolicy?: RetryPolicy;
-  input: I;
-  execute: (input: z.infer<I>, ctx: BaseContext<TUserSchema>) => Promise<R>;
-}
-
-/**
- * An inbound webhook handler with Zod-validated input.
- * Stateless — runs without a full agent context.
- */
-export interface Webhook<I extends z.ZodTypeAny, R = unknown> {
-  id: string;
-  input: I;
-  handler: (input: z.infer<I>) => Promise<R>;
-}
-
-// ─── Introspection ───────────────────────────────────────────────────────────
-
-/** Serializable metadata for a {@link Tool}, used to generate LLM tool-call specs. */
-export interface ToolMetadata {
-  id: string;
-  description?: string;
-  inputSchema: z.ZodTypeAny;
-  icon?: IconConfig;
-}
-
-/** Serializable metadata for a {@link Step}. */
-export interface StepMetadata {
-  id: string;
-  description?: string;
-  inputSchema: z.ZodTypeAny;
-  outputSchema: z.ZodTypeAny;
-  icon?: IconConfig;
-}
-
-/**
- * Maps a tuple of {@link Tool} types to their corresponding {@link ToolMetadata},
- * preserving the tuple structure for exhaustive type inference.
- * The engine uses this to auto-generate tool descriptions for the LLM system prompt.
- */
-export type ExtractToolMetadata<TTools extends Tool<any, any, object>[]> = {
-  [K in keyof TTools]: TTools[K] extends Tool<infer I, unknown, object>
-    ? { id: string; description?: string; inputSchema: I; icon?: IconConfig }
-    : never;
-};
-
-/**
- * Maps a tuple of {@link Step} types to their corresponding {@link StepMetadata},
- * preserving the tuple structure for exhaustive type inference.
- */
-export type ExtractStepMetadata<TSteps extends Step<any, any, object>[]> = {
-  [K in keyof TSteps]: TSteps[K] extends Step<infer I, infer O, object>
-    ? {
-        id: string;
-        description?: string;
-        inputSchema: I;
-        outputSchema: O;
-        icon?: IconConfig;
-      }
-    : never;
-};
-
-// ─── Agent Context ────────────────────────────────────────────────────────────
-
-/**
- * The full execution context available inside {@link defineAgent} handlers.
- * Extends {@link BaseContext} with conversation history, step/tool runners,
- * and inter-agent communication primitives.
- *
- * @typeParam TSteps - Tuple of registered step types for exhaustive `runStep` inference.
- * @typeParam TTools - Tuple of registered tool types for exhaustive `callTool` inference.
- * @typeParam TUserSchema - The agent's database schema.
- */
-export interface AgentContext<
-  TSteps extends Step<any, any>[],
-  TTools extends Tool<any, any>[],
-  TUserSchema extends object = object,
-> extends BaseContext<TUserSchema> {
-  /** Ordered conversation history injected by the engine before each `onMessage` call. */
-  history: KalpHistoryMessage[];
-  /** Short-term in-memory state scoped to the current Durable Object instance. */
-  state: Record<string, unknown>;
-  /**
-   * Sends a typed signal to another agent's Durable Object.
-   * Signal routing and schema validation are handled by the engine.
-   */
-  sendSignal: (
-    agentId: AgentId,
-    signalName: string,
-    data: unknown,
-  ) => Promise<void>;
-  /** Runs a registered {@link Step} with full inference on input and output types. */
+  fetch: (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ) => Promise<Response>;
   runStep: <S extends TSteps[number]>(
     step: S,
     input: z.infer<S["input"]>,
   ) => Promise<z.infer<S["output"]>>;
-  /** Invokes a registered {@link Tool} with full inference on input and return type. */
   callTool: <T extends TTools[number]>(
     tool: T,
     input: z.infer<T["input"]>,
   ) => Promise<Awaited<ReturnType<T["execute"]>>>;
+  runFlow: <F extends TFlows[number]>(flow: F) => Promise<void>;
+}
+
+/**
+ * Reusable context object passed to all handlers (steps, tools, routes).
+ * Contains `ctx` for state access and `actions` for calling other components.
+ */
+export interface HandlerContext<
+  TSecrets extends string[] = RegisteredSecrets,
+  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
+  TTools extends Tool<any, any, any, any, any, any>[] = [],
+  TFlows extends Flow<any>[] = [],
+> {
+  ctx: KalpContextState<TSecrets>;
+  actions: KalpActions<TSteps, TTools, TFlows>;
+}
+
+/**
+ * Base context with user schema support (for future Drizzle integration).
+ * @deprecated Use HandlerContext directly for most cases.
+ */
+export interface BaseContext<
+  TUserSchema extends object = object,
+  TSecrets extends string[] = RegisteredSecrets,
+  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
+  TTools extends Tool<any, any, any, any, any, any>[] = [],
+  TFlows extends Flow<any>[] = [],
+> extends HandlerContext<TSecrets, TSteps, TTools, TFlows> {}
+
+export interface AgentActions<
+  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
+  TTools extends Tool<any, any, any, any, any, any>[] = [],
+  TFlows extends Flow<any>[] = [],
+> extends KalpActions<TSteps, TTools, TFlows> {}
+
+export interface AgentContextState<
+  TSecrets extends string[] = RegisteredSecrets,
+> extends KalpContextState<TSecrets> {
+  history: KalpHistoryMessage[];
+  state: Record<string, unknown>;
+}
+
+/**
+ * Extended context for onMessage handler with conversation state.
+ */
+export interface AgentContext<
+  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
+  TTools extends Tool<any, any, any, any, any, any>[] = [],
+  TFlows extends Flow<any>[] = [],
+  TUserSchema extends object = object,
+  TSecrets extends string[] = RegisteredSecrets,
+> extends HandlerContext<TSecrets, TSteps, TTools, TFlows> {
+  ctx: AgentContextState<TSecrets>;
+}
+
+export interface Step<
+  I extends z.ZodTypeAny,
+  O extends z.ZodTypeAny,
+  TUserSchema extends object = object,
+  TSecrets extends string[] = RegisteredSecrets,
+  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
+  TTools extends Tool<any, any, any, any, any, any>[] = [],
+  TFlows extends Flow<any>[] = [],
+> {
+  kind: "step";
+  id: string;
+  description?: string;
+  input: I;
+  output: O;
+  run: (
+    input: z.infer<I>,
+    context: HandlerContext<TSecrets, TSteps, TTools, TFlows>,
+  ) => Promise<z.infer<O>>;
+}
+
+export interface Tool<
+  I extends z.ZodTypeAny,
+  R = unknown,
+  TUserSchema extends object = object,
+  TSecrets extends string[] = RegisteredSecrets,
+  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
+  TTools extends Tool<any, any, any, any, any, any>[] = [],
+  TFlows extends Flow<any>[] = [],
+> {
+  kind: "tool";
+  id: string;
+  description?: string;
+  input: I;
+  execute: (
+    input: z.infer<I>,
+    context: HandlerContext<TSecrets, TSteps, TTools, TFlows>,
+  ) => Promise<R>;
+}
+
+export interface Route<
+  I extends z.ZodTypeAny | undefined = undefined,
+  R = unknown,
+  TUserSchema extends object = object,
+  TSecrets extends string[] = RegisteredSecrets,
+  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
+  TTools extends Tool<any, any, any, any, any, any>[] = [],
+  TFlows extends Flow<any>[] = [],
+> {
+  id: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+  input?: I;
+  handler: (
+    req: Request,
+    res: {
+      status: (code: number) => { json: (data: R) => void };
+      json: (data: R) => void;
+    },
+    context: HandlerContext<TSecrets, TSteps, TTools, TFlows>,
+  ) => Promise<R> | void | Promise<void>;
+}
+
+export interface Flow<
+  TSteps extends Step<any, any, any>[] = Step<any, any, any>[],
+> {
+  id: string;
+  description?: string;
+  steps: TSteps;
 }

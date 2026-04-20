@@ -5,10 +5,6 @@
   "type": "module",
   "license": "MIT",
   "author": "Kalp HQ",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/kalphq/kalp"
-  },
   "publishConfig": {
     "access": "public"
   },
@@ -30,7 +26,8 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "lint": "tsc --noEmit",
-    "prepublishOnly": "pnpm build"
+    "prepublishOnly": "pnpm build",
+    "test": "vitest"
   },
   "dependencies": {
     "zod": "^3.23.0"

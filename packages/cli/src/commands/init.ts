@@ -48,7 +48,7 @@ export default defineCommand({
     await scaffoldProject({ projectName, targetDir });
     s.stop("Project structure created");
 
-    s.start("Installing dependencies");
+    s.start("Installing Dependencies");
     try {
       await installDeps(targetDir);
       s.stop("Dependencies installed");
@@ -62,8 +62,6 @@ export default defineCommand({
     }
 
     p.log.success("Project scaffolded");
-    p.log.info(`${pc.cyan("kalp.config.ts")} — project config`);
-    p.log.info(`${pc.cyan("package.json")} — dependencies`);
     p.log.info(`${pc.cyan("agents/")} — your agents live here`);
     console.log("");
     p.log.info(pc.bold("Next"));
