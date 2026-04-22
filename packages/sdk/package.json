@@ -1,6 +1,6 @@
 {
   "name": "@kalphq/sdk",
-  "version": "0.0.0-dev-20260422003724",
+  "version": "0.2.0",
   "description": "The official SDK for building Kalp agents",
   "type": "module",
   "license": "MIT",

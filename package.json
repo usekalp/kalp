@@ -8,7 +8,10 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
     "change": "changeset",
+    "change:solo": "rm -rf .changeset/*.md && changeset",
+    "change:status": "changeset status",
     "version-packages": "changeset version",
+    "version:snapshot": "changeset version --snapshot",
     "release": "turbo build && changeset publish",
     "dev-release": "node scripts/dev-release.mjs"
   },

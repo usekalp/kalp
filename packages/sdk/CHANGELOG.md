@@ -1,5 +1,11 @@
 # @kalphq/sdk
 
+## 0.0.0-20260422052115
+
+### Minor Changes
+
+- update SDK architecture, add IR, add loop, ai.classify
+
 ## 0.0.0-dev-20260422050211
 
 ### Patch Changes
