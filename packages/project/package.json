@@ -1,0 +1,33 @@
+{
+  "name": "@kalphq/project",
+  "version": "0.0.1",
+  "description": "Scaffold and template utilities for Kalp projects",
+  "type": "module",
+  "license": "MIT",
+  "author": "Kalp HQ",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "prettier": "^3.7.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsup": "^8.3.5",
+    "typescript": "^5.0.0"
+  }
+}

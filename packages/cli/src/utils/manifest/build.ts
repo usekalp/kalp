@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import type { LoadedAgentModule } from "@/utils/manifest/types";
@@ -13,8 +13,8 @@ async function getHash(payload: string): Promise<string> {
 export async function loadAgentModule(
   agentPath: string,
   cwd: string,
-): Promise<LoadedAgentModule & { codeHash: string }> {
-  const tempDir = await mkdtemp(join(cwd, ".kalp-manifest-"));
+): Promise<LoadedAgentModule> {
+  const tempDir = await mkdtemp(join(cwd, ".kalp-temp-"));
   const outFile = join(tempDir, "agent.manifest.mjs");
 
   await build({
@@ -92,6 +92,7 @@ export async function loadAgentModule(
 
   return {
     agent: loaded.default,
+    entry: basename(outFile),
     tempDir,
     codeHash,
   };

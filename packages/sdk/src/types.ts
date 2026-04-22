@@ -1,21 +1,5 @@
 import { z } from "zod";
 
-/**
- * Global registry for project secrets.
- *
- * To enable type-safe vault access, create a `kalp.d.ts` file in your project root:
- *
- * ```ts
- * import "@kalphq/sdk";
- *
- * declare module "@kalphq/sdk" {
- *   interface SecretsRegistry {
- *     keys: ["STRIPE_SECRET_KEY", "OPENAI_API_KEY"];
- *   }
- * }
- * ```
- */
-/** Global registry for project secrets */
 export interface SecretsRegistry {
   keys: readonly string[];
 }
@@ -110,6 +94,12 @@ export interface KalpAI {
   ) => T extends z.ZodTypeAny
     ? AsyncIterable<Partial<z.infer<T>>>
     : AsyncIterable<string>;
+  classify: (params: {
+    input: string;
+    labels: string[];
+    model?: KalpModelId;
+    confidenceThreshold?: number;
+  }) => Promise<string>;
 }
 
 export interface KalpHistoryMessage {
@@ -162,10 +152,8 @@ export type SecretKey<TSecrets extends readonly string[]> =
     ? string & Record<never, never> // Allow any string, but preserve autocomplete
     : TSecrets[number]; // Use specific literals from codegen
 
-export interface KalpVault<
-  TSecrets extends readonly string[] = RegisteredSecrets,
-> {
-  get: (key: SecretKey<TSecrets>) => Promise<string>;
+export interface KalpVault {
+  get: (key: SecretKey<RegisteredSecrets>) => Promise<string>;
 }
 
 /**
@@ -187,160 +175,309 @@ export interface KalpAuth {
   hasPermission: (permission: string) => boolean;
 }
 
-export interface KalpContextState<
-  TSecrets extends readonly string[] = RegisteredSecrets,
-> {
-  memory: KalpMemory;
-  vault: KalpVault<TSecrets>;
-  storage: {
-    get: <T = unknown>(key: string) => Promise<T | null>;
-    put: (key: string, value: unknown) => Promise<void>;
-    delete: (key: string) => Promise<void>;
-  };
-  /** Authentication context for the current user/request */
-  auth: KalpAuth;
-}
+// ─── Node System ─────────────────────────────────────────────────────────────
 
-export interface KalpActions<
-  TSteps extends Step<any, any>[] = [],
-  TTools extends Tool<any, any>[] = [],
-  TFlows extends Flow<any>[] = [],
-> {
-  ai: KalpAI;
-  wait: (duration: string | number) => Promise<WakeReason>;
-  fetch: (
-    input: string | URL | Request,
-    init?: RequestInit,
-  ) => Promise<Response>;
-  runStep: <S extends TSteps[number]>(
-    step: S,
-    input: z.infer<S["input"]>,
-  ) => Promise<z.infer<S["output"]>>;
-  callTool: <T extends TTools[number]>(
-    tool: T,
-    input: z.infer<T["input"]>,
-  ) => Promise<Awaited<ReturnType<T["execute"]>>>;
-  runFlow: <F extends TFlows[number]>(flow: F) => Promise<void>;
-}
+export type NodeKind = "step" | "tool" | "flow" | "route";
 
-/**
- * Reusable context object passed to all handlers (steps, tools, routes).
- * Contains `ctx` for state access and `actions` for calling other components.
- */
-export interface HandlerContext<
-  TSecrets extends readonly string[] = RegisteredSecrets,
-  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
-  TTools extends Tool<any, any, any, any, any, any>[] = [],
-  TFlows extends Flow<any>[] = [],
-> {
-  ctx: KalpContextState<TSecrets>;
-  actions: KalpActions<TSteps, TTools, TFlows>;
-}
-
-/**
- * Base context with user schema support (for future Drizzle integration).
- * @deprecated Use HandlerContext directly for most cases.
- */
-export interface BaseContext<
-  TUserSchema extends object = object,
-  TSecrets extends readonly string[] = RegisteredSecrets,
-  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
-  TTools extends Tool<any, any, any, any, any, any>[] = [],
-  TFlows extends Flow<any>[] = [],
-> extends HandlerContext<TSecrets, TSteps, TTools, TFlows> {}
-
-export interface AgentActions<
-  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
-  TTools extends Tool<any, any, any, any, any, any>[] = [],
-  TFlows extends Flow<any>[] = [],
-> extends KalpActions<TSteps, TTools, TFlows> {}
-
-export interface AgentContextState<
-  TSecrets extends readonly string[] = RegisteredSecrets,
-> extends KalpContextState<TSecrets> {
-  history: KalpHistoryMessage[];
-  state: Record<string, unknown>;
-}
-
-/**
- * Extended context for onMessage handler with conversation state.
- */
-export interface AgentContext<
-  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
-  TTools extends Tool<any, any, any, any, any, any>[] = [],
-  TFlows extends Flow<any>[] = [],
-  TUserSchema extends object = object,
-  TSecrets extends readonly string[] = RegisteredSecrets,
-> extends HandlerContext<TSecrets, TSteps, TTools, TFlows> {
-  ctx: AgentContextState<TSecrets>;
+export interface Node {
+  kind: NodeKind;
+  id: string;
 }
 
 export interface Step<
-  I extends z.ZodTypeAny,
-  O extends z.ZodTypeAny,
-  TUserSchema extends object = object,
-  TSecrets extends readonly string[] = RegisteredSecrets,
-  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
-  TTools extends Tool<any, any, any, any, any, any>[] = [],
-  TFlows extends Flow<any>[] = [],
-> {
+  I extends z.ZodTypeAny = z.ZodTypeAny,
+  O extends z.ZodTypeAny = z.ZodTypeAny,
+> extends Node {
   kind: "step";
-  id: string;
   description?: string;
-  input: I;
-  output: O;
-  run: (
-    input: z.infer<I>,
-    context: HandlerContext<TSecrets, TSteps, TTools, TFlows>,
-  ) => Promise<z.infer<O>>;
+  inputSchema: I;
+  outputSchema: O;
 }
 
 export interface Tool<
-  I extends z.ZodTypeAny,
+  I extends z.ZodTypeAny = z.ZodTypeAny,
   R = unknown,
-  TUserSchema extends object = object,
-  TSecrets extends readonly string[] = RegisteredSecrets,
-  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
-  TTools extends Tool<any, any, any, any, any, any>[] = [],
-  TFlows extends Flow<any>[] = [],
-> {
+> extends Node {
   kind: "tool";
-  id: string;
   description?: string;
-  input: I;
-  execute: (
-    input: z.infer<I>,
-    context: HandlerContext<TSecrets, TSteps, TTools, TFlows>,
-  ) => Promise<R>;
+  inputSchema: I;
+}
+
+export type AnyStep = Step<z.ZodTypeAny, z.ZodTypeAny>;
+export type AnyTool = Tool<z.ZodTypeAny, unknown>;
+export type AnyFlow = Flow<unknown, unknown>;
+
+/**
+ * Orchestration-only node (Phase 1).
+ * Flows are step sequences — they have NO input and return void.
+ * I/O phantom generics reserved for Phase 2 execution semantics.
+ * Enforced at type level: `InputOf<Flow> = never`, `OutputOf<Flow> = void`.
+ */
+export interface Flow<I = void, O = void> extends Node {
+  kind: "flow";
+  description?: string;
+  steps: readonly Step<any, any>[];
 }
 
 export interface Route<
   I extends z.ZodTypeAny | undefined = undefined,
   R = unknown,
-  TUserSchema extends object = object,
-  TSecrets extends readonly string[] = RegisteredSecrets,
-  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
-  TTools extends Tool<any, any, any, any, any, any>[] = [],
-  TFlows extends Flow<any>[] = [],
-> {
-  id: string;
+> extends Node {
+  kind: "route";
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
-  input?: I;
+  inputSchema?: I;
+}
+
+export type StepConfig<
+  I extends z.ZodTypeAny = z.ZodTypeAny,
+  O extends z.ZodTypeAny = z.ZodTypeAny,
+> = Omit<Step<I, O>, "kind"> & {
+  run: (input: z.infer<I>, context: HandlerContext) => Promise<z.infer<O>>;
+};
+
+export type ToolConfig<
+  I extends z.ZodTypeAny = z.ZodTypeAny,
+  R = unknown,
+> = Omit<Tool<I, R>, "kind"> & {
+  execute: (input: z.infer<I>, context: HandlerContext) => Promise<R>;
+};
+
+export type RouteConfig<
+  I extends z.ZodTypeAny | undefined = undefined,
+  R = unknown,
+> = Omit<Route<I, R>, "kind"> & {
   handler: (
     req: Request,
     res: {
       status: (code: number) => { json: (data: R) => void };
       json: (data: R) => void;
     },
-    context: HandlerContext<TSecrets, TSteps, TTools, TFlows>,
+    context: HandlerContext,
   ) => Promise<R> | void | Promise<void>;
+};
+
+/** Nodes that can be passed to `actions.run()`. */
+export type ExecutableNode = AnyStep | AnyTool | AnyFlow;
+/**
+ * All registered nodes including routes (manifest / introspection).
+ * Routes are registry-only — they must NEVER be passed to `actions.run()`.
+ */
+export type RegistryNode = ExecutableNode | Route;
+
+// ─── IR Nodes ───────────────────────────────────────────────────────────────
+
+export type IRNodeId = string & { readonly __brand: "IRNodeId" };
+
+export type IRNodeKind =
+  | "entry"
+  | "run"
+  | "wait"
+  | "fetch"
+  | "loop"
+  | "llm.generate"
+  | "llm.stream"
+  | "llm.classify";
+
+export interface IRNodeBase {
+  kind: IRNodeKind;
+  id: IRNodeId;
 }
 
-export interface Flow<
-  TSteps extends Step<any, any, any>[] = Step<any, any, any>[],
-> {
-  id: string;
-  description?: string;
-  steps: TSteps;
+export type RunTargetKind = "step" | "tool" | "flow";
+
+export interface EntryIRNode extends IRNodeBase {
+  kind: "entry";
+  handler: "onMessage" | "onInit" | "onTick";
 }
+
+export interface RunIRNode extends IRNodeBase {
+  kind: "run";
+  targetId: string;
+  targetKind: RunTargetKind;
+  input?: unknown;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+}
+
+export interface WaitIRNode extends IRNodeBase {
+  kind: "wait";
+  duration: string | number;
+}
+
+export interface FetchIRNode extends IRNodeBase {
+  kind: "fetch";
+  url: string;
+  init?: unknown;
+}
+
+export interface GenerateIRNode extends IRNodeBase {
+  kind: "llm.generate";
+  model?: string;
+  input: unknown;
+  schema?: unknown;
+}
+
+export interface StreamIRNode extends IRNodeBase {
+  kind: "llm.stream";
+  model?: string;
+  input: unknown;
+  schema?: unknown;
+}
+
+export interface ClassifyIRNode extends IRNodeBase {
+  kind: "llm.classify";
+  model?: string;
+  input: { text: string; labels: string[] };
+  branches: Array<{ label: string; next?: IRNodeId }>;
+  fallback?: IRNodeId;
+  confidenceThreshold?: number;
+}
+
+export interface LoopIRNode extends IRNodeBase {
+  kind: "loop";
+  entry: IRNodeId;
+  detached: true;
+  key?: string;
+  schedule: {
+    type: "interval" | "cron" | "event-driven";
+    value?: string | number;
+  };
+  lifecycle: {
+    onStart?: IRNodeId;
+    onIterationStart?: IRNodeId;
+    onIterationEnd?: IRNodeId;
+    onError?: IRNodeId;
+    onStop?: IRNodeId;
+  };
+  maxIterations?: number;
+  until?: IRNodeId;
+  persistent: true;
+}
+
+export type IRNode =
+  | EntryIRNode
+  | RunIRNode
+  | WaitIRNode
+  | FetchIRNode
+  | GenerateIRNode
+  | StreamIRNode
+  | ClassifyIRNode
+  | LoopIRNode;
+
+export interface IREdge {
+  from: IRNodeId;
+  to: IRNodeId;
+  condition?: string;
+}
+
+export interface IRGraph {
+  agentId: string;
+  entries: {
+    onMessage?: IRNodeId;
+    onInit?: IRNodeId;
+    onTick?: IRNodeId;
+  };
+  nodes: Record<IRNodeId, IRNode>;
+  edges: IREdge[];
+}
+
+// ─── Type Inference Engine (KTE) ─────────────────────────────────────────────
+
+export type InputOf<T> =
+  T extends Step<infer I, any>
+    ? z.infer<I>
+    : T extends Tool<infer I, any>
+      ? z.infer<I>
+      : T extends Flow
+        ? never
+        : never;
+
+export type OutputOf<T> =
+  T extends Step<any, infer O>
+    ? z.infer<O>
+    : T extends Tool<any, infer R>
+      ? R
+      : T extends Flow
+        ? void
+        : never;
+
+/**
+ * Extracts the union of all executable nodes registered in an agent config.
+ * Each branch evaluates independently (parallel union, NOT sequential conditional).
+ */
+export type InferNodes<C> =
+  | (C extends { steps: readonly (infer S)[] } ? S : never)
+  | (C extends { tools: readonly (infer T)[] } ? T : never)
+  | (C extends { flows: readonly (infer F)[] } ? F : never);
+
+// ─── Actions ─────────────────────────────────────────────────────────────────
+
+export interface KalpActions {
+  run: <T extends ExecutableNode>(
+    node: T,
+    ...args: InputOf<T> extends never ? [] : [input: InputOf<T>]
+  ) => Promise<OutputOf<T>>;
+  wait: (duration: string | number) => Promise<WakeReason>;
+  loop: (body: () => Promise<void>) => void;
+  fetch: (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ) => Promise<Response>;
+}
+
+/** Type-safe actions parameterized by an agent's registered nodes. */
+export interface TypedActions<TNodes> {
+  run: <T extends TNodes>(
+    node: T,
+    ...args: InputOf<T> extends never ? [] : [input: InputOf<T>]
+  ) => Promise<OutputOf<T>>;
+  wait: (duration: string | number) => Promise<WakeReason>;
+  loop: (body: () => Promise<void>) => void;
+  fetch: (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ) => Promise<Response>;
+}
+
+// ─── Context ─────────────────────────────────────────────────────────────────
+
+/**
+ * Context passed to all handlers (steps, tools, routes).
+ * Flat structure: `context.ai`, `context.memory`, `context.actions`, etc.
+ */
+export interface HandlerContext {
+  ai: KalpAI;
+  memory: KalpMemory;
+  vault: KalpVault;
+  storage: {
+    get: <T = unknown>(key: string) => Promise<T | null>;
+    put: (key: string, value: unknown) => Promise<void>;
+    delete: (key: string) => Promise<void>;
+  };
+  auth: KalpAuth;
+  actions: KalpActions;
+}
+
+/** Convenience alias for {@link HandlerContext}. */
+export type KalpCtx = HandlerContext;
+
+/**
+ * Extended context for `onMessage` with conversation state.
+ */
+export interface AgentContext extends HandlerContext {
+  message: { text: string; data?: unknown; senderId: UserId };
+  history: KalpHistoryMessage[];
+  state: Record<string, unknown>;
+}
+
+/** Agent context with type-safe actions bound to the agent's registered nodes. */
+export interface TypedAgentContext<C> extends Omit<HandlerContext, "actions"> {
+  message: { text: string; data?: unknown; senderId: UserId };
+  actions: TypedActions<InferNodes<C>>;
+  history: KalpHistoryMessage[];
+  state: Record<string, unknown>;
+}
+
+/** Response from an agent's `onMessage` handler. */
+export type AgentResponse = { text: string; data?: unknown };

@@ -9,7 +9,6 @@ import {
 import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
 import { format } from "prettier";
-import { generateTypes, updateKalpDts, updateTsconfig } from "@/utils/codegen";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -115,11 +114,6 @@ export default defineConfig({
 `;
   await writeFile(join(targetDir, "kalp.config.ts"), kalpConfig, "utf-8");
 
-  // ── Generate types and kalp.d.ts ──────────────────────────────────────
-  await generateTypes(targetDir);
-  await updateKalpDts(targetDir);
-  await updateTsconfig(targetDir);
-
   // ── Replace placeholders across the whole target ──────────────────────
   await replacePlaceholders(targetDir, { __PROJECT_NAME__: projectName });
 }
@@ -152,25 +146,40 @@ export default defineAgent({
   routes: [healthRoute],
   flows: [chatFlow],
 
-  async onMessage({ message, ctx, actions }) {
-    const stream = actions.ai.stream({
+  // Compiled to IR — handler executed by Kalp runtime
+  async onMessage({ message, actions, ai }) {
+    // Classify intent — compiler detects this pattern and builds branches
+    const intent = await ai.classify({
+      input: message.text,
+      labels: ["research", "chat"],
+      model: "openai/gpt-4o-mini",
+    });
+
+    if (intent === "research") {
+      // Detached loop — scheduled in Durable Object
+      actions.loop(async () => {
+        await actions.run(processQuery, { query: message.text });
+        await actions.wait("1h");
+      });
+      return { text: "Research loop started." };
+    }
+
+    return ai.stream({
       model: "openai/gpt-4o-mini",
       system: "You are a helpful assistant.",
       prompt: message.text,
     });
-
-    return stream;
   },
 });`;
 
-  const stepProcessFile = `import { createStep } from "@kalphq/sdk";
+  const stepProcessFile = `import { defineStep } from "@kalphq/sdk";
 import { z } from "zod";
 
-export const processQuery = createStep({
+export const processQuery = defineStep({
   id: "process_query",
   description: "Analyze and enhance user query",
-  input: z.object({ query: z.string() }),
-  output: z.object({
+  inputSchema: z.object({ query: z.string() }),
+  outputSchema: z.object({
     enhanced: z.string(),
     intent: z.string(),
     needsSearch: z.boolean(),
@@ -188,17 +197,17 @@ export const processQuery = createStep({
   },
 });`;
 
-  const stepFormatFile = `import { createStep } from "@kalphq/sdk";
+  const stepFormatFile = `import { defineStep } from "@kalphq/sdk";
 import { z } from "zod";
 
-export const formatResponse = createStep({
+export const formatResponse = defineStep({
   id: "format_response",
   description: "Format final response with metadata",
-  input: z.object({
+  inputSchema: z.object({
     text: z.string(),
     sources: z.array(z.string()).optional(),
   }),
-  output: z.object({
+  outputSchema: z.object({
     formatted: z.string(),
     meta: z.object({ timestamp: z.number(), version: z.string() }),
   }),
@@ -217,13 +226,13 @@ export const formatResponse = createStep({
   },
 });`;
 
-  const toolFile = `import { createTool } from "@kalphq/sdk";
+  const toolFile = `import { defineTool } from "@kalphq/sdk";
 import { z } from "zod";
 
-export const searchTool = createTool({
+export const searchTool = defineTool({
   id: "search",
   description: "Search for relevant information",
-  input: z.object({ query: z.string(), limit: z.number().default(3) }),
+  inputSchema: z.object({ query: z.string(), limit: z.number().default(3) }),
   async execute({ query, limit }) {
     // Simulated search - replace with real API call
     const results = [
@@ -241,7 +250,7 @@ export const healthRoute = defineRoute({
   id: "health",
   method: "GET",
   path: "/health",
-  handler: async (_req, res, { ctx }) => {
+  handler: async (_req, res) => {
     res.json({
       status: "ok",
       agent: "${agentName}",

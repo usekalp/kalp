@@ -32,7 +32,9 @@ async function removeSecretFromLocalConfig(
   try {
     content = await readFile(configPath, "utf-8");
   } catch {
-    throw new Error("kalp.config.ts not found. Run `kalp init` first.");
+    throw new Error(
+      "kalp.config.ts not found. Run `npx create-kalp@latest` first.",
+    );
   }
 
   // Check if key exists

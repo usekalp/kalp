@@ -9,9 +9,7 @@ const pkg = require("../package.json");
 const LOGO = "🦋";
 
 const COMMANDS = [
-  ["init", "Create a new Kalp project"],
   ["create", "Add a new agent"],
-  ["migrate", "Migrate agent schema"],
   ["push", "Push agent to Kalp"],
   ["link", "Link project to Kalp cloud"],
   ["secrets", "Manage secrets"],
@@ -47,9 +45,7 @@ const main = defineCommand({
     },
   },
   subCommands: {
-    init: () => import("./commands/init").then((r) => r.default),
     create: () => import("./commands/create").then((r) => r.default),
-    migrate: () => import("./commands/migrate").then((r) => r.default),
     push: () => import("./commands/push").then((r) => r.default),
     link: () => import("./commands/link").then((r) => r.default),
     secrets: () => import("./commands/secrets").then((r) => r.default),

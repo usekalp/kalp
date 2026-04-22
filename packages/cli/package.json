@@ -1,6 +1,6 @@
 {
   "name": "@kalphq/cli",
-  "version": "0.1.0",
+  "version": "0.0.0-dev-20260422003724",
   "description": "Zero-config CLI for deploying Kalp agents",
   "type": "module",
   "license": "MIT",
@@ -10,8 +10,7 @@
   },
   "main": "./dist/index.js",
   "files": [
-    "dist",
-    "templates"
+    "dist"
   ],
   "publishConfig": {
     "access": "public"
@@ -25,12 +24,13 @@
   "dependencies": {
     "@antfu/ni": "24.4.0",
     "@clack/prompts": "0.9.1",
+    "@kalphq/compiler": "workspace:*",
+    "@kalphq/project": "workspace:*",
     "@kalphq/sdk": "workspace:*",
     "citty": "0.1.6",
     "esbuild": "0.25.0",
     "picocolors": "1.1.1",
-    "zod": "3.25.76",
-    "zod-to-json-schema": "3.25.2"
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

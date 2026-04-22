@@ -3,13 +3,47 @@ import type {
   Flow,
   HandlerContext,
   KalpAuth,
-  RegisteredSecrets,
   Route,
+  RouteConfig,
   Step,
+  StepConfig,
   Tool,
+  ToolConfig,
 } from "@/types";
 
 export type { HandlerContext, KalpAuth };
+export type { KalpCtx, AgentResponse } from "@/types";
+export type {
+  Node,
+  NodeKind,
+  ExecutableNode,
+  RegistryNode,
+  Step,
+  Tool,
+  Flow,
+  Route,
+  IRGraph,
+  IREdge,
+  IRNode,
+  IRNodeBase,
+  IRNodeId,
+  IRNodeKind,
+  EntryIRNode,
+  RunTargetKind,
+  RunIRNode,
+  WaitIRNode,
+  FetchIRNode,
+  GenerateIRNode,
+  StreamIRNode,
+  ClassifyIRNode,
+  LoopIRNode,
+  InputOf,
+  OutputOf,
+  StepConfig,
+  ToolConfig,
+  RouteConfig,
+  KalpActions,
+} from "@/types";
 export { asAgentId, asUserId } from "@/types";
 export { defineAgent } from "@/agent";
 export {
@@ -21,92 +55,65 @@ export {
   normalizeKalpError,
 } from "@/errors";
 
+// ─── Factory functions ───────────────────────────────────────────────────────
+
 /**
- * Creates a typed {@link Step} and attaches the `"step"` kind discriminant.
+ * Defines a typed {@link Step} with automatic `"step"` kind discriminant.
  *
- * @typeParam I           - Zod schema for the step's input.
- * @typeParam O           - Zod schema for the step's output.
- * @typeParam TUserSchema - The agent's database schema (forwarded to `ctx`).
- * @typeParam TSecrets    - The secret keys from `kalp.config.ts`.
- * @typeParam TSteps      - Registered steps for action context.
- * @typeParam TTools      - Registered tools for action context.
- * @typeParam TFlows      - Registered flows for action context.
+ * @typeParam I - Zod schema for the step's input.
+ * @typeParam O - Zod schema for the step's output.
  */
-export const createStep = <
-  I extends z.ZodTypeAny,
-  O extends z.ZodTypeAny,
-  TUserSchema extends object = object,
-  TSecrets extends readonly string[] = RegisteredSecrets,
-  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
-  TTools extends Tool<any, any, any, any, any, any>[] = [],
-  TFlows extends Flow<any>[] = [],
+export const defineStep = <
+  I extends z.ZodTypeAny = z.ZodTypeAny,
+  O extends z.ZodTypeAny = z.ZodTypeAny,
 >(
-  config: Omit<
-    Step<I, O, TUserSchema, TSecrets, TSteps, TTools, TFlows>,
-    "kind"
-  >,
-): Step<I, O, TUserSchema, TSecrets, TSteps, TTools, TFlows> => ({
+  config: StepConfig<I, O>,
+): Step<I, O> => ({
   ...config,
   kind: "step",
 });
 
 /**
- * Creates a typed {@link Tool} and attaches the `"tool"` kind discriminant.
+ * Defines a typed {@link Tool} with automatic `"tool"` kind discriminant.
  *
- * @typeParam I           - Zod schema for the tool's input.
- * @typeParam R           - The tool's return type.
- * @typeParam TUserSchema - The agent's database schema (forwarded to `ctx`).
- * @typeParam TSecrets    - The secret keys from `kalp.config.ts`.
- * @typeParam TSteps      - Registered steps for action context.
- * @typeParam TTools      - Registered tools for action context.
- * @typeParam TFlows      - Registered flows for action context.
+ * @typeParam I - Zod schema for the tool's input.
+ * @typeParam R - The tool's return type.
  */
-export const createTool = <
-  I extends z.ZodTypeAny,
-  R = unknown,
-  TUserSchema extends object = object,
-  TSecrets extends readonly string[] = RegisteredSecrets,
-  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
-  TTools extends Tool<any, any, any, any, any, any>[] = [],
-  TFlows extends Flow<any>[] = [],
->(
-  config: Omit<
-    Tool<I, R, TUserSchema, TSecrets, TSteps, TTools, TFlows>,
-    "kind"
-  >,
-): Tool<I, R, TUserSchema, TSecrets, TSteps, TTools, TFlows> => ({
+export const defineTool = <I extends z.ZodTypeAny = z.ZodTypeAny, R = unknown>(
+  config: ToolConfig<I, R>,
+): Tool<I, R> => ({
   ...config,
   kind: "tool",
 });
 
+/**
+ * Defines an HTTP route exposed by the agent.
+ *
+ * @typeParam I - Optional Zod schema for request body validation.
+ * @typeParam R - The route handler's return type.
+ */
 export const defineRoute = <
   I extends z.ZodTypeAny | undefined = undefined,
   R = unknown,
-  TUserSchema extends object = object,
-  TSecrets extends readonly string[] = RegisteredSecrets,
-  TSteps extends Step<any, any, any, any, any, any, any>[] = [],
-  TTools extends Tool<any, any, any, any, any, any>[] = [],
-  TFlows extends Flow<any>[] = [],
 >(
-  config: Route<I, R, TUserSchema, TSecrets, TSteps, TTools, TFlows>,
-): Route<I, R, TUserSchema, TSecrets, TSteps, TTools, TFlows> => config;
+  config: RouteConfig<I, R>,
+): Route<I, R> => ({
+  ...config,
+  kind: "route",
+});
 
-export const defineFlow = <
-  TSteps extends Step<any, any, any, any, any, any, any>[] = Step<
-    any,
-    any,
-    any,
-    any,
-    any,
-    any,
-    any
-  >[],
->(
-  config: Flow<TSteps>,
-): Flow<TSteps> => config;
+/**
+ * Defines a multi-step execution flow.
+ */
+export const defineFlow = (config: Omit<Flow, "kind">): Flow => ({
+  ...config,
+  kind: "flow",
+});
+
+// ─── Project configuration ───────────────────────────────────────────────────
 
 /** Top-level Kalp project configuration, defined in `kalp.config.ts`. */
-export interface KalpConfig<TSecrets extends string[] = string[]> {
+export interface KalpProjectConfig<TSecrets extends string[] = string[]> {
   secrets: TSecrets;
 }
 
@@ -124,7 +131,7 @@ export interface KalpConfig<TSecrets extends string[] = string[]> {
  * ```
  */
 export function defineConfig<TSecrets extends string[]>(
-  config: KalpConfig<TSecrets>,
-): KalpConfig<TSecrets> {
+  config: KalpProjectConfig<TSecrets>,
+): KalpProjectConfig<TSecrets> {
   return config;
 }

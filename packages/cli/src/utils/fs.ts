@@ -1,9 +1,5 @@
-import { access, mkdir } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import { join } from "node:path";
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
-
-const execAsync = promisify(exec);
 
 export async function isProjectInitialized(cwd: string): Promise<boolean> {
   try {
@@ -18,17 +14,5 @@ export async function ensureConfig(cwd: string): Promise<void> {
   const initialized = await isProjectInitialized(cwd);
   if (!initialized) {
     throw new Error("kalp.config.ts not found");
-  }
-}
-
-export async function ensureDirectory(path: string): Promise<void> {
-  await mkdir(path, { recursive: true });
-}
-
-export async function installDeps(cwd: string): Promise<void> {
-  try {
-    await execAsync("npx --no-install nci", { cwd });
-  } catch {
-    await execAsync("npm install", { cwd });
   }
 }

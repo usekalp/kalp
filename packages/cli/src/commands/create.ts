@@ -1,9 +1,9 @@
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { scaffoldProject, scaffoldAgent } from "@/scaffold";
-import { installDeps, isProjectInitialized } from "@/utils/fs";
-import { promptAgentDetails, promptProjectName } from "@/utils/ui";
+import { scaffoldAgent } from "@kalphq/project";
+import { isProjectInitialized } from "@/utils/fs";
+import { promptAgentDetails } from "@/utils/ui";
 
 const LOGO = "🦋";
 
@@ -17,37 +17,19 @@ export default defineCommand({
     // ── Check if project is initialized ─────────────────────────────────
     const needsInit = !(await isProjectInitialized(cwd));
 
-    // ── Init phase (inline — one unified timeline) ───────────────────────
-    let projectName: string | undefined;
     if (needsInit) {
-      p.log.warn(
-        `No ${pc.cyan("kalp.config.ts")} found — initializing project first.`,
-      );
-      projectName = await promptProjectName({
-        message: "Project name?",
-        placeholder: "my-project",
-      });
+      p.log.error("This is not a Kalp project.");
+      console.log("");
+      console.log("  Run:");
+      console.log(`    ${pc.cyan("npx create-kalp@latest")}`);
+      console.log("");
+      process.exit(1);
     }
 
     // ── Agent prompts ────────────────────────────────────────────────────
     const agentAnswers = await promptAgentDetails();
 
     const s = p.spinner();
-
-    // ── Scaffold project if needed ───────────────────────────────────────
-    if (needsInit && projectName) {
-      s.start("Creating project structure");
-      await scaffoldProject({ projectName, targetDir: cwd });
-      s.stop("Project structure created");
-
-      s.start("Installing Dependencies");
-      try {
-        await installDeps(cwd);
-        s.stop("Dependencies installed");
-      } catch {
-        s.stop(pc.yellow("Install failed — run npm install manually."));
-      }
-    }
 
     // ── Scaffold agent ───────────────────────────────────────────────────
     s.start(`Scaffolding agent ${pc.cyan(agentAnswers.name)}`);

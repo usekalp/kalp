@@ -1,0 +1,33 @@
+{
+  "name": "create-kalp",
+  "version": "0.0.1",
+  "description": "Create a new Kalp project",
+  "type": "module",
+  "license": "MIT",
+  "author": "Kalp HQ",
+  "bin": {
+    "create-kalp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kalphq/project": "workspace:*",
+    "@clack/prompts": "0.9.1",
+    "picocolors": "1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsup": "^8.3.5",
+    "typescript": "^5.0.0"
+  }
+}

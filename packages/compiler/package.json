@@ -1,0 +1,43 @@
+{
+  "name": "@kalphq/compiler",
+  "version": "0.0.0-dev-20260422003724",
+  "description": "Compiler for Kalp DSL to IR",
+  "type": "module",
+  "license": "MIT",
+  "author": "Kalp HQ",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "tsc --noEmit",
+    "test": "vitest",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "@kalphq/sdk": "workspace:*",
+    "zod": "3.25.76",
+    "zod-to-json-schema": "3.25.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsup": "^8.3.5",
+    "typescript": "^5.0.0",
+    "vitest": "^1.6.0"
+  }
+}
