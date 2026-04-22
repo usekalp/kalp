@@ -1,5 +1,30 @@
 # @kalphq/cli
 
+## 0.0.1
+
+### Patch Changes
+
+- update packages
+- Updated dependencies
+  - @kalphq/project@0.1.1
+
+## 0.0.0
+
+### Patch Changes
+
+- Updated dependencies
+  - @kalphq/project@0.1.0
+
+## 0.0.0-dev-20260422050211
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260422050211
+  - @kalphq/project@0.0.0-dev-20260422050211
+  - @kalphq/sdk@0.0.0-dev-20260422050211
+
 ## 0.0.0-dev-20260422003724
 
 ### Patch Changes

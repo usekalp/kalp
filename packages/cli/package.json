@@ -1,6 +1,6 @@
 {
   "name": "@kalphq/cli",
-  "version": "0.0.0-dev-20260422003724",
+  "version": "0.0.1",
   "description": "Zero-config CLI for deploying Kalp agents",
   "type": "module",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
   "name": "@kalphq/project",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "description": "Scaffold and template utilities for Kalp projects",
   "type": "module",
   "license": "MIT",
@@ -12,6 +12,9 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
