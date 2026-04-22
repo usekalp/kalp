@@ -1,5 +1,23 @@
 # @kalphq/cli
 
+## 0.2.0
+
+### Minor Changes
+
+- fix version
+
+## 0.1.0
+
+### Minor Changes
+
+- fix package versions
+
+### Patch Changes
+
+- Updated dependencies
+  - @kalphq/compiler@0.1.0
+  - @kalphq/sdk@0.3.0
+
 ## 0.0.0-20260422052115
 
 ### Patch Changes

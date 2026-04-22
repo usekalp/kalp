@@ -1,5 +1,11 @@
 # @kalphq/sdk
 
+## 0.3.0
+
+### Minor Changes
+
+- fix package versions
+
 ## 0.0.0-20260422052115
 
 ### Minor Changes
