@@ -1,19 +1,17 @@
 import { z } from "zod";
-import type { IRGraph } from "@kalphq/sdk";
+import type { IRGraph, IRNodeId } from "@kalphq/sdk";
 
-// ─── Primitive schemas ────────────────────────────────────────────────────────
+// Primitive schemas
 
 const IRNodeIdSchema = z.string().min(1);
 
-// ─── Node schemas ─────────────────────────────────────────────────────────────
+// Node schemas
 
 const EntryIRNodeSchema = z.object({
   kind: z.literal("entry"),
   id: IRNodeIdSchema,
   handler: z.string().min(1),
-  method: z
-    .enum(["GET", "POST", "PUT", "PATCH", "DELETE"])
-    .optional(),
+  method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).optional(),
   path: z.string().optional(),
 });
 
@@ -107,11 +105,12 @@ export const IRNodeSchema = z.discriminatedUnion("kind", [
   LoopIRNodeSchema,
 ]);
 
-// ─── Graph schema ─────────────────────────────────────────────────────────────
+// Graph schema
 
 export const IREdgeSchema = z.object({
   from: IRNodeIdSchema,
   to: IRNodeIdSchema,
+  type: z.enum(["sequential", "branch", "nested"]),
   condition: z.string().optional(),
 });
 
@@ -122,11 +121,12 @@ export const IRGraphSchema = z.object({
   edges: z.array(IREdgeSchema),
 });
 
-// ─── Validation functions ─────────────────────────────────────────────────────
+// Validation functions
 
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
+  warnings?: string[];
 }
 
 export function validateIR(ir: unknown): ValidationResult {
@@ -148,46 +148,57 @@ export function validateIRBindings(
   handlerNames: string[],
 ): ValidationResult {
   const errors: string[] = [];
+  const warnings: string[] = [];
   const handlerSet = new Set(handlerNames);
 
+  // Run nodes: targetId must match a handler key directly
   for (const node of Object.values(ir.nodes)) {
     if (node.kind === "run") {
-      const handlerKey = `${node.targetKind}s.${node.targetId}`;
-      const directKey = node.targetId;
-      if (!handlerSet.has(handlerKey) && !handlerSet.has(directKey)) {
+      if (!handlerSet.has(node.targetId)) {
         errors.push(
-          `IR references "${node.targetId}" (${node.targetKind}) but no handler bundled for it. Expected key: "${handlerKey}"`,
+          `IR references "${node.targetId}" (${node.targetKind}) but no handler bundled for it`,
         );
       }
     }
   }
 
+  // Entry handlers: routes skipped (no handler in v1), all others must be bundled
   for (const [entryKey, entryNodeId] of Object.entries(ir.entries)) {
-    if (entryKey === "onMessage" || entryKey === "onInit" || entryKey === "onTick") {
-      if (!handlerSet.has(entryKey)) {
-        errors.push(
-          `Entry handler "${entryKey}" is declared in IR (node: ${entryNodeId}) but not bundled`,
-        );
-      }
+    if (entryKey.startsWith("route:")) continue;
+    if (!handlerSet.has(entryKey)) {
+      errors.push(`Entry "${entryKey}" declared in IR but not bundled`);
+    }
+    if (!ir.nodes[entryNodeId as IRNodeId]) {
+      errors.push(
+        `Entry "${entryKey}" points to missing node "${entryNodeId}"`,
+      );
     }
   }
 
+  // Orphan detection (warning only — handlers may be reusable but unused in current IR)
   const referencedHandlers = new Set<string>();
   for (const node of Object.values(ir.nodes)) {
     if (node.kind === "run") {
-      referencedHandlers.add(`${node.targetKind}s.${node.targetId}`);
       referencedHandlers.add(node.targetId);
     }
   }
   for (const k of Object.keys(ir.entries)) {
-    referencedHandlers.add(k);
+    if (!k.startsWith("route:")) {
+      referencedHandlers.add(k);
+    }
   }
 
   for (const name of handlerNames) {
     if (!referencedHandlers.has(name)) {
-      errors.push(`Handler "${name}" is bundled but not referenced in IR (orphan)`);
+      warnings.push(
+        `Handler "${name}" is bundled but not referenced in IR (orphan)`,
+      );
     }
   }
 
-  return { valid: errors.length === 0, errors };
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings: warnings.length > 0 ? warnings : undefined,
+  };
 }

@@ -10,8 +10,9 @@ import type {
   WaitIRNode,
 } from "@kalphq/sdk";
 import { createIdGenerator } from "@/ids";
+import { toHandlerKey } from "@/handler-key";
 
-// ─── Compile Error ───────────────────────────────────────────────────────────
+// Compile Error
 
 export class CompileError extends Error {
   constructor(message: string) {
@@ -20,7 +21,7 @@ export class CompileError extends Error {
   }
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// Types
 
 export interface RecordingTrace {
   nodes: IRNode[];
@@ -70,7 +71,7 @@ export interface RecordingContext {
 
 export type RecordingBody = (context: RecordingContext) => Promise<void> | void;
 
-// ─── Compile-time Sandbox ────────────────────────────────────────────────────
+// Compile-time Sandbox
 
 interface SandboxState {
   originalFetch: typeof globalThis.fetch | undefined;
@@ -80,7 +81,7 @@ interface SandboxState {
 
 const FIXED_TIMESTAMP = 1700000000000;
 
-const patchGlobals = (): SandboxState => {
+export const patchGlobals = (): SandboxState => {
   const state: SandboxState = {
     originalFetch:
       typeof globalThis.fetch === "function" ? globalThis.fetch : undefined,
@@ -105,7 +106,7 @@ const patchGlobals = (): SandboxState => {
   return state;
 };
 
-const restoreGlobals = (state: SandboxState): void => {
+export const restoreGlobals = (state: SandboxState): void => {
   if (state.originalFetch) {
     globalThis.fetch = state.originalFetch;
   }
@@ -117,13 +118,13 @@ const restoreGlobals = (state: SandboxState): void => {
   }
 };
 
-// ─── Sentinel for stopping execution at classify ─────────────────────────────
+// Sentinel for stopping execution at classify
 
-class ClassifySentinel {
+export class ClassifySentinel {
   constructor(public capture: ClassifyCapture) {}
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Helpers
 
 const toUrlString = (input: string | URL | Request): string => {
   if (typeof input === "string") return input;
@@ -140,7 +141,7 @@ const nodeFingerprint = (node: IRNode): string => {
   return node.kind;
 };
 
-const assertDeterministic = (
+export const assertDeterministic = (
   reference: IRNode[],
   candidate: IRNode[],
   label: string,
@@ -165,7 +166,7 @@ const assertDeterministic = (
   }
 };
 
-// ─── Context Factory ─────────────────────────────────────────────────────────
+// Context Factory
 
 interface EmitterConfig {
   classifyReturn?: string;
@@ -173,7 +174,7 @@ interface EmitterConfig {
   simpleMode?: boolean;
 }
 
-const createRecordingContext = (
+export const createRecordingContext = (
   nodes: IRNode[],
   createId: ReturnType<typeof createIdGenerator>,
   config: EmitterConfig = {},
@@ -189,10 +190,11 @@ const createRecordingContext = (
 
   const actions: RecordingContext["actions"] = {
     run: async (node, input) => {
+      const targetKind = (node.kind ?? "step") as RunTargetKind;
       emit<RunIRNode>({
         kind: "run",
-        targetId: node.id,
-        targetKind: (node.kind ?? "step") as RunTargetKind,
+        targetId: toHandlerKey(targetKind, node.id),
+        targetKind,
         input,
       });
       return undefined;
@@ -264,7 +266,7 @@ const createRecordingContext = (
   return { actions, ai };
 };
 
-// ─── Simple recording (no classify) ──────────────────────────────────────────
+// Simple recording (no classify)
 
 export const recordEmissions = async (
   body: RecordingBody,
@@ -276,7 +278,7 @@ export const recordEmissions = async (
   return { nodes };
 };
 
-// ─── Two-phase recording with multi-pass classify ────────────────────────────
+// Two-phase recording with multi-pass classify
 
 export const recordWithBranching = async (
   body: RecordingBody,
@@ -284,7 +286,7 @@ export const recordWithBranching = async (
   const sandbox = patchGlobals();
 
   try {
-    // ── Phase A: run until classify (or to completion) ──────────────────
+    // Phase A: run until classify (or to completion)
     const phaseANodes: IRNode[] = [];
     const phaseACreateId = createIdGenerator();
     let classifyCapture: ClassifyCapture | null = null;
@@ -310,7 +312,7 @@ export const recordWithBranching = async (
     const preTraceLength = phaseANodes.length;
     const preTrace = [...phaseANodes];
 
-    // ── Phase B: one pass per label ────────────────────────────────────
+    // Phase B: one pass per label
     const branches = new Map<string, IRNode[]>();
 
     for (const label of classifyCapture.labels) {

@@ -4,8 +4,6 @@ import { createHash } from "node:crypto";
 import { basename, join, resolve } from "node:path";
 import { build } from "esbuild";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 export interface HandlerEntry {
   name: string;
   code: string;
@@ -14,8 +12,6 @@ export interface HandlerEntry {
 }
 
 export type HandlerMap = Record<string, HandlerEntry>;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function sha256(content: string): string {
   return createHash("sha256").update(content).digest("hex");
@@ -30,8 +26,6 @@ const asString = (v: unknown): string | undefined =>
   typeof v === "string" ? v : undefined;
 
 const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-
-// ─── Wrapper generation ───────────────────────────────────────────────────────
 
 interface WrapperSpec {
   name: string;
@@ -107,8 +101,6 @@ function buildWrappers(agentPath: string, agentConfig: unknown): WrapperSpec[] {
   return wrappers;
 }
 
-// ─── esbuild plugins (reused from build.ts) ───────────────────────────────────
-
 function makePlugins(cwd: string) {
   return [
     {
@@ -145,8 +137,6 @@ function makePlugins(cwd: string) {
   ];
 }
 
-// ─── Main export ──────────────────────────────────────────────────────────────
-
 export async function extractHandlers(
   agentPath: string,
   agentConfig: unknown,
@@ -170,6 +160,7 @@ export async function extractHandlers(
     const result = await build({
       entryPoints,
       bundle: true,
+      outdir: tempDir,
       format: "esm",
       platform: "browser",
       target: "es2020",
@@ -184,10 +175,7 @@ export async function extractHandlers(
 
     for (const outputFile of result.outputFiles) {
       const fileName = basename(outputFile.path, ".js");
-      const handlerName = fileName.replace(/_/g, ".");
-      const wrapper = wrappers.find(
-        (w) => w.name.replace(/\./g, "_") === fileName,
-      );
+      const wrapper = wrappers.find((w) => w.name === fileName);
       if (!wrapper) continue;
 
       const code = outputFile.text;

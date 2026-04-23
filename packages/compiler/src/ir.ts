@@ -3,6 +3,7 @@ export type {
   FetchIRNode,
   GenerateIRNode,
   IREdge,
+  IREdgeType,
   IRGraph,
   IRNode,
   IRNodeBase,

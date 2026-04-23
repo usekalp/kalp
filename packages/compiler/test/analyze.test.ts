@@ -58,6 +58,59 @@ describe("analyzeHandler - capabilities", () => {
       1,
     );
   });
+
+  it("detects destructured parameter usage", () => {
+    const result = analyzeHandler(`
+      async function handler({ actions, ai }) {
+        await actions.run(step, { value: "x" });
+        await ai.classify({ input: "hi", labels: ["a", "b"] });
+      }
+    `);
+    expect(result.capabilities).toContain("actions.run");
+    expect(result.capabilities).toContain("ai.classify");
+  });
+
+  it("detects variable destructured usage", () => {
+    const result = analyzeHandler(`
+      async function handler(ctx) {
+        const { storage } = ctx;
+        await storage.put("key", "value");
+      }
+    `);
+    expect(result.capabilities).toContain("storage.put");
+  });
+
+  it("detects actions.loop", () => {
+    const result = analyzeHandler(`
+      async function handler(ctx) {
+        ctx.actions.loop(async () => {
+          await ctx.actions.wait("1h");
+        });
+      }
+    `);
+    expect(result.capabilities).toContain("actions.loop");
+  });
+
+  it("detects actions.wait", () => {
+    const result = analyzeHandler(`
+      async function handler(ctx) {
+        await ctx.actions.wait("30m");
+      }
+    `);
+    expect(result.capabilities).toContain("actions.wait");
+  });
+
+  it("detects destructured actions.loop and actions.wait", () => {
+    const result = analyzeHandler(`
+      async function handler({ actions }) {
+        actions.loop(async () => {
+          await actions.wait("1h");
+        });
+      }
+    `);
+    expect(result.capabilities).toContain("actions.loop");
+    expect(result.capabilities).toContain("actions.wait");
+  });
 });
 
 describe("analyzeHandler - blockers", () => {
@@ -144,6 +197,13 @@ describe("analyzeHandler - warnings", () => {
       const key = process.env.API_KEY;
     `);
     expect(result.warnings).toContain("process.env");
+  });
+
+  it("detects new Date() as warning", () => {
+    const result = analyzeHandler(`
+      const now = new Date();
+    `);
+    expect(result.warnings).toContain("new Date()");
   });
 });
 

@@ -6,9 +6,15 @@ import {
 } from "@kalphq/compiler";
 import { billing, estimateFromIR } from "@/lib/billing";
 import { logPush, type NamedAnalysis } from "@/lib/logger";
+import { join } from "path";
+import { writeFileSync } from "fs";
 
 export async function POST(req: Request) {
   const body = (await req.json()) as Record<string, unknown>;
+
+  const debugPath = join(process.cwd(), "incoming-payload.json");
+  writeFileSync(debugPath, JSON.stringify(body, null, 2), "utf-8");
+
   const agentName = body.agentName as string | undefined;
   const ir = body.ir;
   const hash = body.hash as string | undefined;

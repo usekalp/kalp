@@ -17,11 +17,13 @@ function makeMinimalGraph(overrides?: Partial<IRGraph>): IRGraph {
       [id("run_1")]: {
         kind: "run",
         id: id("run_1"),
-        targetId: "process_query",
+        targetId: "steps.process_query",
         targetKind: "step",
       },
     },
-    edges: [{ from: id("entry_1"), to: id("run_1") }],
+    edges: [
+      { from: id("entry_1"), to: id("run_1"), type: "sequential" as const },
+    ],
     ...overrides,
   };
 }
@@ -56,7 +58,7 @@ describe("validateIR", () => {
           [id("run_1")]: {
             kind: "run",
             id: id("run_1"),
-            targetId: "process_query",
+            targetId: "steps.process_query",
             targetKind: "step",
           },
         },
@@ -89,7 +91,7 @@ describe("validateIR", () => {
   it("fails when edges array contains invalid edge", () => {
     const result = validateIR({
       ...makeMinimalGraph(),
-      edges: [{ from: id(""), to: id("run_1") }],
+      edges: [{ from: id(""), to: id("run_1"), type: "sequential" as const }],
     });
     expect(result.valid).toBe(false);
   });
@@ -112,7 +114,9 @@ describe("validateIR", () => {
         },
         [id("wait_1")]: { kind: "wait", id: id("wait_1"), duration: "30m" },
       },
-      edges: [{ from: id("entry_1"), to: id("wait_1") }],
+      edges: [
+        { from: id("entry_1"), to: id("wait_1"), type: "sequential" as const },
+      ],
     });
     expect(result.valid).toBe(true);
   });
@@ -155,7 +159,9 @@ describe("validateIRBindings", () => {
     const graph = makeMinimalGraph();
     const result = validateIRBindings(graph, ["onMessage"]);
     expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => e.includes("process_query"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("steps.process_query"))).toBe(
+      true,
+    );
   });
 
   it("fails when onMessage entry has no bundled handler", () => {
@@ -172,8 +178,8 @@ describe("validateIRBindings", () => {
       "steps.process_query",
       "tools.unused_tool",
     ]);
-    expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => e.includes("unused_tool"))).toBe(true);
+    expect(result.valid).toBe(true); // Orphans are warnings, not errors
+    expect(result.warnings?.some((w) => w.includes("unused_tool"))).toBe(true);
   });
 
   it("passes for graph with no run nodes and only entry", () => {
@@ -191,5 +197,44 @@ describe("validateIRBindings", () => {
     };
     const result = validateIRBindings(graph, ["onMessage"]);
     expect(result.valid).toBe(true);
+  });
+
+  it("skips route entries (no handler expected in v1)", () => {
+    const graph: IRGraph = {
+      agentId: "agent",
+      entries: {
+        onMessage: id("entry_1"),
+        "route:GET:/health": id("entry_2"),
+      },
+      nodes: {
+        [id("entry_1")]: {
+          kind: "entry",
+          id: id("entry_1"),
+          handler: "onMessage",
+        },
+        [id("entry_2")]: {
+          kind: "entry",
+          id: id("entry_2"),
+          handler: "route:GET:/health",
+          method: "GET",
+          path: "/health",
+        },
+      },
+      edges: [],
+    };
+    const result = validateIRBindings(graph, ["onMessage"]);
+    expect(result.valid).toBe(true);
+  });
+
+  it("detects entry pointing to missing node", () => {
+    const graph: IRGraph = {
+      agentId: "agent",
+      entries: { onMessage: id("missing_node") },
+      nodes: {},
+      edges: [],
+    };
+    const result = validateIRBindings(graph, ["onMessage"]);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("missing node"))).toBe(true);
   });
 });

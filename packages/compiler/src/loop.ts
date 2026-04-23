@@ -44,6 +44,7 @@ export const compileLoop = async (
   const edges: IREdge[] = trace.nodes.slice(0, -1).map((node, index) => ({
     from: node.id,
     to: trace.nodes[index + 1]!.id,
+    type: "sequential",
   }));
 
   const createId = createIdGenerator();

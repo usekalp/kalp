@@ -1,6 +1,6 @@
 import { Project, SyntaxKind, Node } from "ts-morph";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// Types
 
 export interface HandlerAnalysis {
   capabilities: string[];
@@ -12,7 +12,7 @@ export interface HandlerAnalysis {
   warnings: string[];
 }
 
-// ─── Detection patterns ───────────────────────────────────────────────────────
+// Detection patterns
 
 const CTX_NAMESPACES = [
   "actions",
@@ -52,7 +52,7 @@ const WARNING_IDENTIFIERS = new Set([
 
 const WARNING_IMPORTS = new Set(["axios"]);
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 
 function isInternalImport(specifier: string): boolean {
   return (
@@ -67,7 +67,7 @@ function dedupe(arr: string[]): string[] {
   return [...new Set(arr)];
 }
 
-// ─── Core analysis ────────────────────────────────────────────────────────────
+// Core analysis
 
 export function analyzeHandler(code: string): HandlerAnalysis {
   const project = new Project({
@@ -85,7 +85,7 @@ export function analyzeHandler(code: string): HandlerAnalysis {
   const blockers = new Set<string>();
   const warnings = new Set<string>();
 
-  // ── Scan imports ──────────────────────────────────────────────────────────
+  // Scan imports
   for (const decl of sourceFile.getImportDeclarations()) {
     const specifier = decl.getModuleSpecifierValue();
     if (isInternalImport(specifier)) {
@@ -101,9 +101,11 @@ export function analyzeHandler(code: string): HandlerAnalysis {
     }
   }
 
-  // ── Walk all nodes ────────────────────────────────────────────────────────
+  // Walk all nodes
+  // Known limitation: aliased namespace references (e.g., `const a = actions; a.run(...)`)
+  // are not detected. This requires full data-flow analysis, deferred to v2.
   sourceFile.forEachDescendant((node: Node) => {
-    // ctx.namespace.method detection
+    // ctx.namespace.method detection (e.g., ctx.actions.run)
     if (Node.isPropertyAccessExpression(node)) {
       const expr = node.getExpression();
       const name = node.getName();
@@ -120,9 +122,13 @@ export function analyzeHandler(code: string): HandlerAnalysis {
         }
       }
 
-      if (Node.isIdentifier(expr) && expr.getText() === "ctx") {
-        if (CTX_NAMESPACES.includes(name as (typeof CTX_NAMESPACES)[number])) {
-          capabilities.add(name);
+      // Destructured namespace detection (e.g., actions.run, storage.put)
+      if (Node.isIdentifier(expr)) {
+        const objName = expr.getText();
+        if (
+          CTX_NAMESPACES.includes(objName as (typeof CTX_NAMESPACES)[number])
+        ) {
+          capabilities.add(`${objName}.${name}`);
         }
       }
     }
@@ -162,6 +168,9 @@ export function analyzeHandler(code: string): HandlerAnalysis {
       const expr = node.getExpression();
       if (Node.isIdentifier(expr) && expr.getText() === "Function") {
         blockers.add("new Function()");
+      }
+      if (Node.isIdentifier(expr) && expr.getText() === "Date") {
+        warnings.add("new Date()");
       }
     }
 

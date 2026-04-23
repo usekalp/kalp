@@ -24,6 +24,7 @@ export type {
   Route,
   IRGraph,
   IREdge,
+  IREdgeType,
   IRNode,
   IRNodeBase,
   IRNodeId,

@@ -5,9 +5,15 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { ensureConfig } from "@/utils/fs";
 import { readAgentManifest, computePushHash } from "@/utils/manifest";
+import packageJson from "../../package.json" with { type: "json" };
 
 const LOGO = "🦋";
-const CLOUD_API = process.env.KALP_CLOUD_URL || "http://localhost:3000";
+
+const CLI_VERSION: string = packageJson.version;
+const IS_DEV_VERSION = CLI_VERSION.includes("dev");
+const CLOUD_API =
+  process.env.KALP_CLOUD_URL ||
+  (IS_DEV_VERSION ? "http://localhost:3000" : "https://app.usekalp.com");
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -18,52 +24,18 @@ function printPushResult(
   agentName: string,
   hash: string,
   handlers: Record<string, { size: number }>,
-  analysis: Array<{
-    name: string;
-    capabilities: string[];
-    warnings: string[];
-    blockers: string[];
-  }>,
 ) {
   const div = pc.dim("─".repeat(48));
+  const handlerCount = Object.keys(handlers).length;
+  const totalSize = Object.values(handlers).reduce((sum, h) => sum + h.size, 0);
+
   console.log("\n" + div);
   console.log(pc.green("✔ Deployed"));
   console.log("");
-  console.log(`${pc.bold("agent:")}    ${agentName}`);
-  console.log(`${pc.bold("hash:")}     ${hash.slice(0, 16)}...`);
-  console.log(`${pc.bold("handlers:")} ${Object.keys(handlers).length}`);
-
-  for (const [name, h] of Object.entries(handlers)) {
-    const padded = name.padEnd(28);
-    console.log(`  ${pc.dim(padded)} ${formatBytes(h.size)}`);
-  }
-
-  const allCaps = [...new Set(analysis.flatMap((a) => a.capabilities))];
-  if (allCaps.length > 0) {
-    console.log("");
-    console.log(`${pc.bold("capabilities:")}`);
-    console.log(`  ${pc.cyan(allCaps.join(", "))}`);
-  }
-
-  const allWarnings = analysis.flatMap((a) =>
-    a.warnings.map((w) => `${w} in ${a.name}`),
+  console.log(`  ${pc.bold(agentName)}  ${pc.dim(hash.slice(0, 7))}...`);
+  console.log(
+    `  ${pc.dim(String(handlerCount))} handlers · ${formatBytes(totalSize)}`,
   );
-  if (allWarnings.length > 0) {
-    console.log("");
-    console.log(pc.yellow("⚠ warnings:"));
-    for (const w of allWarnings) {
-      console.log(`  ${pc.yellow(w)}`);
-    }
-  }
-
-  const allBlockers = analysis.flatMap((a) =>
-    a.blockers.map((b) => `${b} in ${a.name}`),
-  );
-  if (allBlockers.length === 0) {
-    console.log("");
-    console.log(pc.green("✔ blockers: none"));
-  }
-
   console.log(div + "\n");
 }
 
@@ -155,16 +127,9 @@ export default defineCommand({
     }
 
     s.stop(pc.green("Pushed successfully"));
+    printPushResult(agentName, hash, manifest.handlers);
 
-    const analysis =
-      (body?.analysis as Array<{
-        name: string;
-        capabilities: string[];
-        warnings: string[];
-        blockers: string[];
-      }>) ?? [];
-    printPushResult(agentName, hash, manifest.handlers, analysis);
-
-    p.outro(`${LOGO} ${pc.green("Agent pushed to cloud")}`);
+    const dashboardUrl = `${CLOUD_API}/a/${agentName}`;
+    p.outro(`${LOGO} ${pc.green("Agent live at")} ${pc.cyan(dashboardUrl)}`);
   },
 });

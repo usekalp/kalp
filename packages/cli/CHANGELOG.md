@@ -1,5 +1,95 @@
 # @kalphq/cli
 
+## 0.0.0-dev-20260423043828
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260423043828
+  - @kalphq/project@0.0.0-dev-20260423043828
+  - @kalphq/sdk@0.0.0-dev-20260423043828
+
+## 0.0.0-dev-20260423043703
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260423043703
+  - @kalphq/project@0.0.0-dev-20260423043703
+  - @kalphq/sdk@0.0.0-dev-20260423043703
+
+## 0.0.0-dev-20260423043255
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260423043255
+  - @kalphq/project@0.0.0-dev-20260423043255
+  - @kalphq/sdk@0.0.0-dev-20260423043255
+
+## 0.0.0-dev-20260423042205
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260423042205
+  - @kalphq/project@0.0.0-dev-20260423042205
+  - @kalphq/sdk@0.0.0-dev-20260423042205
+
+## 0.0.0-dev-20260423042035
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260423042035
+  - @kalphq/project@0.0.0-dev-20260423042035
+  - @kalphq/sdk@0.0.0-dev-20260423042035
+
+## 0.0.0-dev-20260423041201
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260423041201
+  - @kalphq/project@0.0.0-dev-20260423041201
+  - @kalphq/sdk@0.0.0-dev-20260423041201
+
+## 0.0.0-dev-20260423030653
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260423030653
+  - @kalphq/project@0.0.0-dev-20260423030653
+  - @kalphq/sdk@0.0.0-dev-20260423030653
+
+## 0.0.0-dev-20260423024252
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260423024252
+  - @kalphq/project@0.0.0-dev-20260423024252
+  - @kalphq/sdk@0.0.0-dev-20260423024252
+
+## 0.0.0-dev-20260423023800
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260423023800
+  - @kalphq/project@0.0.0-dev-20260423023800
+  - @kalphq/sdk@0.0.0-dev-20260423023800
+
 ## 0.2.0
 
 ### Minor Changes

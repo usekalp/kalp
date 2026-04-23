@@ -72,7 +72,7 @@ describe("Recording Proxy", () => {
     expect(trace.nodes).toHaveLength(1);
     const node = trace.nodes[0] as RunIRNode;
     expect(node.kind).toBe("run");
-    expect(node.targetId).toBe("step_1");
+    expect(node.targetId).toBe("steps.step_1");
     expect(node.input).toEqual({ value: "test" });
   });
 
@@ -217,7 +217,8 @@ describe("Loop Compiler", () => {
     });
 
     const firstNode = Object.values(result.nodes).find(
-      (n): n is RunIRNode => n.kind === "run" && n.targetId === "entry_node",
+      (n): n is RunIRNode =>
+        n.kind === "run" && n.targetId === "steps.entry_node",
     );
     expect(firstNode).toBeDefined();
     expect(result.loopNode.entry).toBe(firstNode!.id);
@@ -325,7 +326,7 @@ describe("Agent Compiler", () => {
     const graph = await compileAgent(agent);
 
     const runNode = Object.values(graph.nodes).find(
-      (n): n is RunIRNode => n.kind === "run" && n.targetId === "s1",
+      (n): n is RunIRNode => n.kind === "run" && n.targetId === "steps.s1",
     );
     expect(runNode).toBeDefined();
     expect(runNode!.inputSchema).toBeDefined();
@@ -342,7 +343,8 @@ describe("Agent Compiler", () => {
     const graph = await compileAgent(agent);
 
     const toolRuns = Object.values(graph.nodes).filter(
-      (n): n is RunIRNode => n.kind === "run" && n.targetId.startsWith("tool_"),
+      (n): n is RunIRNode =>
+        n.kind === "run" && n.targetId.startsWith("tools.tool_"),
     );
     expect(toolRuns).toHaveLength(2);
     expect(toolRuns[0]!.targetKind).toBe("tool");
@@ -362,13 +364,14 @@ describe("Agent Compiler", () => {
 
     // flows are expanded at compile-time: no run node for "my_flow" itself
     const flowByFlowId = Object.values(graph.nodes).filter(
-      (n): n is RunIRNode => n.kind === "run" && n.targetId === "my_flow",
+      (n): n is RunIRNode => n.kind === "run" && n.targetId === "steps.my_flow",
     );
     expect(flowByFlowId).toHaveLength(0);
 
     // instead, the steps inside the flow appear as run nodes
     const expandedStep = Object.values(graph.nodes).find(
-      (n): n is RunIRNode => n.kind === "run" && n.targetId === "flow_step",
+      (n): n is RunIRNode =>
+        n.kind === "run" && n.targetId === "steps.flow_step",
     );
     expect(expandedStep).toBeDefined();
     expect(expandedStep!.targetKind).toBe("step");
@@ -424,6 +427,60 @@ describe("Agent Compiler", () => {
       "agent must be an object",
     );
   });
+
+  it("uses recording wiring when onMessage is a function", async () => {
+    const agent = {
+      id: "fn-agent",
+      steps: [createMockStep("process_query")],
+      tools: [createMockTool("search")],
+      onMessage: async (ctx: any) => {
+        await ctx.actions.run({ id: "process_query" });
+        await ctx.actions.run({ id: "search", kind: "tool" });
+      },
+    };
+
+    const graph = await compileAgent(agent);
+
+    expect(graph.agentId).toBe("fn-agent");
+    expect(graph.entries.onMessage).toBeDefined();
+
+    // Should have entry + 2 run nodes
+    const entryNode = graph.nodes[graph.entries.onMessage!];
+    expect(entryNode?.kind).toBe("entry");
+
+    const runNodes = Object.values(graph.nodes).filter(
+      (n) => n.kind === "run",
+    ) as RunIRNode[];
+    expect(runNodes).toHaveLength(2);
+    expect(runNodes[0]!.targetId).toBe("steps.process_query");
+    expect(runNodes[1]!.targetId).toBe("tools.search");
+
+    // All edges should be sequential and typed
+    for (const edge of graph.edges) {
+      expect(edge.type).toBe("sequential");
+    }
+    // entry → run1, run1 → run2
+    expect(graph.edges).toHaveLength(2);
+  });
+
+  it("enriches schemas from registry on recorded run nodes", async () => {
+    const agent = {
+      id: "schema-fn-agent",
+      steps: [createMockStep("s1")],
+      onMessage: async (ctx: any) => {
+        await ctx.actions.run({ id: "s1" });
+      },
+    };
+
+    const graph = await compileAgent(agent);
+
+    const runNode = Object.values(graph.nodes).find(
+      (n): n is RunIRNode => n.kind === "run" && n.targetId === "steps.s1",
+    );
+    expect(runNode).toBeDefined();
+    expect(runNode!.inputSchema).toBeDefined();
+    expect(runNode!.outputSchema).toBeDefined();
+  });
 });
 
 describe("Graph Normalizer", () => {
@@ -444,7 +501,13 @@ describe("Graph Normalizer", () => {
           targetKind: "step",
         } as RunIRNode,
       },
-      edges: [{ from: "entry_1" as IRNodeId, to: "run_1" as IRNodeId }],
+      edges: [
+        {
+          from: "entry_1" as IRNodeId,
+          to: "run_1" as IRNodeId,
+          type: "sequential" as const,
+        },
+      ],
     };
 
     const normalized = normalizeGraph(graph);
@@ -489,7 +552,13 @@ describe("Graph Normalizer", () => {
           targetKind: "step",
         } as RunIRNode,
       },
-      edges: [{ from: "missing" as IRNodeId, to: "run_1" as IRNodeId }],
+      edges: [
+        {
+          from: "missing" as IRNodeId,
+          to: "run_1" as IRNodeId,
+          type: "sequential" as const,
+        },
+      ],
     };
 
     expect(() => normalizeGraph(graph)).toThrow(
@@ -509,7 +578,13 @@ describe("Graph Normalizer", () => {
           targetKind: "step",
         } as RunIRNode,
       },
-      edges: [{ from: "run_1" as IRNodeId, to: "missing" as IRNodeId }],
+      edges: [
+        {
+          from: "run_1" as IRNodeId,
+          to: "missing" as IRNodeId,
+          type: "sequential" as const,
+        },
+      ],
     };
 
     expect(() => normalizeGraph(graph)).toThrow(
@@ -662,9 +737,9 @@ describe("Two-Phase Recording (recordWithBranching)", () => {
     const branchA = branching.branches.get("a")!;
     const branchB = branching.branches.get("b")!;
     expect(branchA).toHaveLength(1);
-    expect((branchA[0] as RunIRNode).targetId).toBe("branch_a");
+    expect((branchA[0] as RunIRNode).targetId).toBe("steps.branch_a");
     expect(branchB).toHaveLength(1);
-    expect((branchB[0] as RunIRNode).targetId).toBe("branch_b");
+    expect((branchB[0] as RunIRNode).targetId).toBe("steps.branch_b");
   });
 
   it("handles empty branches", async () => {

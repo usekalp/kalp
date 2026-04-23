@@ -373,9 +373,12 @@ export type IRNode =
   | ClassifyIRNode
   | LoopIRNode;
 
+export type IREdgeType = "sequential" | "branch" | "nested";
+
 export interface IREdge {
   from: IRNodeId;
   to: IRNodeId;
+  type: IREdgeType;
   condition?: string;
 }
 
