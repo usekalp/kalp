@@ -336,7 +336,7 @@ export interface ClassifyIRNode extends IRNodeBase {
   kind: "llm.classify";
   model?: string;
   input: { text: string; labels: string[] };
-  branches: Array<{ label: string; next?: IRNodeId }>;
+  branches: Array<{ label: string; next?: IRNodeId | null }>;
   fallback?: IRNodeId;
   confidenceThreshold?: number;
 }

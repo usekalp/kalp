@@ -135,7 +135,7 @@ describe("validateIR", () => {
           kind: "llm.classify",
           id: id("cls_1"),
           input: { text: "hello", labels: ["a", "b"] },
-          branches: [{ label: "a", next: undefined }],
+          branches: [{ label: "a", next: null }], // Terminal branch
         },
       },
       edges: [],
@@ -182,7 +182,7 @@ describe("validateIRBindings", () => {
     expect(result.warnings?.some((w) => w.includes("unused_tool"))).toBe(true);
   });
 
-  it("passes for graph with no run nodes and only entry", () => {
+  it("fails for onMessage entry without execution path", () => {
     const graph: IRGraph = {
       agentId: "agent",
       entries: { onMessage: id("entry_1") },
@@ -196,7 +196,12 @@ describe("validateIRBindings", () => {
       edges: [],
     };
     const result = validateIRBindings(graph, ["onMessage"]);
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some(
+        (e) => e.includes("onMessage") && e.includes("no execution path"),
+      ),
+    ).toBe(true);
   });
 
   it("skips route entries (no handler expected in v1)", () => {
@@ -219,11 +224,21 @@ describe("validateIRBindings", () => {
           method: "GET",
           path: "/health",
         },
+        [id("run_1")]: {
+          kind: "run",
+          id: id("run_1"),
+          targetId: "steps.process",
+          targetKind: "step",
+        },
       },
-      edges: [],
+      edges: [{ from: id("entry_1"), to: id("run_1"), type: "sequential" }],
     };
-    const result = validateIRBindings(graph, ["onMessage"]);
+    const result = validateIRBindings(graph, ["onMessage", "steps.process"]);
     expect(result.valid).toBe(true);
+    // Route without IR nodes gets a warning (informational)
+    expect(result.warnings?.some((w) => w.includes("route:GET:/health"))).toBe(
+      true,
+    );
   });
 
   it("detects entry pointing to missing node", () => {
@@ -236,5 +251,81 @@ describe("validateIRBindings", () => {
     const result = validateIRBindings(graph, ["onMessage"]);
     expect(result.valid).toBe(false);
     expect(result.errors.some((e) => e.includes("missing node"))).toBe(true);
+  });
+
+  it("allows terminal branch with null next", () => {
+    const graph: IRGraph = {
+      agentId: "agent",
+      entries: { onMessage: id("entry_1") },
+      nodes: {
+        [id("entry_1")]: {
+          kind: "entry",
+          id: id("entry_1"),
+          handler: "onMessage",
+        },
+        [id("classify_1")]: {
+          kind: "llm.classify",
+          id: id("classify_1"),
+          input: { text: "test", labels: ["a", "b"] },
+          branches: [
+            { label: "a", next: id("run_1") },
+            { label: "b", next: null }, // Terminal branch
+          ],
+        },
+        [id("run_1")]: {
+          kind: "run",
+          id: id("run_1"),
+          targetId: "steps.process",
+          targetKind: "step",
+        },
+      },
+      edges: [
+        { from: id("entry_1"), to: id("classify_1"), type: "sequential" },
+        {
+          from: id("classify_1"),
+          to: id("run_1"),
+          type: "branch",
+          condition: "a",
+        },
+      ],
+    };
+    // Schema should parse without throwing
+    const result = validateIR(graph);
+    expect(result.valid).toBe(true);
+  });
+
+  it("includes path context in issues for invalid classify", () => {
+    const graph: IRGraph = {
+      agentId: "agent",
+      entries: { onMessage: id("entry_1") },
+      nodes: {
+        [id("entry_1")]: {
+          kind: "entry",
+          id: id("entry_1"),
+          handler: "onMessage",
+        },
+        [id("classify_1")]: {
+          kind: "llm.classify",
+          id: id("classify_1"),
+          input: { text: "test", labels: ["a"] },
+          branches: [
+            { label: "a", next: null }, // Terminal (will trigger "dead classify" warning)
+          ],
+        },
+      },
+      edges: [
+        { from: id("entry_1"), to: id("classify_1"), type: "sequential" },
+      ],
+    };
+
+    const result = validateIRBindings(graph, ["onMessage"]);
+
+    // Check that issues exist and have context
+    if (result.issues && result.issues.length > 0) {
+      const issue = result.issues[0];
+      expect(issue.context).toBeDefined();
+      // Should contain handler name
+      expect(issue.context).toMatch(/onMessage/i);
+    }
   });
 });

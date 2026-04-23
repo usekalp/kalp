@@ -3,7 +3,7 @@ export { compileClassify } from "@/classify";
 export { compileLoop } from "@/loop";
 export { normalizeGraph } from "@/normalize";
 export { toHandlerKey } from "@/handler-key";
-export { recordHandler } from "@/record-handler";
+export { recordHandler, adaptRouteHandler } from "@/record-handler";
 export type {
   ExecutionTrace,
   LinearTrace,
@@ -18,7 +18,13 @@ export {
   createRecordingContext,
   CompileError,
 } from "@/proxy";
-export type { RecordingTrace, BranchingResult, ClassifyCapture } from "@/proxy";
+export type {
+  RecordingTrace,
+  BranchingResult,
+  ClassifyCapture,
+  Event,
+  SourceContext,
+} from "@/proxy";
 export * from "@/ir";
 export {
   validateIR,
@@ -27,6 +33,6 @@ export {
   IRNodeSchema,
   IREdgeSchema,
 } from "@/validate";
-export type { ValidationResult } from "@/validate";
+export type { ValidationResult, Severity, ValidationIssue } from "@/validate";
 export { analyzeHandler } from "@/analyze";
 export type { HandlerAnalysis } from "@/analyze";

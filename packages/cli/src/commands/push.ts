@@ -5,6 +5,7 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { ensureConfig } from "@/utils/fs";
 import { readAgentManifest, computePushHash } from "@/utils/manifest";
+import { renderLegacyError } from "@/utils/issues";
 import packageJson from "../../package.json" with { type: "json" };
 
 const LOGO = "🦋";
@@ -39,18 +40,31 @@ function printPushResult(
   console.log(div + "\n");
 }
 
-function printPushError(phase: string, errors: string[], blockers?: string[]) {
+function printPushError(
+  phase: string,
+  errors: string[],
+  blockers?: string[],
+  verbose?: boolean,
+) {
   const div = pc.dim("─".repeat(48));
   console.log("\n" + div);
-  if (phase === "ir") {
-    for (const e of errors) console.log(pc.red(`✘ invalid IR: ${e}`));
-  } else if (phase === "bindings") {
-    for (const e of errors) console.log(pc.red(`✘ handler missing: ${e}`));
-  } else if (phase === "analysis" && blockers) {
-    for (const b of blockers) console.log(pc.red(`✘ blockers found: ${b}`));
-  } else {
-    for (const e of errors) console.log(pc.red(`✘ ${e}`));
+
+  // Use DX-first rendering for all errors
+  for (const e of errors) {
+    console.log(renderLegacyError(e, verbose));
+    console.log(""); // Empty line between errors
   }
+
+  if (phase === "analysis" && blockers) {
+    for (const b of blockers) {
+      console.log(pc.red(`✘ Blocker: ${b}`));
+    }
+  }
+
+  if (!verbose) {
+    console.log(pc.dim(`\nRun with --verbose for more details.\n`));
+  }
+
   console.log(div + "\n");
 }
 
@@ -62,6 +76,12 @@ export default defineCommand({
       alias: "a",
       description: "Agent name to push",
       required: false,
+    },
+    verbose: {
+      type: "boolean",
+      alias: "v",
+      description: "Show debug information",
+      default: false,
     },
   },
   async run({ args }) {

@@ -11,7 +11,7 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { createIdGenerator } from "@/ids";
 import { normalizeGraph } from "@/normalize";
 import { toHandlerKey } from "@/handler-key";
-import { recordHandler } from "@/record-handler";
+import { recordHandler, adaptRouteHandler } from "@/record-handler";
 import { traceToIR } from "@/trace-to-ir";
 
 // Helpers for parsing raw agent config
@@ -187,6 +187,7 @@ export const compileAgent = async (agent: unknown): Promise<IRGraph> => {
       // Record handler execution
       const trace = await recordHandler(
         fn as (ctx: unknown) => Promise<unknown>,
+        handler, // Pass handler name for source context
       );
 
       // Convert trace → IR fragment
@@ -213,9 +214,9 @@ export const compileAgent = async (agent: unknown): Promise<IRGraph> => {
       // If route has a handler function, record and generate IR
       const handlerFn = rec.handler;
       if (typeof handlerFn === "function") {
-        const trace = await recordHandler(
-          handlerFn as (ctx: unknown) => Promise<unknown>,
-        );
+        // Use adapter for routes (req, res, ctx) -> (ctx)
+        const adaptedHandler = adaptRouteHandler(handlerFn as any);
+        const trace = await recordHandler(adaptedHandler, routeKey);
         const fragment = await traceToIR(trace, routeId, createId);
 
         // Merge fragment into graph

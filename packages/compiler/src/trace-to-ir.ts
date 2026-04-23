@@ -79,12 +79,11 @@ export async function traceToIR(
 
     // Build each branch
     for (const [label, branchNodes] of trace.branches) {
-      // Get per-branch loop captures (loops called within this branch)
-      const branchLoops = trace.branchLoopCaptures.get(label) ?? [];
-
+      // Source of truth: only events (no branchLoopCaptures)
+      // Loops are already in branchNodes as first-class events
       const branchChain = await resolveNodes(
         branchNodes,
-        branchLoops,
+        [], // Loops are in branchNodes, not separate
         nodes,
         edges,
         createId,
@@ -115,17 +114,30 @@ export async function traceToIR(
         }
       } else {
         // Terminal branch (no nodes after classify for this label)
-        classifyNode.branches.push({ label });
+        classifyNode.branches.push({ label, next: null });
       }
     }
 
     nodes[classifyId] = classifyNode;
   }
 
-  return { nodes, edges };
+  return {
+    nodes,
+    edges: dedupeEdges(edges),
+  };
 }
 
 // ── Helpers ──
+
+function dedupeEdges(edges: IREdge[]): IREdge[] {
+  const seen = new Set<string>();
+  return edges.filter((e) => {
+    const key = `${e.from}-${e.to}-${e.type}-${(e as any).condition ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 function wireSequential(
   entryId: IRNodeId,

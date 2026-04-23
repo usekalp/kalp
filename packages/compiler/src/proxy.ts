@@ -23,6 +23,36 @@ export class CompileError extends Error {
 
 // Types
 
+// Source context for error reporting
+export interface SourceContext {
+  handler?: string;
+  step?: number;
+  file?: string;
+  line?: number;
+  column?: number;
+}
+
+// Event types (source of truth)
+export type Event =
+  | {
+      type: "run";
+      targetId: string;
+      targetKind: string;
+      input?: unknown;
+      __source?: SourceContext;
+    }
+  | { type: "wait"; duration: string | number; __source?: SourceContext }
+  | { type: "loop"; body: Event[]; __source?: SourceContext }
+  | {
+      type: "classify";
+      input: string;
+      labels: string[];
+      model?: string;
+      confidenceThreshold?: number;
+      branches: Record<string, Event[]>;
+      __source?: SourceContext;
+    };
+
 export interface RecordingTrace {
   nodes: IRNode[];
 }
@@ -177,14 +207,22 @@ interface EmitterConfig {
 export const createRecordingContext = (
   nodes: IRNode[],
   createId: ReturnType<typeof createIdGenerator>,
-  config: EmitterConfig = {},
+  config: EmitterConfig & { handlerName?: string } = {},
 ): RecordingContext => {
   let classifyCount = 0;
+  let stepIndex = 0;
+  const handlerName = config.handlerName ?? "unknown";
 
-  const emit = <T extends IRNode>(node: Omit<T, "id"> & { id?: IRNodeId }) => {
+  const emit = <T extends IRNode>(
+    node: Omit<T, "id"> & { id?: IRNodeId; __source?: SourceContext },
+  ) => {
     const kind = node.kind as IRNode["kind"];
     const id = node.id ?? createId(kind.replaceAll(".", "_"));
-    nodes.push({ ...node, id } as T);
+    const source: SourceContext = {
+      handler: handlerName,
+      step: stepIndex++,
+    };
+    nodes.push({ ...node, id, __source: source } as unknown as T);
     return id;
   };
 

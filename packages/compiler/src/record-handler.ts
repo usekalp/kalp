@@ -29,10 +29,37 @@ export interface BranchingTrace {
   classify: ClassifyCapture;
   branches: Map<string, IRNode[]>;
   loopCaptures: LoopCapture[]; // Loops captured before classify (pre-classify loops)
-  branchLoopCaptures: Map<string, LoopCapture[]>; // Loops captured per branch
 }
 
 export type ExecutionTrace = LinearTrace | BranchingTrace;
+
+// Route handler type for type-safe adapter
+type RouteHandler = (
+  req: unknown,
+  res: {
+    json: (body?: unknown) => unknown;
+    status: (code: number) => unknown;
+    send: (body?: unknown) => unknown;
+  },
+  ctx: unknown,
+) => Promise<unknown>;
+
+export function adaptRouteHandler(routeHandler: RouteHandler) {
+  return async (ctx: unknown) => {
+    const mockReq = {
+      body: {},
+      query: {},
+      params: {},
+      headers: {},
+    };
+    const mockRes = {
+      json: (body?: unknown) => body,
+      send: (body?: unknown) => body,
+      status: (_: number) => mockRes,
+    };
+    return routeHandler(mockReq, mockRes, ctx);
+  };
+}
 
 // ── Delegate-based mock context ──
 
@@ -104,6 +131,7 @@ function buildMockContext(
 
 export async function recordHandler(
   handlerFn: (ctx: unknown) => Promise<unknown>,
+  handlerName: string = "unknown",
 ): Promise<ExecutionTrace> {
   const loopCaptures: LoopCapture[] = [];
   const delegate: ActionDelegate = { ctx: null! };
@@ -121,6 +149,7 @@ export async function recordHandler(
       onClassify: (capture) => {
         classifyCapture = capture;
       },
+      handlerName,
     });
 
     try {
@@ -181,7 +210,6 @@ export async function recordHandler(
       classify: classifyCapture,
       branches,
       loopCaptures,
-      branchLoopCaptures,
     };
   } finally {
     restoreGlobals(sandbox);
