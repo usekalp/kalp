@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import type { LoadedAgentModule } from "@/utils/manifest/types";
@@ -92,7 +92,6 @@ export async function loadAgentModule(
 
   return {
     agent: loaded.default,
-    entry: basename(outFile),
     tempDir,
     codeHash,
   };

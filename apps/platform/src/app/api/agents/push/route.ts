@@ -1,22 +1,100 @@
 import { NextResponse } from "next/server";
+import {
+  validateIR,
+  validateIRBindings,
+  analyzeHandler,
+} from "@kalphq/compiler";
+import { billing, estimateFromIR } from "@/lib/billing";
+import { logPush, type NamedAnalysis } from "@/lib/logger";
 
 export async function POST(req: Request) {
-  const body = await req.json();
-  const { agentName, ir, hash } = body;
+  const body = (await req.json()) as Record<string, unknown>;
+  const agentName = body.agentName as string | undefined;
+  const ir = body.ir;
+  const hash = body.hash as string | undefined;
+  const bundle = body.bundle as
+    | {
+        handlers?: Record<string, { code: string; hash: string; size: number }>;
+      }
+    | undefined;
 
-  console.log("📦 PUSH RECEIVED");
-  console.log("agent:", agentName);
-  console.log("hash:", hash);
-  console.log("ir:", JSON.stringify(ir, null, 2));
+  if (!agentName || !ir || !hash || !bundle?.handlers) {
+    return NextResponse.json(
+      {
+        ok: false,
+        phase: "parse",
+        errors: ["Missing required fields: Agent Name, IR, Hash, Handlers"],
+      },
+      { status: 400 },
+    );
+  }
 
-  // Phase 1: Just log
-  // Phase 2: Store in database
-  // Phase 3: Manage state, rollback, etc
+  const irValidation = validateIR(ir);
+  if (!irValidation.valid) {
+    return NextResponse.json(
+      { ok: false, phase: "ir", errors: irValidation.errors },
+      { status: 400 },
+    );
+  }
+
+  const irGraph = ir as Parameters<typeof validateIRBindings>[0];
+
+  const handlerNames = Object.keys(bundle.handlers);
+  const bindingValidation = validateIRBindings(irGraph, handlerNames);
+  if (!bindingValidation.valid) {
+    return NextResponse.json(
+      { ok: false, phase: "bindings", errors: bindingValidation.errors },
+      { status: 400 },
+    );
+  }
+
+  const analysis: NamedAnalysis[] = Object.entries(bundle.handlers).map(
+    ([name, handler]) => ({
+      name,
+      ...analyzeHandler(handler.code),
+    }),
+  );
+
+  const allBlockers = analysis.flatMap((a) =>
+    a.blockers.map((b) => `${b} in ${a.name}`),
+  );
+  if (allBlockers.length > 0) {
+    return NextResponse.json(
+      {
+        ok: false,
+        phase: "analysis",
+        errors: allBlockers,
+        blockers: allBlockers,
+      },
+      { status: 400 },
+    );
+  }
+
+  billing.consume({
+    unit: "push",
+    agentId: agentName,
+    estimatedCost: estimateFromIR(irGraph),
+  });
+
+  logPush({
+    agentName,
+    hash,
+    validation: {
+      ir: irValidation,
+      bindings: bindingValidation,
+    },
+    analysis,
+    timestamp: new Date().toISOString(),
+  });
+
+  const allWarnings = analysis.flatMap((a) =>
+    a.warnings.map((w) => `${w} in ${a.name}`),
+  );
 
   return NextResponse.json({
     ok: true,
-    received: true,
-    agentName,
-    hash: hash.slice(0, 16),
+    hash,
+    analysis,
+    warnings: allWarnings,
   });
 }

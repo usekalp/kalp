@@ -28,8 +28,6 @@ import {
 } from "../src/proxy";
 import { normalizeGraph } from "../src/normalize";
 
-// ─── Mocks ───────────────────────────────────────────────────────────────────
-
 const createMockStep = (id: string): Step<z.ZodTypeAny, z.ZodTypeAny> => ({
   kind: "step",
   id,
@@ -64,8 +62,6 @@ const createMockRoute = (
   path: `/${id}`,
   inputSchema: undefined,
 });
-
-// ─── Recording Proxy Tests ─────────────────────────────────────────────────────
 
 describe("Recording Proxy", () => {
   it("records run emissions", async () => {
@@ -175,8 +171,6 @@ describe("Recording Proxy", () => {
   });
 });
 
-// ─── Loop Compiler Tests ───────────────────────────────────────────────────────
-
 describe("Loop Compiler", () => {
   it("compiles a basic loop with wait schedule", async () => {
     const result = await compileLoop(async ({ actions }: RecordingContext) => {
@@ -236,8 +230,6 @@ describe("Loop Compiler", () => {
   });
 });
 
-// ─── Classify Compiler Tests ───────────────────────────────────────────────────
-
 describe("Classify Compiler", () => {
   it("compiles basic classify node", () => {
     const node = compileClassify({
@@ -281,8 +273,6 @@ describe("Classify Compiler", () => {
   });
 });
 
-// ─── Agent Compiler Tests ──────────────────────────────────────────────────────
-
 describe("Agent Compiler", () => {
   it("compiles minimal agent with steps", async () => {
     const agent = {
@@ -306,11 +296,12 @@ describe("Agent Compiler", () => {
   });
 
   it("populates targetKind on run nodes", async () => {
+    const flowStep = createMockStep("flow_inner");
     const agent = {
       id: "kind-agent",
       steps: [createMockStep("s")],
       tools: [createMockTool("t")],
-      flows: [createMockFlow("f")],
+      flows: [createMockFlow("f", [flowStep])],
     };
 
     const graph = await compileAgent(agent);
@@ -321,7 +312,8 @@ describe("Agent Compiler", () => {
     const kinds = runNodes.map((n) => n.targetKind);
     expect(kinds).toContain("step");
     expect(kinds).toContain("tool");
-    expect(kinds).toContain("flow");
+    // flows are expanded at compile-time: no "flow" targetKind in IR
+    expect(kinds).not.toContain("flow");
   });
 
   it("populates inputSchema/outputSchema from zod schemas", async () => {
@@ -356,7 +348,7 @@ describe("Agent Compiler", () => {
     expect(toolRuns[0]!.targetKind).toBe("tool");
   });
 
-  it("compiles agent with flows", async () => {
+  it("compiles agent with flows (expanded inline)", async () => {
     const step = createMockStep("flow_step");
     const flow = createMockFlow("my_flow", [step]);
 
@@ -368,11 +360,18 @@ describe("Agent Compiler", () => {
 
     const graph = await compileAgent(agent);
 
-    const flowRuns = Object.values(graph.nodes).filter(
+    // flows are expanded at compile-time: no run node for "my_flow" itself
+    const flowByFlowId = Object.values(graph.nodes).filter(
       (n): n is RunIRNode => n.kind === "run" && n.targetId === "my_flow",
     );
-    expect(flowRuns).toHaveLength(1);
-    expect(flowRuns[0]!.targetKind).toBe("flow");
+    expect(flowByFlowId).toHaveLength(0);
+
+    // instead, the steps inside the flow appear as run nodes
+    const expandedStep = Object.values(graph.nodes).find(
+      (n): n is RunIRNode => n.kind === "run" && n.targetId === "flow_step",
+    );
+    expect(expandedStep).toBeDefined();
+    expect(expandedStep!.targetKind).toBe("step");
   });
 
   it("compiles complete agent with all components", async () => {
@@ -426,8 +425,6 @@ describe("Agent Compiler", () => {
     );
   });
 });
-
-// ─── Graph Normalizer Tests ────────────────────────────────────────────────────
 
 describe("Graph Normalizer", () => {
   it("validates valid graph with entries", () => {
@@ -626,10 +623,6 @@ describe("Graph Normalizer", () => {
   });
 });
 
-// ─── Integration Tests ───────────────────────────────────────────────────────
-
-// ─── Two-Phase Recording Tests ─────────────────────────────────────────────
-
 describe("Two-Phase Recording (recordWithBranching)", () => {
   it("returns simple trace when no classify", async () => {
     const result = await recordWithBranching(async ({ actions }) => {
@@ -732,8 +725,6 @@ describe("Two-Phase Recording (recordWithBranching)", () => {
     expect(branching.branches.get("chat")!).toHaveLength(0);
   });
 });
-
-// ─── Integration Tests ───────────────────────────────────────────────────────
 
 describe("Integration: Full Agent with Loop and Classify", () => {
   it("compiles agent with loop subgraph", async () => {

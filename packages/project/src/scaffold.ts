@@ -59,9 +59,7 @@ async function replacePlaceholders(
           const formatted = await formatGeneratedFile(fp, src);
           await writeFile(fp, formatted, "utf-8");
         }
-      } catch {
-        // binary file — skip
-      }
+      } catch {}
     }
   }
 }
@@ -72,13 +70,11 @@ export async function scaffoldProject(opts: {
 }): Promise<void> {
   const { projectName, targetDir } = opts;
 
-  // ── Copy project template (flat) to target directory ──────────────────
   await cp(join(TEMPLATES_DIR, "project"), targetDir, {
     recursive: true,
     force: true,
   });
 
-  // ── Ensure .gitignore exists (cp may skip dotfiles on Windows) ────────
   const gitignorePath = join(targetDir, ".gitignore");
   try {
     await access(gitignorePath);
@@ -90,7 +86,6 @@ export async function scaffoldProject(opts: {
     );
   }
 
-  // ── Create .temp directory with version info (project local) ───────────
   const tempDir = join(targetDir, ".temp");
   await mkdir(tempDir, { recursive: true });
 
@@ -105,7 +100,6 @@ export async function scaffoldProject(opts: {
     "utf-8",
   );
 
-  // ── kalp.config.ts ────────────────────────────────────────────────────
   const kalpConfig = `import { defineConfig } from "@kalphq/sdk";
 
 export default defineConfig({
@@ -114,7 +108,6 @@ export default defineConfig({
 `;
   await writeFile(join(targetDir, "kalp.config.ts"), kalpConfig, "utf-8");
 
-  // ── Replace placeholders across the whole target ──────────────────────
   await replacePlaceholders(targetDir, { __PROJECT_NAME__: projectName });
 }
 
@@ -130,9 +123,7 @@ export async function scaffoldAgent(opts: {
   await mkdir(join(agentDir, "routes"), { recursive: true });
   await mkdir(join(agentDir, "flows"), { recursive: true });
 
-  // ── Agent index.ts ────────────────────────────────────────────────────
-  const agentIndex = `// Define behavior using normal JavaScript.
-// Kalp compiles this into a distributed execution graph (IR).
+  const agentIndex = `
 import { asAgentId, defineAgent } from "@kalphq/sdk";
 import { processQuery } from "@/${agentName}/steps/process-query";
 import { formatResponse } from "@/${agentName}/steps/format-response";
@@ -143,10 +134,6 @@ export default defineAgent({
   id: asAgentId("${agentName}"),
   name: "${agentName}",
   description: "A helpful AI assistant",
-
-  // Optional — compiler infers from actions.run(), but these help with validation and tooling
-  steps: [processQuery, formatResponse],
-  tools: [searchTool],
 
   routes: [healthRoute],
 
@@ -176,7 +163,6 @@ export default defineAgent({
   },
 });`;
 
-  // ── Step: process-query.ts ────────────────────────────────────────────
   const stepProcessFile = `import { defineStep } from "@kalphq/sdk";
 import { z } from "zod";
 
@@ -197,7 +183,6 @@ export const processQuery = defineStep({
   },
 });`;
 
-  // ── Step: format-response.ts ──────────────────────────────────────────
   const stepFormatFile = `import { defineStep } from "@kalphq/sdk";
 import { z } from "zod";
 
@@ -227,7 +212,6 @@ export const formatResponse = defineStep({
   },
 });`;
 
-  // ── Tool: search.ts ───────────────────────────────────────────────────
   const toolFile = `import { defineTool } from "@kalphq/sdk";
 import { z } from "zod";
 
@@ -246,7 +230,6 @@ export const searchTool = defineTool({
   },
 });`;
 
-  // ── Route: health.ts ──────────────────────────────────────────────────
   const routeFile = `import { defineRoute } from "@kalphq/sdk";
 
 export const healthRoute = defineRoute({
@@ -262,9 +245,7 @@ export const healthRoute = defineRoute({
   },
 });`;
 
-  // ── Flow: chat-flow.ts ────────────────────────────────────────────────
-  const flowFile = `// Optional composition helper — compiled into the execution graph.
-// Not required for execution.
+  const flowFile = `
 import { defineFlow } from "@kalphq/sdk";
 import { processQuery } from "@/${agentName}/steps/process-query";
 import { formatResponse } from "@/${agentName}/steps/format-response";

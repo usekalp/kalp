@@ -9,7 +9,6 @@ import type {
   TypedAgentContext,
 } from "@/types";
 
-/** Base shape for the data/config portion of `defineAgent`. */
 interface AgentConfigBase {
   id: AgentId;
   name?: string;
@@ -38,7 +37,7 @@ interface AgentConfigBase {
  */
 export function defineAgent<const TConfig extends AgentConfigBase>(
   config: TConfig & {
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    // Lifecycle
     /** Called once when the agent starts. */
     onInit?: (context: HandlerContext) => Promise<void>;
     /** Called periodically on a timer. */

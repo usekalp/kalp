@@ -1,5 +1,6 @@
 import type {
   EntryIRNode,
+  RouteEntryIRNode,
   IRGraph,
   IREdge,
   IRNodeId,
@@ -46,10 +47,12 @@ export const compileAgent = async (agent: unknown): Promise<IRGraph> => {
   const steps = asArray(raw.steps);
   const tools = asArray(raw.tools);
   const flows = asArray(raw.flows);
+  const routes = asArray(raw.routes);
 
   const createId = createIdGenerator();
   const nodes: IRGraph["nodes"] = {};
   const edges: IREdge[] = [];
+  const entries: IRGraph["entries"] = {};
 
   // ── Create EntryIRNode for onMessage ────────────────────────────────────
   const entryId = createId("entry");
@@ -59,6 +62,41 @@ export const compileAgent = async (agent: unknown): Promise<IRGraph> => {
     handler: "onMessage",
   };
   nodes[entryId] = entryNode;
+  entries["onMessage"] = entryId;
+
+  // ── Register onInit / onTick if present ─────────────────────────────────
+  for (const lifecycle of ["onInit", "onTick"] as const) {
+    if (raw[lifecycle] != null) {
+      const lcId = createId("entry");
+      const lcNode: EntryIRNode = {
+        kind: "entry",
+        id: lcId,
+        handler: lifecycle,
+      };
+      nodes[lcId] = lcNode;
+      entries[lifecycle] = lcId;
+    }
+  }
+
+  // ── Register routes as entry nodes (metadata only, no execution wiring) ─
+  for (const route of routes) {
+    const rec = asRecord(route);
+    if (!rec) continue;
+    const path = asString(rec.path) ?? "/unknown";
+    const method = (
+      asString(rec.method) ?? "GET"
+    ).toUpperCase() as RouteEntryIRNode["method"];
+    const routeId = createId("entry");
+    const routeNode: RouteEntryIRNode = {
+      kind: "entry",
+      id: routeId,
+      handler: `route:${method}:${path}`,
+      method,
+      path,
+    };
+    nodes[routeId] = routeNode;
+    entries[`route:${method}:${path}`] = routeId;
+  }
 
   // ── Register run nodes ──────────────────────────────────────────────────
   const registerRun = (
@@ -89,9 +127,17 @@ export const compileAgent = async (agent: unknown): Promise<IRGraph> => {
     const rec = asRecord(tool);
     if (rec) runSequence.push(registerRun(rec, "tool"));
   }
+
+  // ── Flows: expand inline (no targetKind:"flow" in IR) ───────────────────
   for (const flow of flows) {
     const rec = asRecord(flow);
-    if (rec) runSequence.push(registerRun(rec, "flow"));
+    if (!rec) continue;
+    const flowSteps = asArray(rec.steps);
+    if (flowSteps.length === 0) continue;
+    for (const fs of flowSteps) {
+      const frec = asRecord(fs);
+      if (frec) runSequence.push(registerRun(frec, "step"));
+    }
   }
 
   if (runSequence.length === 0) {
@@ -108,7 +154,7 @@ export const compileAgent = async (agent: unknown): Promise<IRGraph> => {
 
   const graph: IRGraph = {
     agentId,
-    entries: { onMessage: entryId },
+    entries,
     nodes,
     edges,
   };

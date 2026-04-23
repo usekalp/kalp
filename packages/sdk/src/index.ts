@@ -29,6 +29,7 @@ export type {
   IRNodeId,
   IRNodeKind,
   EntryIRNode,
+  RouteEntryIRNode,
   RunTargetKind,
   RunIRNode,
   WaitIRNode,
@@ -55,7 +56,7 @@ export {
   normalizeKalpError,
 } from "@/errors";
 
-// ─── Factory functions ───────────────────────────────────────────────────────
+// Factory functions
 
 /**
  * Defines a typed {@link Step} with automatic `"step"` kind discriminant.
@@ -110,7 +111,7 @@ export const defineFlow = (config: Omit<Flow, "kind">): Flow => ({
   kind: "flow",
 });
 
-// ─── Project configuration ───────────────────────────────────────────────────
+// Project configuration
 
 /** Top-level Kalp project configuration, defined in `kalp.config.ts`. */
 export interface KalpProjectConfig<TSecrets extends string[] = string[]> {

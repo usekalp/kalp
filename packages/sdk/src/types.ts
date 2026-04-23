@@ -7,7 +7,7 @@ export interface SecretsRegistry {
 /** Inferred secret keys from the global registry */
 export type RegisteredSecrets = SecretsRegistry["keys"];
 
-// ─── Model Map ───────────────────────────────────────────────────────────────
+// Model Map
 
 export type ModelMap = {
   openai:
@@ -175,7 +175,7 @@ export interface KalpAuth {
   hasPermission: (permission: string) => boolean;
 }
 
-// ─── Node System ─────────────────────────────────────────────────────────────
+// Node System
 
 export type NodeKind = "step" | "tool" | "flow" | "route";
 
@@ -265,7 +265,7 @@ export type ExecutableNode = AnyStep | AnyTool | AnyFlow;
  */
 export type RegistryNode = ExecutableNode | Route;
 
-// ─── IR Nodes ───────────────────────────────────────────────────────────────
+// IR Nodes
 
 export type IRNodeId = string & { readonly __brand: "IRNodeId" };
 
@@ -284,11 +284,18 @@ export interface IRNodeBase {
   id: IRNodeId;
 }
 
-export type RunTargetKind = "step" | "tool" | "flow";
+export type RunTargetKind = "step" | "tool";
 
 export interface EntryIRNode extends IRNodeBase {
   kind: "entry";
-  handler: "onMessage" | "onInit" | "onTick";
+  handler: string;
+}
+
+export interface RouteEntryIRNode extends IRNodeBase {
+  kind: "entry";
+  handler: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
 }
 
 export interface RunIRNode extends IRNodeBase {
@@ -357,6 +364,7 @@ export interface LoopIRNode extends IRNodeBase {
 
 export type IRNode =
   | EntryIRNode
+  | RouteEntryIRNode
   | RunIRNode
   | WaitIRNode
   | FetchIRNode
@@ -373,16 +381,12 @@ export interface IREdge {
 
 export interface IRGraph {
   agentId: string;
-  entries: {
-    onMessage?: IRNodeId;
-    onInit?: IRNodeId;
-    onTick?: IRNodeId;
-  };
+  entries: Record<string, IRNodeId>;
   nodes: Record<IRNodeId, IRNode>;
   edges: IREdge[];
 }
 
-// ─── Type Inference Engine (KTE) ─────────────────────────────────────────────
+// Type Inference Engine (KTE)
 
 export type InputOf<T> =
   T extends Step<infer I, any>
@@ -411,7 +415,7 @@ export type InferNodes<C> =
   | (C extends { tools: readonly (infer T)[] } ? T : never)
   | (C extends { flows: readonly (infer F)[] } ? F : never);
 
-// ─── Actions ─────────────────────────────────────────────────────────────────
+// Actions
 
 export interface KalpActions {
   run: <T extends ExecutableNode>(
@@ -440,7 +444,7 @@ export interface TypedActions<TNodes> {
   ) => Promise<Response>;
 }
 
-// ─── Context ─────────────────────────────────────────────────────────────────
+// Context
 
 /**
  * Context passed to all handlers (steps, tools, routes).

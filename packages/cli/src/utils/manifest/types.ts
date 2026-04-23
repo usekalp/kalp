@@ -1,14 +1,12 @@
 import type { IRGraph } from "@kalphq/sdk";
+import type { HandlerMap } from "@/utils/manifest/handlers";
 
 export interface AgentManifestV2 {
   format: "kalp-agent-manifest";
   schemaVersion: 2;
   codeHash: string;
   ir: IRGraph;
-  bundle: {
-    entry: string;
-    hash: string;
-  };
+  handlers: HandlerMap;
   metadata?: {
     generatedAt?: string;
   };
@@ -16,7 +14,6 @@ export interface AgentManifestV2 {
 
 export interface LoadedAgentModule {
   agent: unknown;
-  entry: string;
   tempDir: string;
   codeHash: string;
 }
