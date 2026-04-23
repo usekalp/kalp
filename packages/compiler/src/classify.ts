@@ -12,7 +12,7 @@ export interface ClassifyParams {
 }
 
 export const compileClassify = (params: ClassifyParams): ClassifyIRNode => {
-  const createId = createIdGenerator();
+  const createId = createIdGenerator("classify");
   return {
     kind: "llm.classify",
     id: params.id ?? createId("llm_classify"),

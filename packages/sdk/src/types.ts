@@ -277,7 +277,10 @@ export type IRNodeKind =
   | "loop"
   | "llm.generate"
   | "llm.stream"
-  | "llm.classify";
+  | "llm.classify"
+  | "source"
+  | "storage.put"
+  | "storage.get";
 
 export interface IRNodeBase {
   kind: IRNodeKind;
@@ -362,6 +365,35 @@ export interface LoopIRNode extends IRNodeBase {
   persistent: true;
 }
 
+/**
+ * Nodo fuente para datos de entrada (message, context, storage)
+ * Usado como origen de edges de tipo "data"
+ */
+export interface SourceIRNode extends IRNodeBase {
+  kind: "source";
+  sourceType: "message" | "context" | "storage" | "env";
+  field?: string; // ej: "text" para message.text
+}
+
+/**
+ * Nodo para operación storage.put
+ * Scope y sequence se derivan del grafo, NO se almacenan
+ */
+export interface StoragePutIRNode extends IRNodeBase {
+  kind: "storage.put";
+  key: string;
+  value?: unknown;
+}
+
+/**
+ * Nodo para operación storage.get
+ * Scope y sequence se derivan del grafo, NO se almacenan
+ */
+export interface StorageGetIRNode extends IRNodeBase {
+  kind: "storage.get";
+  key: string;
+}
+
 export type IRNode =
   | EntryIRNode
   | RouteEntryIRNode
@@ -371,15 +403,38 @@ export type IRNode =
   | GenerateIRNode
   | StreamIRNode
   | ClassifyIRNode
-  | LoopIRNode;
+  | LoopIRNode
+  | SourceIRNode
+  | StoragePutIRNode
+  | StorageGetIRNode;
 
-export type IREdgeType = "sequential" | "branch" | "nested";
+export type IREdgeType =
+  | "sequential"
+  | "branch"
+  | "nested"
+  | "data"
+  | "cross_scope";
 
 export interface IREdge {
   from: IRNodeId;
   to: IRNodeId;
   type: IREdgeType;
   condition?: string;
+  /**
+   * Para edges de tipo "data": mapeo de campo fuente → campo destino
+   * Ej: { sourceField: "text", targetField: "prompt" }
+   */
+  mapping?: {
+    sourceField: string;
+    targetField: string;
+  };
+  /**
+   * Para edges de tipo "cross_scope": metadatos de dependencia entre scopes
+   */
+  scopeDependency?: {
+    fromScope: string;
+    toScope: string;
+  };
 }
 
 export interface IRGraph {

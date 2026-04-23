@@ -1,4 +1,4 @@
-import type { IRNode } from "@kalphq/sdk";
+import type { IRNode, IREdge } from "@kalphq/sdk";
 import { createIdGenerator } from "@/ids";
 import {
   createRecordingContext,
@@ -20,12 +20,14 @@ export interface LoopCapture {
 export interface LinearTrace {
   kind: "linear";
   nodes: IRNode[];
+  edges?: IREdge[]; // FIX 2: edges de tipo "data" para bindings
   loopCaptures: LoopCapture[];
 }
 
 export interface BranchingTrace {
   kind: "branching";
   preNodes: IRNode[];
+  edges?: IREdge[]; // FIX 2: edges de tipo "data" para bindings
   classify: ClassifyCapture;
   branches: Map<string, IRNode[]>;
   loopCaptures: LoopCapture[]; // Loops captured before classify (pre-classify loops)
@@ -142,15 +144,21 @@ export async function recordHandler(
   try {
     // Phase A: run until classify (or completion)
     const phaseANodes: IRNode[] = [];
-    const phaseACreateId = createIdGenerator();
+    const phaseAEdges: IREdge[] = []; // FIX 2: array para data edges
+    const phaseACreateId = createIdGenerator(handlerName);
     let classifyCapture: ClassifyCapture | null = null;
 
-    delegate.ctx = createRecordingContext(phaseANodes, phaseACreateId, {
-      onClassify: (capture) => {
-        classifyCapture = capture;
+    delegate.ctx = createRecordingContext(
+      phaseANodes,
+      phaseACreateId,
+      {
+        onClassify: (capture) => {
+          classifyCapture = capture;
+        },
+        handlerName,
       },
-      handlerName,
-    });
+      phaseAEdges,
+    ); // FIX 2: pasar edges
 
     try {
       await handlerFn(mockCtx);
@@ -161,7 +169,12 @@ export async function recordHandler(
 
     // No classify → linear trace
     if (!classifyCapture) {
-      return { kind: "linear", nodes: phaseANodes, loopCaptures };
+      return {
+        kind: "linear",
+        nodes: phaseANodes,
+        edges: phaseAEdges,
+        loopCaptures,
+      };
     }
 
     const preTraceLength = phaseANodes.length;
@@ -174,7 +187,7 @@ export async function recordHandler(
     for (const label of classifyCapture.labels) {
       const passNodes: IRNode[] = [];
       const passLoops: LoopCapture[] = []; // Fresh loop array for this branch
-      const passCreateId = createIdGenerator();
+      const passCreateId = createIdGenerator(`${handlerName}_branch_${label}`);
       let passClassifyHit = false;
 
       // Build new mock context with fresh loop captures for this branch
@@ -207,6 +220,7 @@ export async function recordHandler(
     return {
       kind: "branching",
       preNodes,
+      edges: phaseAEdges, // FIX 2: incluir edges de fase A
       classify: classifyCapture,
       branches,
       loopCaptures,

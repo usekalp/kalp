@@ -1,5 +1,33 @@
 # platform
 
+## 0.0.0-dev-20260423092034
+
+### Patch Changes
+
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260423092034
+
+## 0.0.0-dev-20260423081407
+
+### Patch Changes
+
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260423081407
+
+## 0.0.0-dev-20260423071414
+
+### Patch Changes
+
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260423071414
+
+## 0.0.0-dev-20260423070430
+
+### Patch Changes
+
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260423070430
+
 ## 0.0.0-dev-20260423070137
 
 ### Patch Changes

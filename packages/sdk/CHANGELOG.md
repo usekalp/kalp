@@ -1,5 +1,29 @@
 # @kalphq/sdk
 
+## 0.0.0-dev-20260423092034
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260423081407
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260423071414
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260423070430
+
+### Patch Changes
+
+- dev release
+
 ## 0.0.0-dev-20260423070137
 
 ### Patch Changes

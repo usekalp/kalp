@@ -205,7 +205,13 @@ function buildPathToNode(
       .filter((e) => e.from === nodeId)
       .sort((a, b) => {
         // Sort by: type, then condition, then target
-        const typeOrder = { sequential: 0, branch: 1, nested: 2 };
+        const typeOrder = {
+          sequential: 0,
+          branch: 1,
+          nested: 2,
+          data: 3,
+          cross_scope: 4,
+        };
         const typeDiff = (typeOrder[a.type] ?? 0) - (typeOrder[b.type] ?? 0);
         if (typeDiff !== 0) return typeDiff;
         const condDiff = (a.condition ?? "").localeCompare(b.condition ?? "");
@@ -662,6 +668,46 @@ export function validateIRBindings(
           `- Check your actions and returns\n` +
           `- Make sure every step is properly defined\n\n` +
           `(debug: edge to non-existent node "${edge.to}")`,
+      );
+    }
+  }
+
+  // 8. Cross-scope execution rules (FIX 1: CRÍTICO)
+  // Verificar que edges cross-scope tengan marca explícita
+  for (const edge of ir.edges) {
+    if (edge.type === "cross_scope") {
+      // Validar que tenga scopeDependency definido
+      if (!edge.scopeDependency) {
+        errors.push(
+          `Cross-scope dependency missing required metadata.\n\n` +
+            `Edge from "${edge.from}" to "${edge.to}" is marked as cross-scope but lacks scopeDependency.\n\n` +
+            `Fix:\n` +
+            `- Add scopeDependency: { fromScope, toScope } to the edge\n\n` +
+            `(debug: cross_scope edge without scopeDependency)`,
+        );
+      }
+    }
+  }
+
+  // Verificar execution semantics: within-scope ordering
+  const scopeGroups = new Map<string, IRNodeId[]>();
+  for (const [nodeId, node] of Object.entries(ir.nodes)) {
+    const scopeId = (node as any).meta?.handler ?? "unknown";
+    if (!scopeGroups.has(scopeId)) {
+      scopeGroups.set(scopeId, []);
+    }
+    scopeGroups.get(scopeId)!.push(nodeId as IRNodeId);
+  }
+
+  // Validar que no hay edges "data" sin mapping definido
+  for (const edge of ir.edges) {
+    if (edge.type === "data" && !edge.mapping) {
+      warnings.push(
+        `Data edge missing field mapping.\n\n` +
+          `Edge from "${edge.from}" to "${edge.to}" should specify which fields are being passed.\n\n` +
+          `Fix:\n` +
+          `- Add mapping: { sourceField, targetField } to the edge\n\n` +
+          `(debug: data edge without mapping)`,
       );
     }
   }

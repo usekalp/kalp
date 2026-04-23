@@ -126,7 +126,7 @@ export const compileAgent = async (agent: unknown): Promise<IRGraph> => {
   const flows = asArray(raw.flows);
   const routes = asArray(raw.routes);
 
-  const createId = createIdGenerator();
+  const createId = createIdGenerator("root");
   const nodes: IRGraph["nodes"] = {};
   const edges: IREdge[] = [];
   const entries: IRGraph["entries"] = {};

@@ -4,9 +4,13 @@ import type {
   GenerateIRNode,
   IRNode,
   IRNodeId,
+  IREdge,
   RunIRNode,
   RunTargetKind,
+  SourceIRNode,
   StreamIRNode,
+  StoragePutIRNode,
+  StorageGetIRNode,
   WaitIRNode,
 } from "@kalphq/sdk";
 import { createIdGenerator } from "@/ids";
@@ -55,6 +59,7 @@ export type Event =
 
 export interface RecordingTrace {
   nodes: IRNode[];
+  edges?: IREdge[]; // FIX 2: edges de tipo "data" para bindings
 }
 
 export interface ClassifyCapture {
@@ -66,6 +71,7 @@ export interface ClassifyCapture {
 
 export interface BranchingResult {
   preTrace: IRNode[];
+  edges?: IREdge[]; // FIX 2: edges de tipo "data"
   classify: ClassifyCapture;
   branches: Map<string, IRNode[]>;
 }
@@ -96,6 +102,10 @@ export interface RecordingContext {
       model?: string;
       confidenceThreshold?: number;
     }) => Promise<string>;
+  };
+  storage: {
+    put: (key: string, value: unknown) => Promise<void>;
+    get: <T = unknown>(key: string) => Promise<T | null>;
   };
 }
 
@@ -208,13 +218,17 @@ export const createRecordingContext = (
   nodes: IRNode[],
   createId: ReturnType<typeof createIdGenerator>,
   config: EmitterConfig & { handlerName?: string } = {},
+  edges?: IREdge[], // FIX 2: array opcional para data edges
 ): RecordingContext => {
   let classifyCount = 0;
   let stepIndex = 0;
   const handlerName = config.handlerName ?? "unknown";
+  const dataEdges = edges ?? [];
 
-  const emit = <T extends IRNode>(
+  // FIX 2: Helper para crear source nodes y data edges
+  const emitWithDataEdge = <T extends IRNode>(
     node: Omit<T, "id"> & { id?: IRNodeId; __source?: SourceContext },
+    dataSource?: { type: string; field: string },
   ) => {
     const kind = node.kind as IRNode["kind"];
     const id = node.id ?? createId(kind.replaceAll(".", "_"));
@@ -222,8 +236,37 @@ export const createRecordingContext = (
       handler: handlerName,
       step: stepIndex++,
     };
+
+    // FIX 2: Si hay fuente de datos, crear nodo source y edge
+    if (dataSource && edges) {
+      const sourceId = createId("source");
+      const sourceNode: SourceIRNode = {
+        kind: "source",
+        id: sourceId,
+        sourceType: dataSource.type as any,
+        field: dataSource.field,
+      };
+      nodes.push(sourceNode as unknown as IRNode);
+
+      dataEdges.push({
+        from: sourceId,
+        to: id,
+        type: "data",
+        mapping: {
+          sourceField: dataSource.field,
+          targetField: "input", // default
+        },
+      });
+    }
+
     nodes.push({ ...node, id, __source: source } as unknown as T);
     return id;
+  };
+
+  const emit = <T extends IRNode>(
+    node: Omit<T, "id"> & { id?: IRNodeId; __source?: SourceContext },
+  ) => {
+    return emitWithDataEdge(node);
   };
 
   const actions: RecordingContext["actions"] = {
@@ -301,7 +344,25 @@ export const createRecordingContext = (
     },
   };
 
-  return { actions, ai };
+  // FIX v7: Storage operations como IR nodes
+  const storage: RecordingContext["storage"] = {
+    put: async (key, value) => {
+      emit<StoragePutIRNode>({
+        kind: "storage.put",
+        key,
+        value,
+      });
+    },
+    get: async <T = unknown>(key: string): Promise<T | null> => {
+      emit<StorageGetIRNode>({
+        kind: "storage.get",
+        key,
+      });
+      return null as T | null;
+    },
+  };
+
+  return { actions, ai, storage };
 };
 
 // Simple recording (no classify)
@@ -310,10 +371,16 @@ export const recordEmissions = async (
   body: RecordingBody,
 ): Promise<RecordingTrace> => {
   const nodes: IRNode[] = [];
-  const createId = createIdGenerator();
-  const ctx = createRecordingContext(nodes, createId, { simpleMode: true });
+  const edges: IREdge[] = []; // FIX 2: array para data edges
+  const createId = createIdGenerator("simple");
+  const ctx = createRecordingContext(
+    nodes,
+    createId,
+    { simpleMode: true },
+    edges,
+  );
   await body(ctx);
-  return { nodes };
+  return { nodes, edges: edges.length > 0 ? edges : undefined };
 };
 
 // Two-phase recording with multi-pass classify
@@ -326,14 +393,20 @@ export const recordWithBranching = async (
   try {
     // Phase A: run until classify (or to completion)
     const phaseANodes: IRNode[] = [];
-    const phaseACreateId = createIdGenerator();
+    const phaseAEdges: IREdge[] = []; // FIX 2: array para data edges
+    const phaseACreateId = createIdGenerator("phase_a");
     let classifyCapture: ClassifyCapture | null = null;
 
-    const phaseACtx = createRecordingContext(phaseANodes, phaseACreateId, {
-      onClassify: (capture) => {
-        classifyCapture = capture;
+    const phaseACtx = createRecordingContext(
+      phaseANodes,
+      phaseACreateId,
+      {
+        onClassify: (capture) => {
+          classifyCapture = capture;
+        },
       },
-    });
+      phaseAEdges,
+    );
 
     try {
       await body(phaseACtx);
@@ -344,7 +417,10 @@ export const recordWithBranching = async (
 
     // No classify → simple linear trace
     if (!classifyCapture) {
-      return { nodes: phaseANodes };
+      return {
+        nodes: phaseANodes,
+        edges: phaseAEdges.length > 0 ? phaseAEdges : undefined,
+      };
     }
 
     const preTraceLength = phaseANodes.length;
@@ -355,15 +431,21 @@ export const recordWithBranching = async (
 
     for (const label of classifyCapture.labels) {
       const passNodes: IRNode[] = [];
-      const passCreateId = createIdGenerator();
+      const passCreateId = createIdGenerator(`branch_${label}`);
       let passClassifyHit = false;
 
-      const passCtx = createRecordingContext(passNodes, passCreateId, {
-        classifyReturn: label,
-        onClassify: () => {
-          passClassifyHit = true;
+      const passEdges: IREdge[] = []; // FIX 2: array para data edges
+      const passCtx = createRecordingContext(
+        passNodes,
+        passCreateId,
+        {
+          classifyReturn: label,
+          onClassify: () => {
+            passClassifyHit = true;
+          },
         },
-      });
+        passEdges,
+      );
 
       await body(passCtx);
 
@@ -383,7 +465,12 @@ export const recordWithBranching = async (
       branches.set(label, postTrace);
     }
 
-    return { preTrace, classify: classifyCapture, branches };
+    return {
+      preTrace,
+      edges: phaseAEdges.length > 0 ? phaseAEdges : undefined,
+      classify: classifyCapture,
+      branches,
+    };
   } finally {
     restoreGlobals(sandbox);
   }

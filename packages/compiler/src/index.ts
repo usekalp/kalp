@@ -1,6 +1,7 @@
 export { compileAgent } from "@/compiler";
 export { compileClassify } from "@/classify";
 export { compileLoop } from "@/loop";
+export type { LoopCompileResult } from "@/loop";
 export { normalizeGraph } from "@/normalize";
 export { toHandlerKey } from "@/handler-key";
 export { recordHandler, adaptRouteHandler } from "@/record-handler";
@@ -36,3 +37,9 @@ export {
 export type { ValidationResult, Severity, ValidationIssue } from "@/validate";
 export { analyzeHandler } from "@/analyze";
 export type { HandlerAnalysis } from "@/analyze";
+export {
+  computeScopes,
+  computeSequence,
+  findCycles,
+  hasControlPath,
+} from "@/graph";

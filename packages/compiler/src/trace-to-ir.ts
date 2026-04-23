@@ -1,17 +1,13 @@
+import { compileLoop } from "@/loop";
+import { createIdGenerator } from "@/ids";
 import type {
   IRNode,
-  IREdge,
   IRNodeId,
-  LoopIRNode,
-  WaitIRNode,
+  IREdge,
   ClassifyIRNode,
+  WaitIRNode,
 } from "@kalphq/sdk";
-import { createIdGenerator } from "@/ids";
-import {
-  recordHandler,
-  type ExecutionTrace,
-  type LoopCapture,
-} from "@/record-handler";
+import type { ExecutionTrace, LoopCapture } from "@/record-handler";
 
 // ── Types ──
 
@@ -22,7 +18,9 @@ export interface IRFragment {
 
 // ── Schedule inference (reused from loop.ts pattern) ──
 
-const inferSchedule = (nodes: IRNode[]): LoopIRNode["schedule"] => {
+const inferSchedule = (
+  nodes: IRNode[],
+): { type: "interval" | "event-driven"; value?: string | number } => {
   const waitNode = nodes.find((n): n is WaitIRNode => n.kind === "wait");
   if (!waitNode) return { type: "event-driven" };
   return { type: "interval", value: waitNode.duration };
@@ -48,6 +46,11 @@ export async function traceToIR(
     );
 
     wireSequential(entryId, chain, edges);
+
+    // FIX 2: Agregar data edges del trace
+    if (trace.edges) {
+      edges.push(...trace.edges);
+    }
   } else {
     // Branching trace
     const preChain = await resolveNodes(
@@ -97,11 +100,11 @@ export async function traceToIR(
         });
 
         // Wire classify → first branch node
+        // Note: condition is inferred from classifyNode.branches, not duplicated here
         edges.push({
           from: classifyId,
           to: branchChain[0]!,
           type: "branch",
-          condition: label,
         });
 
         // Wire sequential within branch
@@ -119,6 +122,11 @@ export async function traceToIR(
     }
 
     nodes[classifyId] = classifyNode;
+
+    // FIX 2: Agregar data edges del trace
+    if (trace.edges) {
+      edges.push(...trace.edges);
+    }
   }
 
   return {
@@ -171,63 +179,36 @@ async function resolveNodes(
     chain.push(node.id);
   }
 
-  // Process loop captures: record each loop body, build LoopIRNode
-  for (const capture of loopCaptures) {
-    const loopTrace = await recordHandler(
-      capture.body as (ctx: unknown) => Promise<unknown>,
-    );
-    const loopCreateId = createIdGenerator();
-    const loopFragment = await traceToIR(
-      loopTrace,
-      "" as IRNodeId,
-      loopCreateId,
+  // FIX v7: Process loop captures como cyclic subgraphs
+  for (let i = 0; i < loopCaptures.length; i++) {
+    const capture = loopCaptures[i]!;
+
+    // Compile loop como cyclic subgraph (no LoopIRNode container)
+    const loopResult = await compileLoop(
+      capture.body as (ctx: unknown) => Promise<void>,
     );
 
-    // Get the first loop node for entry pointer
-    const loopNodeIds = Object.keys(loopFragment.nodes) as IRNodeId[];
-    if (loopNodeIds.length === 0) continue;
-
-    // Merge loop fragment nodes
-    for (const [id, n] of Object.entries(loopFragment.nodes)) {
+    // Merge loop nodes into output
+    for (const [id, n] of Object.entries(loopResult.nodes)) {
       outNodes[id as IRNodeId] = n;
     }
 
-    // Merge loop fragment edges (skip the edge from empty entryId)
-    for (const edge of loopFragment.edges) {
-      if (edge.from !== ("" as IRNodeId)) {
-        outEdges.push(edge);
-      }
+    // Merge loop edges into output
+    for (const edge of loopResult.edges) {
+      outEdges.push(edge);
     }
 
-    // Find first real node (the one that the empty entry wired to)
-    const firstLoopEdge = loopFragment.edges.find(
-      (e) => e.from === ("" as IRNodeId),
-    );
-    const firstLoopNodeId = firstLoopEdge?.to ?? loopNodeIds[0]!;
-
-    // Build LoopIRNode
-    const loopId = createId("loop");
-    const loopNode: LoopIRNode = {
-      kind: "loop",
-      id: loopId,
-      entry: firstLoopNodeId,
-      detached: true,
-      schedule: inferSchedule(Object.values(loopFragment.nodes)),
-      lifecycle: {},
-      persistent: true,
-    };
-    outNodes[loopId] = loopNode;
-
-    // Wire: last chain node → loop (nested edge)
+    // Wire: last chain node → loop entry (sequential edge)
     if (chain.length > 0) {
       outEdges.push({
         from: chain[chain.length - 1]!,
-        to: loopId,
-        type: "nested",
+        to: loopResult.entryId,
+        type: "sequential",
       });
     }
 
-    chain.push(loopId);
+    // Add loop entry to chain (representa el loop en la secuencia)
+    chain.push(loopResult.entryId);
   }
 
   return chain;

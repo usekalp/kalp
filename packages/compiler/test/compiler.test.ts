@@ -8,17 +8,18 @@ import type {
   IRNode,
   IRNodeId,
   EntryIRNode,
-  LoopIRNode,
   ClassifyIRNode,
   RunIRNode,
   WaitIRNode,
   GenerateIRNode,
   StreamIRNode,
   FetchIRNode,
+  StoragePutIRNode,
+  StorageGetIRNode,
 } from "@kalphq/sdk";
 import { z } from "zod";
 import { compileAgent } from "../src/compiler";
-import { compileLoop } from "../src/loop";
+import { compileLoop, type LoopCompileResult } from "../src/loop";
 import { compileClassify } from "../src/classify";
 import {
   recordEmissions,
@@ -27,6 +28,7 @@ import {
   type BranchingResult,
 } from "../src/proxy";
 import { normalizeGraph } from "../src/normalize";
+import { computeScopes } from "../src/graph";
 
 const createMockStep = (id: string): Step<z.ZodTypeAny, z.ZodTypeAny> => ({
   kind: "step",
@@ -172,56 +174,68 @@ describe("Recording Proxy", () => {
 });
 
 describe("Loop Compiler", () => {
-  it("compiles a basic loop with wait schedule", async () => {
+  it("compiles a basic loop with cyclic subgraph structure", async () => {
     const result = await compileLoop(async ({ actions }: RecordingContext) => {
       await actions.run({ id: "process" }, { data: "input" });
       await actions.wait("1h");
     });
 
-    expect(result.loopNode.kind).toBe("loop");
-    expect(result.loopNode.schedule).toEqual({
-      type: "interval",
-      value: "1h",
-    });
-    expect(result.loopNode.persistent).toBe(true);
+    // FIX v7: Loop es cyclic subgraph, no container node
+    expect(result.entryId).toBeDefined();
+    expect(result.exitId).toBeDefined();
+    expect(result.bodyIds.length).toBeGreaterThan(0);
     expect(Object.keys(result.nodes).length).toBeGreaterThan(0);
     expect(result.edges.length).toBeGreaterThan(0);
+
+    // Verificar estructura de back-edge (exit → first body node)
+    const backEdges = result.edges.filter(
+      (e) => e.from === result.exitId && e.to === result.bodyIds[0],
+    );
+    expect(backEdges.length).toBeGreaterThan(0);
   });
 
-  it("defaults to event-driven when no wait", async () => {
+  it("includes entry and exit nodes in nodes record", async () => {
     const result = await compileLoop(async ({ actions }: RecordingContext) => {
       await actions.run({ id: "step_only" });
     });
 
-    expect(result.loopNode.schedule).toEqual({ type: "event-driven" });
+    expect(result.nodes[result.entryId]).toBeDefined();
+    expect(result.nodes[result.exitId]).toBeDefined();
+    expect(result.nodes[result.entryId]!.kind).toBe("run");
   });
 
-  it("uses first wait only for schedule inference", async () => {
+  it("body nodes are in execution order", async () => {
     const result = await compileLoop(async ({ actions }: RecordingContext) => {
       await actions.wait("5m");
       await actions.run({ id: "first" });
-      await actions.wait("1h"); // Should be ignored
       await actions.run({ id: "second" });
     });
 
-    expect(result.loopNode.schedule).toEqual({
-      type: "interval",
-      value: "5m",
-    });
+    // bodyIds debe estar en orden de ejecución
+    expect(result.bodyIds.length).toBe(3);
+
+    // Verificar que hay edges secuenciales entre body nodes
+    for (let i = 0; i < result.bodyIds.length - 1; i++) {
+      const from = result.bodyIds[i];
+      const to = result.bodyIds[i + 1];
+      const edge = result.edges.find((e) => e.from === from && e.to === to);
+      expect(edge).toBeDefined();
+      expect(edge!.type).toBe("sequential");
+    }
   });
 
-  it("creates entry pointer to first node", async () => {
+  it("creates entry node that points to first body node", async () => {
     const result = await compileLoop(async ({ actions }: RecordingContext) => {
       await actions.run({ id: "entry_node" });
       await actions.wait("1s");
     });
 
-    const firstNode = Object.values(result.nodes).find(
-      (n): n is RunIRNode =>
-        n.kind === "run" && n.targetId === "steps.entry_node",
+    const firstBodyId = result.bodyIds[0];
+    const entryEdge = result.edges.find(
+      (e) => e.from === result.entryId && e.to === firstBodyId,
     );
-    expect(firstNode).toBeDefined();
-    expect(result.loopNode.entry).toBe(firstNode!.id);
+    expect(entryEdge).toBeDefined();
+    expect(entryEdge!.type).toBe("sequential");
   });
 
   it("throws on empty loop body", async () => {
@@ -646,55 +660,51 @@ describe("Graph Normalizer", () => {
     );
   });
 
-  it("validates loop entry references", () => {
+  it("validates cyclic loop structure with entry and exit", () => {
+    // FIX v7: Loop es cyclic subgraph, no container node
     const graph: IRGraph = {
       agentId: "test",
-      entries: { onMessage: "loop_1" as IRNodeId },
+      entries: { onMessage: "loop_entry" as IRNodeId },
       nodes: {
-        ["loop_1" as IRNodeId]: {
-          kind: "loop",
-          id: "loop_1" as IRNodeId,
-          entry: "run_start" as IRNodeId,
-          detached: true,
-          schedule: { type: "interval", value: "1h" },
-          lifecycle: {},
-          persistent: true,
-        } as LoopIRNode,
-        ["run_start" as IRNodeId]: {
+        ["loop_entry" as IRNodeId]: {
           kind: "run",
-          id: "run_start" as IRNodeId,
-          targetId: "x",
+          id: "loop_entry" as IRNodeId,
+          targetId: "loop:entry",
+          targetKind: "step",
+        } as RunIRNode,
+        ["body_1" as IRNodeId]: {
+          kind: "wait",
+          id: "body_1" as IRNodeId,
+          duration: "1h",
+        } as WaitIRNode,
+        ["loop_exit" as IRNodeId]: {
+          kind: "run",
+          id: "loop_exit" as IRNodeId,
+          targetId: "loop:check",
           targetKind: "step",
         } as RunIRNode,
       },
-      edges: [],
+      edges: [
+        {
+          from: "loop_entry" as IRNodeId,
+          to: "body_1" as IRNodeId,
+          type: "sequential",
+        },
+        {
+          from: "body_1" as IRNodeId,
+          to: "loop_exit" as IRNodeId,
+          type: "sequential",
+        },
+        {
+          from: "loop_exit" as IRNodeId,
+          to: "body_1" as IRNodeId,
+          type: "sequential",
+        }, // back-edge
+      ],
     };
 
     const normalized = normalizeGraph(graph);
     expect(normalized.agentId).toBe("test");
-  });
-
-  it("throws on missing loop entry", () => {
-    const graph: IRGraph = {
-      agentId: "test",
-      entries: { onMessage: "loop_1" as IRNodeId },
-      nodes: {
-        ["loop_1" as IRNodeId]: {
-          kind: "loop",
-          id: "loop_1" as IRNodeId,
-          entry: "missing" as IRNodeId,
-          detached: true,
-          schedule: { type: "interval", value: "1h" },
-          lifecycle: {},
-          persistent: true,
-        } as LoopIRNode,
-      },
-      edges: [],
-    };
-
-    expect(() => normalizeGraph(graph)).toThrow(
-      "Missing node missing referenced by loop.entry.",
-    );
   });
 });
 
@@ -802,7 +812,7 @@ describe("Two-Phase Recording (recordWithBranching)", () => {
 });
 
 describe("Integration: Full Agent with Loop and Classify", () => {
-  it("compiles agent with loop subgraph", async () => {
+  it("compiles agent with loop cyclic subgraph", async () => {
     const step = createMockStep("processor");
 
     const agent = {
@@ -810,7 +820,7 @@ describe("Integration: Full Agent with Loop and Classify", () => {
       steps: [step],
     };
 
-    // Compile loop separately
+    // Compile loop como cyclic subgraph
     const loopResult = await compileLoop(
       async ({ actions }: RecordingContext) => {
         await actions.run({ id: "processor" });
@@ -818,9 +828,14 @@ describe("Integration: Full Agent with Loop and Classify", () => {
       },
     );
 
-    expect(loopResult.loopNode.kind).toBe("loop");
-    expect(loopResult.loopNode.detached).toBe(true);
-    expect(loopResult.nodes[loopResult.loopNode.entry]).toBeDefined();
+    // FIX v7: Verificar estructura cyclic
+    expect(loopResult.entryId).toBeDefined();
+    expect(loopResult.exitId).toBeDefined();
+    expect(loopResult.bodyIds.length).toBeGreaterThan(0);
+
+    // Verificar que el entry node existe
+    expect(loopResult.nodes[loopResult.entryId]).toBeDefined();
+    expect(loopResult.nodes[loopResult.entryId]!.kind).toBe("run");
   });
 
   it("records full workflow trace (simpleMode)", async () => {
@@ -839,5 +854,145 @@ describe("Integration: Full Agent with Loop and Classify", () => {
     expect(trace.nodes[1]!.kind).toBe("llm.classify");
     expect(trace.nodes[2]!.kind).toBe("wait");
     expect(trace.nodes[3]!.kind).toBe("llm.generate");
+  });
+});
+
+describe("Storage Operations (v7)", () => {
+  it("records storage.put as IR node", async () => {
+    const trace = await recordEmissions(async ({ storage }) => {
+      await storage.put("intent", { value: "positive" });
+    });
+
+    expect(trace.nodes).toHaveLength(1);
+    const node = trace.nodes[0] as StoragePutIRNode;
+    expect(node.kind).toBe("storage.put");
+    expect(node.key).toBe("intent");
+    expect(node.value).toEqual({ value: "positive" });
+  });
+
+  it("records storage.get as IR node", async () => {
+    const trace = await recordEmissions(async ({ storage }) => {
+      await storage.get("user_pref");
+    });
+
+    expect(trace.nodes).toHaveLength(1);
+    const node = trace.nodes[0] as StorageGetIRNode;
+    expect(node.kind).toBe("storage.get");
+    expect(node.key).toBe("user_pref");
+  });
+
+  it("records multiple storage operations in order", async () => {
+    const trace = await recordEmissions(async ({ storage }) => {
+      await storage.put("key1", "value1");
+      await storage.get("key2");
+      await storage.put("key3", { data: true });
+    });
+
+    expect(trace.nodes).toHaveLength(3);
+    expect((trace.nodes[0] as StoragePutIRNode).kind).toBe("storage.put");
+    expect((trace.nodes[0] as StoragePutIRNode).key).toBe("key1");
+    expect((trace.nodes[1] as StorageGetIRNode).kind).toBe("storage.get");
+    expect((trace.nodes[1] as StorageGetIRNode).key).toBe("key2");
+    expect((trace.nodes[2] as StoragePutIRNode).kind).toBe("storage.put");
+    expect((trace.nodes[2] as StoragePutIRNode).key).toBe("key3");
+  });
+});
+
+describe("Graph-Derived Semantics (v7)", () => {
+  it("computes scopes from entry nodes", () => {
+    const graph: IRGraph = {
+      agentId: "test",
+      entries: { onMessage: "entry_1" as IRNodeId },
+      nodes: {
+        ["entry_1" as IRNodeId]: {
+          kind: "entry",
+          id: "entry_1" as IRNodeId,
+          handler: "onMessage",
+        } as EntryIRNode,
+        ["node_a" as IRNodeId]: {
+          kind: "run",
+          id: "node_a" as IRNodeId,
+          targetId: "steps.a",
+          targetKind: "step",
+        } as RunIRNode,
+        ["node_b" as IRNodeId]: {
+          kind: "run",
+          id: "node_b" as IRNodeId,
+          targetId: "steps.b",
+          targetKind: "step",
+        } as RunIRNode,
+      },
+      edges: [
+        {
+          from: "entry_1" as IRNodeId,
+          to: "node_a" as IRNodeId,
+          type: "sequential",
+        },
+        {
+          from: "node_a" as IRNodeId,
+          to: "node_b" as IRNodeId,
+          type: "sequential",
+        },
+      ],
+    };
+
+    const scopes = computeScopes(graph);
+
+    // All nodes should be in scope of entry_1
+    expect(scopes.get("entry_1" as IRNodeId)).toBe("entry_1");
+    expect(scopes.get("node_a" as IRNodeId)).toBe("entry_1");
+    expect(scopes.get("node_b" as IRNodeId)).toBe("entry_1");
+  });
+
+  it("scope boundary is defined by cross_scope edges", () => {
+    const graph: IRGraph = {
+      agentId: "test",
+      entries: {
+        onMessage: "entry_1" as IRNodeId,
+        onTick: "entry_2" as IRNodeId,
+      },
+      nodes: {
+        ["entry_1" as IRNodeId]: {
+          kind: "entry",
+          id: "entry_1" as IRNodeId,
+          handler: "onMessage",
+        } as EntryIRNode,
+        ["entry_2" as IRNodeId]: {
+          kind: "entry",
+          id: "entry_2" as IRNodeId,
+          handler: "onTick",
+        } as EntryIRNode,
+        ["node_a" as IRNodeId]: {
+          kind: "run",
+          id: "node_a" as IRNodeId,
+          targetId: "steps.a",
+          targetKind: "step",
+        } as RunIRNode,
+      },
+      edges: [
+        // cross_scope edge: entry_1 calls into entry_2's scope
+        {
+          from: "entry_1" as IRNodeId,
+          to: "entry_2" as IRNodeId,
+          type: "cross_scope",
+          scopeDependency: { fromScope: "entry_1", toScope: "entry_2" },
+        },
+        // node_a is part of entry_2's scope (reachable from entry_2)
+        {
+          from: "entry_2" as IRNodeId,
+          to: "node_a" as IRNodeId,
+          type: "sequential",
+        },
+      ],
+    };
+
+    const scopes = computeScopes(graph);
+
+    // entry_1 is in its own scope
+    expect(scopes.get("entry_1" as IRNodeId)).toBe("entry_1");
+    // entry_2 and node_a are in entry_2's scope
+    // (entry_2 is reachable from entry_1 via cross_scope, but entry_2 itself defines its scope)
+    expect(scopes.get("entry_2" as IRNodeId)).toBe("entry_2");
+    expect(scopes.get("node_a" as IRNodeId)).toBe("entry_2");
   });
 });
