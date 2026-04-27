@@ -1,6 +1,5 @@
 import { z } from "zod";
 import type {
-  Flow,
   HandlerContext,
   KalpAuth,
   Route,
@@ -10,6 +9,7 @@ import type {
   Tool,
   ToolConfig,
 } from "@/types";
+import { registerNode } from "@/registry";
 
 export type { HandlerContext, KalpAuth };
 export type { KalpCtx, AgentResponse } from "@/types";
@@ -20,7 +20,6 @@ export type {
   RegistryNode,
   Step,
   Tool,
-  Flow,
   Route,
   IRGraph,
   IREdge,
@@ -45,6 +44,8 @@ export type {
 } from "@/types";
 export { asAgentId, asUserId } from "@/types";
 export { defineAgent } from "@/agent";
+export { getRegistry, clearRegistry } from "@/registry";
+export type { RegistryEntry } from "@/registry";
 export {
   KalpError,
   KalpValidationError,
@@ -67,10 +68,11 @@ export const defineStep = <
   O extends z.ZodTypeAny = z.ZodTypeAny,
 >(
   config: StepConfig<I, O>,
-): Step<I, O> => ({
-  ...config,
-  kind: "step",
-});
+): Step<I, O> => {
+  const node: Step<I, O> = { ...config, kind: "step" };
+  registerNode("step", config.id, node);
+  return node;
+};
 
 /**
  * Defines a typed {@link Tool} with automatic `"tool"` kind discriminant.
@@ -80,10 +82,11 @@ export const defineStep = <
  */
 export const defineTool = <I extends z.ZodTypeAny = z.ZodTypeAny, R = unknown>(
   config: ToolConfig<I, R>,
-): Tool<I, R> => ({
-  ...config,
-  kind: "tool",
-});
+): Tool<I, R> => {
+  const node: Tool<I, R> = { ...config, kind: "tool" };
+  registerNode("tool", config.id, node);
+  return node;
+};
 
 /**
  * Defines an HTTP route exposed by the agent.
@@ -99,14 +102,6 @@ export const defineRoute = <
 ): Route<I, R> => ({
   ...config,
   kind: "route",
-});
-
-/**
- * Defines a multi-step execution flow.
- */
-export const defineFlow = (config: Omit<Flow, "kind">): Flow => ({
-  ...config,
-  kind: "flow",
 });
 
 // Project configuration

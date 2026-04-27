@@ -8,9 +8,8 @@
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": ".",
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["agents/*"]
+      "@/*": ["./agents/*"]
     }
   },
   "include": ["agents/**/*.ts", "kalp.config.ts", "kalp.d.ts"],

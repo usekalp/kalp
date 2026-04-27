@@ -75,13 +75,13 @@ export const compileAgent = (agent: unknown): IRGraph => {
   }
   const steps = asArray(raw.steps);
   const tools = asArray(raw.tools);
-  const flows = asArray(raw.flows);
   const routes = asArray(raw.routes);
 
   const createId = createIdGenerator("root");
   const nodes: IRGraph["nodes"] = {};
   const edges: IREdge[] = [];
   const entries: IRGraph["entries"] = {};
+  const handlerIndex: IRGraph["handlerIndex"] = {};
 
   // ── Lifecycle handlers → entry + handler + sequential edge ──
 
@@ -110,6 +110,7 @@ export const compileAgent = (agent: unknown): IRGraph => {
     nodes[handlerId] = handlerNode;
     edges.push({ from: entryId, to: handlerId, type: "sequential" });
     entries[lifecycle] = entryId;
+    handlerIndex[lifecycle] = handlerId;
   }
 
   // ── Steps → handler nodes (no entry — invoked via actions.run at runtime) ──
@@ -130,6 +131,7 @@ export const compileAgent = (agent: unknown): IRGraph => {
       outputSchema: tryJsonSchema(rec.outputSchema ?? rec.output),
     };
     nodes[handlerId] = handlerNode;
+    handlerIndex[`steps.${id}`] = handlerId;
   }
 
   // ── Tools → handler nodes (no entry — invoked via runtime tool calls) ──
@@ -149,33 +151,7 @@ export const compileAgent = (agent: unknown): IRGraph => {
       inputSchema: tryJsonSchema(rec.inputSchema ?? rec.input),
     };
     nodes[handlerId] = handlerNode;
-  }
-
-  // ── Flows → expand steps inline (no flow node in IR) ──
-
-  for (const flow of flows) {
-    const rec = asRecord(flow);
-    if (!rec) continue;
-    for (const fs of asArray(rec.steps)) {
-      const frec = asRecord(fs);
-      if (!frec) continue;
-      const id = asString(frec.id);
-      if (!id) continue;
-
-      const handlerId = createId("handler", `steps.${id}`);
-      // Skip if already registered (dedup)
-      if (nodes[handlerId]) continue;
-
-      const handlerNode: HandlerIRNode = {
-        kind: "handler",
-        id: handlerId,
-        moduleRef: `steps.${id}`,
-        handlerType: "step",
-        inputSchema: tryJsonSchema(frec.inputSchema ?? frec.input),
-        outputSchema: tryJsonSchema(frec.outputSchema ?? frec.output),
-      };
-      nodes[handlerId] = handlerNode;
-    }
+    handlerIndex[`tools.${id}`] = handlerId;
   }
 
   // ── Routes → entry + handler nodes ──
@@ -212,6 +188,7 @@ export const compileAgent = (agent: unknown): IRGraph => {
     nodes[handlerId] = handlerNode;
     edges.push({ from: entryId, to: handlerId, type: "sequential" });
     entries[routeKey] = entryId;
+    handlerIndex[`routes.${id}`] = handlerId;
   }
 
   return normalizeGraph({
@@ -220,5 +197,6 @@ export const compileAgent = (agent: unknown): IRGraph => {
     entries,
     nodes,
     edges,
+    handlerIndex,
   });
 };

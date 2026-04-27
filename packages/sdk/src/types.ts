@@ -177,7 +177,7 @@ export interface KalpAuth {
 
 // Node System
 
-export type NodeKind = "step" | "tool" | "flow" | "route";
+export type NodeKind = "step" | "tool" | "route";
 
 export interface Node {
   kind: NodeKind;
@@ -205,19 +205,6 @@ export interface Tool<
 
 export type AnyStep = Step<z.ZodTypeAny, z.ZodTypeAny>;
 export type AnyTool = Tool<z.ZodTypeAny, unknown>;
-export type AnyFlow = Flow<unknown, unknown>;
-
-/**
- * Orchestration-only node (Phase 1).
- * Flows are step sequences — they have NO input and return void.
- * I/O phantom generics reserved for Phase 2 execution semantics.
- * Enforced at type level: `InputOf<Flow> = never`, `OutputOf<Flow> = void`.
- */
-export interface Flow<I = void, O = void> extends Node {
-  kind: "flow";
-  description?: string;
-  steps: readonly Step<any, any>[];
-}
 
 export interface Route<
   I extends z.ZodTypeAny | undefined = undefined,
@@ -258,7 +245,7 @@ export type RouteConfig<
 };
 
 /** Nodes that can be passed to `actions.run()`. */
-export type ExecutableNode = AnyStep | AnyTool | AnyFlow;
+export type ExecutableNode = AnyStep | AnyTool;
 /**
  * All registered nodes including routes (manifest / introspection).
  * Routes are registry-only — they must NEVER be passed to `actions.run()`.
@@ -368,6 +355,8 @@ export interface IRGraph {
   nodes: Record<IRNodeId, IRNode>;
   /** Directed edges between nodes. */
   edges: IREdge[];
+  /** O(1) lookup: moduleRef → handler node ID. Built by the compiler. */
+  handlerIndex: Record<string, IRNodeId>;
 }
 
 // Type Inference Engine (KTE)
@@ -377,18 +366,14 @@ export type InputOf<T> =
     ? z.infer<I>
     : T extends Tool<infer I, any>
       ? z.infer<I>
-      : T extends Flow
-        ? never
-        : never;
+      : never;
 
 export type OutputOf<T> =
   T extends Step<any, infer O>
     ? z.infer<O>
     : T extends Tool<any, infer R>
       ? R
-      : T extends Flow
-        ? void
-        : never;
+      : never;
 
 /**
  * Extracts the union of all executable nodes registered in an agent config.
@@ -396,8 +381,7 @@ export type OutputOf<T> =
  */
 export type InferNodes<C> =
   | (C extends { steps: readonly (infer S)[] } ? S : never)
-  | (C extends { tools: readonly (infer T)[] } ? T : never)
-  | (C extends { flows: readonly (infer F)[] } ? F : never);
+  | (C extends { tools: readonly (infer T)[] } ? T : never);
 
 // Actions
 

@@ -11,6 +11,48 @@
 import type { IRNodeId } from "@kalphq/sdk";
 
 // ────────────────────────────────────────────────────────────────────────────
+// Execution Model — identity, hierarchy, and observability
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Categories of untracked IO that Kalp can detect (best-effort).
+ *
+ * - `"network"` — bare `globalThis.fetch` or similar outside `actions.fetch`.
+ * - `"timer"` — `setTimeout` / `setInterval` outside `actions.wait`.
+ * - `"fs"` — Node `fs` access (not applicable in all runtimes; kept for portability).
+ * - `"unknown"` — anything else the heuristic can’t classify.
+ */
+export type UntrackedIOSource = "network" | "timer" | "fs" | "unknown";
+
+/**
+ * Execution identity carried through every handler invocation.
+ *
+ * Hierarchy:
+ * ```
+ * thread = actor instance (identified by threadId)
+ *   +-- trace = one handleEvent() call into the actor
+ *         +-- execution = one handler invocation (step/tool/lifecycle run)
+ * ```
+ *
+ * `threadId` is opaque in Core. The adapter maps it to infrastructure
+ * (e.g. Durable Object id, in-memory key). Core never parses or assumes its format.
+ */
+export interface ExecutionContext {
+  /** Unique per handler invocation (UUID). Distinguishes retries, loop iterations. */
+  executionId: string;
+  /** Per `handleEvent()` call. Groups all executions from one external stimulus. */
+  traceId: string;
+  /** Opaque actor identifier. Adapter maps to infrastructure (CF: DO id, tests: in-memory). */
+  threadId: string;
+  /** Total count of detected untracked IO operations. */
+  untrackedIOCount: number;
+  /** Breakdown of untracked IO by source type. */
+  untrackedIOByType: Record<UntrackedIOSource, number>;
+  /** Whether any plugin has been loaded (observability may be incomplete). */
+  hasUntrustedPlugins: boolean;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Execution Events — the system's source of truth
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -24,18 +66,155 @@ import type { IRNodeId } from "@kalphq/sdk";
  * deterministic re-execution.
  */
 export type ExecutionEvent =
-  | { type: "node.started"; nodeId: IRNodeId; timestamp: number }
-  | { type: "node.completed"; nodeId: IRNodeId; result: unknown; timestamp: number }
-  | { type: "primitive.invoked"; name: string; params: unknown; result: unknown; timestamp: number }
-  | { type: "action.run"; target: string; input: unknown; timestamp: number }
-  | { type: "action.run.completed"; target: string; result: unknown; timestamp: number }
-  | { type: "action.wait"; duration: string | number; timestamp: number }
-  | { type: "action.loop.start"; loopId: string; timestamp: number }
-  | { type: "action.loop.iteration"; loopId: string; iteration: number; timestamp: number }
-  | { type: "action.loop.end"; loopId: string; reason: string; timestamp: number }
-  | { type: "state.write"; key: string; value: unknown; timestamp: number }
-  | { type: "state.read"; key: string; value: unknown; timestamp: number }
-  | { type: "error"; nodeId?: IRNodeId; error: string; timestamp: number };
+  | {
+      type: "node.started";
+      nodeId: IRNodeId;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "node.completed";
+      nodeId: IRNodeId;
+      result: unknown;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "primitive.invoked";
+      name: string;
+      params: unknown;
+      result: unknown;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "action.run";
+      target: string;
+      input: unknown;
+      idempotencyKey?: string;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "action.run.completed";
+      target: string;
+      result: unknown;
+      idempotencyKey?: string;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "action.wait";
+      duration: string | number;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "action.loop.start";
+      loopId: string;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "action.loop.iteration";
+      loopId: string;
+      iteration: number;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "action.loop.end";
+      loopId: string;
+      reason: string;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "action.fetch";
+      url: string;
+      method: string;
+      status: number;
+      durationMs: number;
+      idempotencyKey?: string;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "action.emit";
+      event: string;
+      payload: unknown;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "action.schedule";
+      at: number;
+      payload: unknown;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "state.write";
+      key: string;
+      value: unknown;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "state.read";
+      key: string;
+      value: unknown;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "execution.untracked";
+      source: UntrackedIOSource;
+      location?: string;
+      nodeId?: IRNodeId;
+      action?: string;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "error";
+      nodeId?: IRNodeId;
+      error: string;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Runtime Events — external stimuli entering the reactor
@@ -50,6 +229,8 @@ export interface RuntimeEvent {
   type: string;
   /** Arbitrary payload associated with the event. */
   payload: unknown;
+  /** Opaque thread identifier. Adapter sets this from infrastructure (DO id, etc.). */
+  threadId?: string;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

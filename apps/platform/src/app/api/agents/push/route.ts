@@ -6,9 +6,14 @@ import {
 } from "@kalphq/compiler";
 import { billing, estimateFromIR } from "@/lib/billing";
 import { logPush, type NamedAnalysis } from "@/lib/logger";
+import fs from "fs";
 
 export async function POST(req: Request) {
   const body = (await req.json()) as Record<string, unknown>;
+
+  console.log(body);
+
+  fs.writeFileSync("body.json", JSON.stringify(body));
 
   const agentName = body.agentName as string | undefined;
   const ir = body.ir;

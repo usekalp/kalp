@@ -82,22 +82,6 @@ function buildWrappers(agentPath: string, agentConfig: unknown): WrapperSpec[] {
     });
   }
 
-  for (const flow of asArray(raw.flows)) {
-    const rec = asRecord(flow);
-    if (!rec) continue;
-    for (const fs of asArray(rec.steps)) {
-      const frec = asRecord(fs);
-      const id = frec ? asString(frec.id) : undefined;
-      if (!id) continue;
-      const safeName = `steps.${id}`;
-      if (wrappers.some((w) => w.name === safeName)) continue;
-      wrappers.push({
-        name: safeName,
-        code: `import agent from "${escapedPath}";\nconst _s = Array.isArray(agent.steps) ? agent.steps.find((s) => s.id === "${id}") : null;\nexport default _s?.run ?? null;\n`,
-      });
-    }
-  }
-
   for (const route of asArray(raw.routes)) {
     const rec = asRecord(route);
     const id = rec ? asString(rec.id) : undefined;

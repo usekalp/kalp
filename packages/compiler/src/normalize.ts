@@ -56,5 +56,29 @@ export const normalizeGraph = (graph: IRGraph): IRGraph => {
     assertNodeExists(graph, edge.to, "edge.to");
   }
 
+  // Validate handlerIndex: every value must reference an existing handler node
+  for (const [moduleRef, nodeId] of Object.entries(graph.handlerIndex) as [
+    string,
+    string,
+  ][]) {
+    assertNodeExists(graph, nodeId, `handlerIndex.${moduleRef}`);
+    const node = graph.nodes[nodeId as IRNodeId];
+    if (node && node.kind !== "handler") {
+      throw new Error(
+        `handlerIndex["${moduleRef}"] points to node ${nodeId} with kind "${node.kind}" — expected "handler".`,
+      );
+    }
+  }
+
+  // Validate completeness: every handler node must appear in handlerIndex
+  const indexedNodeIds = new Set(Object.values(graph.handlerIndex));
+  for (const [id, node] of Object.entries(graph.nodes)) {
+    if (node.kind === "handler" && !indexedNodeIds.has(id as IRNodeId)) {
+      throw new Error(
+        `Handler node "${id}" (moduleRef: "${(node as any).moduleRef}") is not in handlerIndex.`,
+      );
+    }
+  }
+
   return graph;
 };

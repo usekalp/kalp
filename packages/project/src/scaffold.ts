@@ -121,7 +121,6 @@ export async function scaffoldAgent(opts: {
   await mkdir(join(agentDir, "steps"), { recursive: true });
   await mkdir(join(agentDir, "tools"), { recursive: true });
   await mkdir(join(agentDir, "routes"), { recursive: true });
-  await mkdir(join(agentDir, "flows"), { recursive: true });
 
   const agentIndex = `
 import { asAgentId, defineAgent } from "@kalphq/sdk";
@@ -245,17 +244,6 @@ export const healthRoute = defineRoute({
   },
 });`;
 
-  const flowFile = `
-import { defineFlow } from "@kalphq/sdk";
-import { processQuery } from "@/${agentName}/steps/process-query";
-import { formatResponse } from "@/${agentName}/steps/format-response";
-
-export const chatFlow = defineFlow({
-  id: "chat_flow",
-  description: "Process user message through query analysis and formatting",
-  steps: [processQuery, formatResponse],
-});`;
-
   await writeFile(join(agentDir, "index.ts"), agentIndex, "utf-8");
   await writeFile(
     join(agentDir, "steps", "process-query.ts"),
@@ -269,5 +257,4 @@ export const chatFlow = defineFlow({
   );
   await writeFile(join(agentDir, "tools", "search.ts"), toolFile, "utf-8");
   await writeFile(join(agentDir, "routes", "health.ts"), routeFile, "utf-8");
-  await writeFile(join(agentDir, "flows", "chat-flow.ts"), flowFile, "utf-8");
 }

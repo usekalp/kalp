@@ -1,23 +1,23 @@
 import type {
   AgentId,
   AgentResponse,
-  Flow,
   HandlerContext,
   Route,
-  Step,
-  Tool,
   TypedAgentContext,
 } from "@/types";
 
+/**
+ * Base configuration for an agent definition.
+ *
+ * Steps and tools are autodiscovered from imports via the SDK registry.
+ * Routes remain explicit because they require method/path metadata.
+ */
 interface AgentConfigBase {
   id: AgentId;
   name?: string;
   description?: string;
   version?: number;
   systemPrompt?: string | ((context: HandlerContext) => Promise<string>);
-  steps?: readonly Step<any, any>[];
-  tools?: readonly Tool<any, any>[];
-  flows?: readonly Flow<any, any>[];
   routes?: readonly Route[];
 }
 

@@ -17,14 +17,19 @@
  * @module
  */
 
-import type { HandlerContext, KalpAuth, KalpMemory, KalpVault } from '@kalphq/sdk';
-import type { PersistenceAdapter, SchedulerAdapter } from '@/adapters/interfaces';
-import type { ExecutionLog } from '@/engine/execution-log';
-import type { AIProvider } from '@/engine/primitives/ai';
-import type { DispatchAction } from '@/engine/primitives/actions';
-import { createAIPrimitive } from '@/engine/primitives/ai';
-import { createStoragePrimitive } from '@/engine/primitives/storage';
-import { createActionsPrimitive } from '@/engine/primitives/actions';
+import type {
+  HandlerContext,
+  KalpAuth,
+  KalpMemory,
+  KalpVault,
+} from "@kalphq/sdk";
+import type { StateStore, SchedulerAdapter } from "@/adapters/interfaces";
+import type { ExecutionLog } from "@/engine/execution-log";
+import type { AIProvider } from "@/engine/primitives/ai";
+import type { DispatchAction } from "@/engine/primitives/actions";
+import { createAIPrimitive } from "@/engine/primitives/ai";
+import { createStoragePrimitive } from "@/engine/primitives/storage";
+import { createActionsPrimitive } from "@/engine/primitives/actions";
 
 // ────────────────────────────────────────────────────────────────────────────
 // External providers injected by the host adapter
@@ -35,14 +40,14 @@ import { createActionsPrimitive } from '@/engine/primitives/actions';
  * These are NOT part of the reactor core — they come from infrastructure.
  */
 export interface RuntimeProviders {
-	/** AI provider implementation (e.g. OpenAI, Anthropic, Cloudflare AI). */
-	ai: AIProvider;
-	/** Authentication context for the current request. */
-	auth: KalpAuth;
-	/** Memory (conversation history) provider. */
-	memory: KalpMemory;
-	/** Secrets vault provider. */
-	vault: KalpVault;
+  /** AI provider implementation (e.g. OpenAI, Anthropic, Cloudflare AI). */
+  ai: AIProvider;
+  /** Authentication context for the current request. */
+  auth: KalpAuth;
+  /** Memory (conversation history) provider. */
+  memory: KalpMemory;
+  /** Secrets vault provider. */
+  vault: KalpVault;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -57,25 +62,25 @@ export interface RuntimeProviders {
  * execution log. The handler never touches infrastructure directly.
  *
  * @param log - The execution log for event emission.
- * @param persistence - The persistence adapter for state operations.
+ * @param stateStore - The state sub-store for KV operations.
  * @param scheduler - The scheduler adapter for deferred execution.
  * @param dispatch - Callback to enqueue handler tasks in the reactor.
  * @param providers - External providers (ai, auth, memory, vault).
  * @returns A complete {@link HandlerContext} matching the SDK interface.
  */
 export function buildHandlerContext(
-	log: ExecutionLog,
-	persistence: PersistenceAdapter,
-	scheduler: SchedulerAdapter,
-	dispatch: DispatchAction,
-	providers: RuntimeProviders,
+  log: ExecutionLog,
+  stateStore: StateStore,
+  scheduler: SchedulerAdapter,
+  dispatch: DispatchAction,
+  providers: RuntimeProviders,
 ): HandlerContext {
-	return {
-		ai: createAIPrimitive(providers.ai, log),
-		storage: createStoragePrimitive(persistence, log),
-		actions: createActionsPrimitive(log, scheduler, dispatch),
-		auth: providers.auth,
-		memory: providers.memory,
-		vault: providers.vault,
-	};
+  return {
+    ai: createAIPrimitive(providers.ai, log),
+    storage: createStoragePrimitive(stateStore, log),
+    actions: createActionsPrimitive(log, scheduler, dispatch),
+    auth: providers.auth,
+    memory: providers.memory,
+    vault: providers.vault,
+  };
 }

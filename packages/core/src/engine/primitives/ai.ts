@@ -7,8 +7,9 @@
  * @module
  */
 
-import type { KalpAI } from '@kalphq/sdk';
-import type { ExecutionLog } from '@/engine/execution-log';
+import type { KalpAI } from "@kalphq/sdk";
+import type { ExecutionLog } from "@/engine/execution-log";
+import type { ExecutionContext } from "@/engine/types";
 
 /**
  * A concrete AI provider implementation that performs the actual LLM calls.
@@ -27,45 +28,59 @@ export type AIProvider = KalpAI;
  *
  * @param provider - The concrete AI provider implementation.
  * @param log - The execution log for event emission.
+ * @param execCtx - Optional execution context for event identity.
  * @returns An intercepted {@link KalpAI} matching the SDK interface.
  */
-export function createAIPrimitive(provider: AIProvider, log: ExecutionLog): KalpAI {
-	return {
-		async generate(params) {
-			const result = await provider.generate(params);
-			await log.emit({
-				type: 'primitive.invoked',
-				name: 'ai.generate',
-				params: { model: params.model, prompt: params.prompt },
-				result,
-				timestamp: Date.now(),
-			});
-			return result;
-		},
+export function createAIPrimitive(
+  provider: AIProvider,
+  log: ExecutionLog,
+  execCtx?: ExecutionContext,
+): KalpAI {
+  const ids = {
+    executionId: execCtx?.executionId ?? "",
+    traceId: execCtx?.traceId ?? "",
+    threadId: execCtx?.threadId ?? "",
+  };
 
-		stream(params) {
-			// Stream is special — we log the invocation but return the iterable.
-			// Individual chunks are NOT logged (too noisy). The caller consumes them.
-			void log.emit({
-				type: 'primitive.invoked',
-				name: 'ai.stream',
-				params: { model: params.model, prompt: params.prompt },
-				result: '[stream]',
-				timestamp: Date.now(),
-			});
-			return provider.stream(params);
-		},
+  return {
+    async generate(params) {
+      const result = await provider.generate(params);
+      await log.emit({
+        type: "primitive.invoked",
+        name: "ai.generate",
+        params: { model: params.model, prompt: params.prompt },
+        result,
+        ...ids,
+        timestamp: Date.now(),
+      });
+      return result;
+    },
 
-		async classify(params) {
-			const result = await provider.classify(params);
-			await log.emit({
-				type: 'primitive.invoked',
-				name: 'ai.classify',
-				params: { input: params.input, labels: params.labels },
-				result,
-				timestamp: Date.now(),
-			});
-			return result;
-		},
-	};
+    stream(params) {
+      // Stream is special — we log the invocation but return the iterable.
+      // Individual chunks are NOT logged (too noisy). The caller consumes them.
+      void log.emit({
+        type: "primitive.invoked",
+        name: "ai.stream",
+        params: { model: params.model, prompt: params.prompt },
+        result: "[stream]",
+        ...ids,
+        timestamp: Date.now(),
+      });
+      return provider.stream(params);
+    },
+
+    async classify(params) {
+      const result = await provider.classify(params);
+      await log.emit({
+        type: "primitive.invoked",
+        name: "ai.classify",
+        params: { input: params.input, labels: params.labels },
+        result,
+        ...ids,
+        timestamp: Date.now(),
+      });
+      return result;
+    },
+  };
 }
