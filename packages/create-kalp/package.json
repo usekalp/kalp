@@ -1,6 +1,6 @@
 {
   "name": "create-kalp",
-  "version": "0.1.1",
+  "version": "0.0.0-dev-20260427013932",
   "description": "Create a new Kalp project",
   "type": "module",
   "license": "MIT",

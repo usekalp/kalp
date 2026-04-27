@@ -1,34 +1,37 @@
 import type {
   EntryIRNode,
-  RouteEntryIRNode,
+  HandlerIRNode,
+  HandlerType,
   IRGraph,
   IREdge,
   IRNodeId,
-  RunIRNode,
-  RunTargetKind,
 } from "@kalphq/sdk";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { createIdGenerator } from "@/ids";
 import { normalizeGraph } from "@/normalize";
-import { toHandlerKey } from "@/handler-key";
-import { recordHandler, adaptRouteHandler } from "@/record-handler";
-import { traceToIR } from "@/trace-to-ir";
 
-// Helpers for parsing raw agent config
+// ────────────────────────────────────────────────────────────────────────────
+// Helpers for parsing raw agent config objects
+// ────────────────────────────────────────────────────────────────────────────
 
+/** Safely cast unknown to a record, or return undefined. */
 const asRecord = (v: unknown): Record<string, unknown> | undefined =>
   v != null && typeof v === "object" && !Array.isArray(v)
     ? (v as Record<string, unknown>)
     : undefined;
 
+/** Safely cast unknown to a string, or return undefined. */
 const asString = (v: unknown): string | undefined =>
   typeof v === "string" ? v : undefined;
 
+/** Safely cast unknown to an array, defaulting to empty. */
 const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
+/** Detect Zod schema objects by checking for `_def`. */
 const isZodSchema = (v: unknown): boolean =>
   v != null && typeof v === "object" && typeof (v as any)._def === "object";
 
+/** Try to convert a Zod schema to JSON Schema, returning undefined on failure. */
 const tryJsonSchema = (v: unknown): Record<string, unknown> | undefined => {
   if (!isZodSchema(v)) return undefined;
   try {
@@ -38,89 +41,38 @@ const tryJsonSchema = (v: unknown): Record<string, unknown> | undefined => {
   }
 };
 
-// Schema registry: maps "steps.id" → { inputSchema, outputSchema }
-type SchemaEntry = {
-  inputSchema?: Record<string, unknown>;
-  outputSchema?: Record<string, unknown>;
-};
+// ────────────────────────────────────────────────────────────────────────────
+// Compiler v2 — Pure declarative index builder
+// ────────────────────────────────────────────────────────────────────────────
 
-function buildSchemaRegistry(
-  steps: unknown[],
-  tools: unknown[],
-  flows: unknown[],
-): Map<string, SchemaEntry> {
-  const registry = new Map<string, SchemaEntry>();
-
-  for (const step of steps) {
-    const rec = asRecord(step);
-    if (!rec) continue;
-    const id = asString(rec.id);
-    if (!id) continue;
-    registry.set(toHandlerKey("step", id), {
-      inputSchema: tryJsonSchema(rec.inputSchema ?? rec.input),
-      outputSchema: tryJsonSchema(rec.outputSchema ?? rec.output),
-    });
-  }
-
-  for (const tool of tools) {
-    const rec = asRecord(tool);
-    if (!rec) continue;
-    const id = asString(rec.id);
-    if (!id) continue;
-    registry.set(toHandlerKey("tool", id), {
-      inputSchema: tryJsonSchema(rec.inputSchema ?? rec.input),
-      outputSchema: tryJsonSchema(rec.outputSchema ?? rec.output),
-    });
-  }
-
-  for (const flow of flows) {
-    const rec = asRecord(flow);
-    if (!rec) continue;
-    for (const fs of asArray(rec.steps)) {
-      const frec = asRecord(fs);
-      if (!frec) continue;
-      const id = asString(frec.id);
-      if (!id) continue;
-      registry.set(toHandlerKey("step", id), {
-        inputSchema: tryJsonSchema(frec.inputSchema ?? frec.input),
-        outputSchema: tryJsonSchema(frec.outputSchema ?? frec.output),
-      });
-    }
-  }
-
-  return registry;
-}
-
-// Enrich RunIRNodes with schemas from the registry
-function enrichWithSchemas(
-  nodes: IRGraph["nodes"],
-  registry: Map<string, SchemaEntry>,
-): void {
-  for (const node of Object.values(nodes)) {
-    if (node.kind === "run") {
-      const run = node as RunIRNode;
-      const schema = registry.get(run.targetId);
-      if (schema) {
-        if (!run.inputSchema && schema.inputSchema) {
-          run.inputSchema = schema.inputSchema;
-        }
-        if (!run.outputSchema && schema.outputSchema) {
-          run.outputSchema = schema.outputSchema;
-        }
-      }
-    }
-  }
-}
-
-// Compiler
-
-export const compileAgent = async (agent: unknown): Promise<IRGraph> => {
+/**
+ * Compiles an agent configuration into an {@link IRGraph}.
+ *
+ * This is a **pure, synchronous** function that produces a minimal structural
+ * index of the agent. It does NOT:
+ * - Execute any handler functions
+ * - Record execution traces
+ * - Infer branches, loops, or runtime control flow
+ * - Touch any IO or side-effects
+ *
+ * The resulting IR only records which entrypoints and handlers exist, and how
+ * they are structurally connected. All runtime behavior (branches, loops,
+ * effects) is resolved by the Orchestration Reactor at execution time.
+ *
+ * @param agent - The raw agent configuration object (from `defineAgent()`).
+ * @returns A normalized {@link IRGraph} ready for deployment.
+ * @throws If `agent` is not an object or has no valid entries.
+ */
+export const compileAgent = (agent: unknown): IRGraph => {
   const raw = asRecord(agent);
   if (!raw) {
     throw new Error("compileAgent: agent must be an object.");
   }
 
-  const agentId = asString(raw.id) ?? asString(raw.name) ?? "unknown";
+  const agentId = asString(raw.id) ?? asString(raw.name);
+  if (!agentId) {
+    throw new Error("compileAgent: agent.id is required.");
+  }
   const steps = asArray(raw.steps);
   const tools = asArray(raw.tools);
   const flows = asArray(raw.flows);
@@ -131,206 +83,142 @@ export const compileAgent = async (agent: unknown): Promise<IRGraph> => {
   const edges: IREdge[] = [];
   const entries: IRGraph["entries"] = {};
 
-  // Build schema registry for enrichment
-  const schemaRegistry = buildSchemaRegistry(steps, tools, flows);
+  // ── Lifecycle handlers → entry + handler + sequential edge ──
 
-  // Detect if any lifecycle handler is a function (recording mode)
   const lifecycleHandlers = ["onMessage", "onInit", "onTick"] as const;
-  const hasFunctionHandlers = lifecycleHandlers.some(
-    (k) => typeof raw[k] === "function",
-  );
 
-  // Helper to register a route entry node
-  const registerRouteEntry = (
-    rec: Record<string, unknown>,
-  ): { routeKey: string; routeId: IRNodeId } | null => {
-    const path = (asString(rec.path) ?? "/unknown").replace(/\/+$/, "") || "/";
-    const method = (
-      asString(rec.method) ?? "GET"
-    ).toUpperCase() as RouteEntryIRNode["method"];
-    const routeId = createId("entry");
-    const routeKey = `route:${method}:${path}`;
-    const routeNode: RouteEntryIRNode = {
+  for (const lifecycle of lifecycleHandlers) {
+    if (raw[lifecycle] == null) continue;
+
+    const entryId = createId("entry", lifecycle);
+    const handlerId = createId("handler", lifecycle);
+
+    const entryNode: EntryIRNode = {
       kind: "entry",
-      id: routeId,
+      id: entryId,
+      handler: lifecycle,
+    };
+
+    const handlerNode: HandlerIRNode = {
+      kind: "handler",
+      id: handlerId,
+      moduleRef: lifecycle,
+      handlerType: "lifecycle",
+    };
+
+    nodes[entryId] = entryNode;
+    nodes[handlerId] = handlerNode;
+    edges.push({ from: entryId, to: handlerId, type: "sequential" });
+    entries[lifecycle] = entryId;
+  }
+
+  // ── Steps → handler nodes (no entry — invoked via actions.run at runtime) ──
+
+  for (const step of steps) {
+    const rec = asRecord(step);
+    if (!rec) continue;
+    const id = asString(rec.id);
+    if (!id) continue;
+
+    const handlerId = createId("handler", `steps.${id}`);
+    const handlerNode: HandlerIRNode = {
+      kind: "handler",
+      id: handlerId,
+      moduleRef: `steps.${id}`,
+      handlerType: "step",
+      inputSchema: tryJsonSchema(rec.inputSchema ?? rec.input),
+      outputSchema: tryJsonSchema(rec.outputSchema ?? rec.output),
+    };
+    nodes[handlerId] = handlerNode;
+  }
+
+  // ── Tools → handler nodes (no entry — invoked via runtime tool calls) ──
+
+  for (const tool of tools) {
+    const rec = asRecord(tool);
+    if (!rec) continue;
+    const id = asString(rec.id);
+    if (!id) continue;
+
+    const handlerId = createId("handler", `tools.${id}`);
+    const handlerNode: HandlerIRNode = {
+      kind: "handler",
+      id: handlerId,
+      moduleRef: `tools.${id}`,
+      handlerType: "tool",
+      inputSchema: tryJsonSchema(rec.inputSchema ?? rec.input),
+    };
+    nodes[handlerId] = handlerNode;
+  }
+
+  // ── Flows → expand steps inline (no flow node in IR) ──
+
+  for (const flow of flows) {
+    const rec = asRecord(flow);
+    if (!rec) continue;
+    for (const fs of asArray(rec.steps)) {
+      const frec = asRecord(fs);
+      if (!frec) continue;
+      const id = asString(frec.id);
+      if (!id) continue;
+
+      const handlerId = createId("handler", `steps.${id}`);
+      // Skip if already registered (dedup)
+      if (nodes[handlerId]) continue;
+
+      const handlerNode: HandlerIRNode = {
+        kind: "handler",
+        id: handlerId,
+        moduleRef: `steps.${id}`,
+        handlerType: "step",
+        inputSchema: tryJsonSchema(frec.inputSchema ?? frec.input),
+        outputSchema: tryJsonSchema(frec.outputSchema ?? frec.output),
+      };
+      nodes[handlerId] = handlerNode;
+    }
+  }
+
+  // ── Routes → entry + handler nodes ──
+
+  for (const route of routes) {
+    const rec = asRecord(route);
+    if (!rec) continue;
+    const id = asString(rec.id);
+    if (!id) continue;
+
+    const path = (asString(rec.path) ?? "/unknown").replace(/\/+$/, "") || "/";
+    const method = (asString(rec.method) ?? "GET").toUpperCase();
+    const routeKey = `route:${method}:${path}`;
+
+    const entryId = createId("entry", routeKey);
+    const handlerId = createId("handler", `routes.${id}`);
+
+    const entryNode: EntryIRNode = {
+      kind: "entry",
+      id: entryId,
       handler: routeKey,
       method,
       path,
     };
-    nodes[routeId] = routeNode;
-    entries[routeKey] = routeId;
-    return { routeKey, routeId };
-  };
 
-  if (hasFunctionHandlers) {
-    // ── Recording-based wiring ──
-    // For each lifecycle handler that is a function, record and generate IR
-    for (const handler of lifecycleHandlers) {
-      const fn = raw[handler];
-      if (typeof fn !== "function") {
-        // If the handler exists but isn't a function (e.g. metadata), create entry only
-        if (fn != null) {
-          const lcId = createId("entry");
-          const lcNode: EntryIRNode = { kind: "entry", id: lcId, handler };
-          nodes[lcId] = lcNode;
-          entries[handler] = lcId;
-        }
-        continue;
-      }
-
-      // Create entry node
-      const entryId = createId("entry");
-      const entryNode: EntryIRNode = { kind: "entry", id: entryId, handler };
-      nodes[entryId] = entryNode;
-      entries[handler] = entryId;
-
-      // Record handler execution
-      const trace = await recordHandler(
-        fn as (ctx: unknown) => Promise<unknown>,
-        handler, // Pass handler name for source context
-      );
-
-      // Convert trace → IR fragment
-      const fragment = await traceToIR(trace, entryId, createId);
-
-      // Merge fragment into graph
-      for (const [id, node] of Object.entries(fragment.nodes)) {
-        nodes[id as IRNodeId] = node;
-      }
-      for (const edge of fragment.edges) {
-        edges.push(edge);
-      }
-    }
-
-    // ── Trace route handlers as lifecycle handlers ──
-    for (const route of routes) {
-      const rec = asRecord(route);
-      if (!rec) continue;
-
-      const routeEntry = registerRouteEntry(rec);
-      if (!routeEntry) continue;
-      const { routeId, routeKey } = routeEntry;
-
-      // If route has a handler function, record and generate IR
-      const handlerFn = rec.handler;
-      if (typeof handlerFn === "function") {
-        // Use adapter for routes (req, res, ctx) -> (ctx)
-        const adaptedHandler = adaptRouteHandler(handlerFn as any);
-        const trace = await recordHandler(adaptedHandler, routeKey);
-        const fragment = await traceToIR(trace, routeId, createId);
-
-        // Merge fragment into graph
-        for (const [id, node] of Object.entries(fragment.nodes)) {
-          nodes[id as IRNodeId] = node;
-        }
-        for (const edge of fragment.edges) {
-          edges.push(edge);
-        }
-      }
-    }
-  } else {
-    // ── Static wiring fallback ──
-    // Register routes as metadata only (no execution wiring)
-    for (const route of routes) {
-      const rec = asRecord(route);
-      if (!rec) continue;
-      registerRouteEntry(rec);
-    }
-
-    // ── Create static entry and run nodes ──
-
-    // Create EntryIRNode for onMessage
-    const entryId = createId("entry");
-    const entryNode: EntryIRNode = {
-      kind: "entry",
-      id: entryId,
-      handler: "onMessage",
+    const handlerNode: HandlerIRNode = {
+      kind: "handler",
+      id: handlerId,
+      moduleRef: `routes.${id}`,
+      handlerType: "route",
     };
+
     nodes[entryId] = entryNode;
-    entries["onMessage"] = entryId;
-
-    // Register onInit / onTick if present
-    for (const lifecycle of ["onInit", "onTick"] as const) {
-      if (raw[lifecycle] != null) {
-        const lcId = createId("entry");
-        const lcNode: EntryIRNode = {
-          kind: "entry",
-          id: lcId,
-          handler: lifecycle,
-        };
-        nodes[lcId] = lcNode;
-        entries[lifecycle] = lcId;
-      }
-    }
-
-    // Register run nodes
-    const registerRun = (
-      item: Record<string, unknown>,
-      targetKind: RunTargetKind,
-    ): IRNodeId => {
-      const id = createId("run");
-      const targetId = toHandlerKey(targetKind, asString(item.id) ?? "unknown");
-      const node: RunIRNode = {
-        kind: "run",
-        id,
-        targetId,
-        targetKind,
-        inputSchema: tryJsonSchema(item.inputSchema ?? item.input),
-        outputSchema: tryJsonSchema(item.outputSchema ?? item.output),
-      };
-      nodes[id] = node;
-      return id;
-    };
-
-    const runSequence: IRNodeId[] = [];
-
-    for (const step of steps) {
-      const rec = asRecord(step);
-      if (rec) runSequence.push(registerRun(rec, "step"));
-    }
-    for (const tool of tools) {
-      const rec = asRecord(tool);
-      if (rec) runSequence.push(registerRun(rec, "tool"));
-    }
-
-    // Flows: expand inline (no targetKind:"flow" in IR)
-    for (const flow of flows) {
-      const rec = asRecord(flow);
-      if (!rec) continue;
-      const flowSteps = asArray(rec.steps);
-      if (flowSteps.length === 0) continue;
-      for (const fs of flowSteps) {
-        const frec = asRecord(fs);
-        if (frec) runSequence.push(registerRun(frec, "step"));
-      }
-    }
-
-    if (runSequence.length === 0) {
-      runSequence.push(registerRun({ id: agentId }, "step"));
-    }
-
-    // Wire entry → first run node
-    edges.push({ from: entryId, to: runSequence[0]!, type: "sequential" });
-
-    // Wire sequential run nodes
-    for (let i = 0; i < runSequence.length - 1; i += 1) {
-      edges.push({
-        from: runSequence[i]!,
-        to: runSequence[i + 1]!,
-        type: "sequential",
-      });
-    }
+    nodes[handlerId] = handlerNode;
+    edges.push({ from: entryId, to: handlerId, type: "sequential" });
+    entries[routeKey] = entryId;
   }
 
-  // Enrich RunIRNodes with schemas from registry
-  enrichWithSchemas(nodes, schemaRegistry);
-
-  const graph: IRGraph = {
+  return normalizeGraph({
+    version: 2,
     agentId,
     entries,
     nodes,
     edges,
-  };
-
-  return normalizeGraph(graph);
+  });
 };

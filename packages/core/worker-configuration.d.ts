@@ -3,11 +3,11 @@
 // Runtime types generated with workerd@1.20260410.1 2026-04-13 nodejs_compat
 declare namespace Cloudflare {
 	interface GlobalProps {
-		mainModule: typeof import("./src/index");
-		durableNamespaces: "MyDurableObject";
+		mainModule: typeof import('./src/index');
+		durableNamespaces: 'AgentDurableObject';
 	}
 	interface Env {
-		MY_DURABLE_OBJECT: DurableObjectNamespace<import("./src/index").MyDurableObject>;
+		MY_DURABLE_OBJECT: DurableObjectNamespace<import('./src/index').AgentDurableObject>;
 	}
 }
 interface Env extends Cloudflare.Env {}

@@ -1,5 +1,13 @@
 # create-kalp
 
+## 0.0.0-dev-20260427013932
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/project@0.0.0-dev-20260427013932
+
 ## 0.0.0-dev-20260423092034
 
 ### Patch Changes

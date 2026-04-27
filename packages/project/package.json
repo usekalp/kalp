@@ -1,6 +1,6 @@
 {
   "name": "@kalphq/project",
-  "version": "0.1.1",
+  "version": "0.0.0-dev-20260427013932",
   "description": "Scaffold and template utilities for Kalp projects",
   "type": "module",
   "license": "MIT",

@@ -1,69 +1,106 @@
 import { describe, expect, it } from "vitest";
-import type { IRGraph, IRNodeId } from "@kalphq/sdk";
+import type {
+  IRGraph,
+  IRNodeId,
+  EntryIRNode,
+  HandlerIRNode,
+} from "@kalphq/sdk";
 import { validateIR, validateIRBindings } from "../src/validate";
 
 const id = (s: string) => s as IRNodeId;
 
+/**
+ * Creates a minimal v2 IR graph with only entry and handler nodes,
+ * and sequential/event edges.
+ */
 function makeMinimalGraph(overrides?: Partial<IRGraph>): IRGraph {
+  const entryNode: EntryIRNode = {
+    kind: "entry",
+    id: id("entry_1"),
+    handler: "onMessage",
+  };
+  const handlerNode: HandlerIRNode = {
+    kind: "handler",
+    id: id("handler_1"),
+    moduleRef: "onMessage",
+    handlerType: "lifecycle",
+    inputSchema: undefined,
+    outputSchema: undefined,
+  };
+
   return {
+    version: 2,
     agentId: "test-agent",
     entries: { onMessage: id("entry_1") },
     nodes: {
-      [id("entry_1")]: {
-        kind: "entry",
-        id: id("entry_1"),
-        handler: "onMessage",
-      },
-      [id("run_1")]: {
-        kind: "run",
-        id: id("run_1"),
-        targetId: "steps.process_query",
-        targetKind: "step",
-      },
+      [id("entry_1")]: entryNode,
+      [id("handler_1")]: handlerNode,
     },
     edges: [
-      { from: id("entry_1"), to: id("run_1"), type: "sequential" as const },
+      { from: id("entry_1"), to: id("handler_1"), type: "sequential" as const },
     ],
     ...overrides,
   };
 }
 
 describe("validateIR", () => {
-  it("passes a valid minimal graph", () => {
+  it("passes a valid minimal v2 graph", () => {
     const result = validateIR(makeMinimalGraph());
     expect(result.valid).toBe(true);
     expect(result.errors).toHaveLength(0);
   });
 
+  it("fails without version 2", () => {
+    const graph = { ...makeMinimalGraph(), version: 1 };
+    const result = validateIR(graph);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("version"))).toBe(true);
+  });
+
   it("passes a graph with route entries", () => {
-    const result = validateIR(
-      makeMinimalGraph({
-        entries: {
-          onMessage: id("entry_1"),
-          [id("route:GET:/health")]: id("entry_2"),
-        },
-        nodes: {
-          [id("entry_1")]: {
-            kind: "entry",
-            id: id("entry_1"),
-            handler: "onMessage",
-          },
-          [id("entry_2")]: {
-            kind: "entry",
-            id: id("entry_2"),
-            handler: "route:GET:/health",
-            method: "GET",
-            path: "/health",
-          },
-          [id("run_1")]: {
-            kind: "run",
-            id: id("run_1"),
-            targetId: "steps.process_query",
-            targetKind: "step",
-          },
-        },
-      }),
-    );
+    const entryOnMessage: EntryIRNode = {
+      kind: "entry",
+      id: id("entry_1"),
+      handler: "onMessage",
+    };
+    const entryRoute: EntryIRNode = {
+      kind: "entry",
+      id: id("entry_2"),
+      handler: "routes.health",
+      method: "GET",
+      path: "/health",
+    };
+    const handlerOnMessage: HandlerIRNode = {
+      kind: "handler",
+      id: id("handler_1"),
+      moduleRef: "onMessage",
+      handlerType: "lifecycle",
+    };
+    const handlerRoute: HandlerIRNode = {
+      kind: "handler",
+      id: id("handler_2"),
+      moduleRef: "routes.health",
+      handlerType: "route",
+    };
+
+    const result = validateIR({
+      version: 2,
+      agentId: "test-agent",
+      entries: {
+        onMessage: id("entry_1"),
+        "route:GET:/health": id("entry_2"),
+      },
+      nodes: {
+        [id("entry_1")]: entryOnMessage,
+        [id("entry_2")]: entryRoute,
+        [id("handler_1")]: handlerOnMessage,
+        [id("handler_2")]: handlerRoute,
+      },
+      edges: [
+        { from: id("entry_1"), to: id("handler_1"), type: "sequential" },
+        { from: id("entry_2"), to: id("handler_2"), type: "sequential" },
+      ],
+    });
     expect(result.valid).toBe(true);
   });
 
@@ -82,7 +119,7 @@ describe("validateIR", () => {
           id: id("entry_1"),
           handler: "onMessage",
         },
-        [id("run_1")]: { kind: "unknown_kind", id: id("run_1") } as any,
+        [id("bad_1")]: { kind: "run", id: id("bad_1") } as any,
       },
     });
     expect(result.valid).toBe(false);
@@ -91,7 +128,9 @@ describe("validateIR", () => {
   it("fails when edges array contains invalid edge", () => {
     const result = validateIR({
       ...makeMinimalGraph(),
-      edges: [{ from: id(""), to: id("run_1"), type: "sequential" as const }],
+      edges: [
+        { from: id(""), to: id("handler_1"), type: "sequential" as const },
+      ],
     });
     expect(result.valid).toBe(false);
   });
@@ -102,8 +141,9 @@ describe("validateIR", () => {
     expect(validateIR(42).valid).toBe(false);
   });
 
-  it("passes with wait node", () => {
+  it("fails with v1 node kinds like run", () => {
     const result = validateIR({
+      version: 2,
       agentId: "agent",
       entries: { onMessage: id("entry_1") },
       nodes: {
@@ -112,51 +152,48 @@ describe("validateIR", () => {
           id: id("entry_1"),
           handler: "onMessage",
         },
-        [id("wait_1")]: { kind: "wait", id: id("wait_1"), duration: "30m" },
-      },
-      edges: [
-        { from: id("entry_1"), to: id("wait_1"), type: "sequential" as const },
-      ],
-    });
-    expect(result.valid).toBe(true);
-  });
-
-  it("passes with classify node", () => {
-    const result = validateIR({
-      agentId: "agent",
-      entries: { onMessage: id("entry_1") },
-      nodes: {
-        [id("entry_1")]: {
-          kind: "entry",
-          id: id("entry_1"),
-          handler: "onMessage",
-        },
-        [id("cls_1")]: {
-          kind: "llm.classify",
-          id: id("cls_1"),
-          input: { text: "hello", labels: ["a", "b"] },
-          branches: [{ label: "a", next: null }], // Terminal branch
-        },
+        [id("run_1")]: {
+          kind: "run",
+          id: id("run_1"),
+          targetId: "steps.x",
+          targetKind: "step",
+        } as any,
       },
       edges: [],
     });
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBe(false);
   });
 });
 
 describe("validateIRBindings", () => {
-  it("passes when all run targets have matching handlers", () => {
+  it("passes when all handler nodes have matching bundled modules", () => {
     const graph = makeMinimalGraph();
-    const result = validateIRBindings(graph, [
-      "onMessage",
-      "steps.process_query",
-    ]);
+    const result = validateIRBindings(graph, ["onMessage"]);
     expect(result.valid).toBe(true);
     expect(result.errors).toHaveLength(0);
   });
 
-  it("fails when a run target has no matching handler", () => {
-    const graph = makeMinimalGraph();
+  it("fails when a handler node has no matching bundled module", () => {
+    const handlerNode: HandlerIRNode = {
+      kind: "handler",
+      id: id("handler_1"),
+      moduleRef: "steps.process_query",
+      handlerType: "step",
+    };
+    const graph: IRGraph = {
+      version: 2,
+      agentId: "test",
+      entries: { onMessage: id("entry_1") },
+      nodes: {
+        [id("entry_1")]: {
+          kind: "entry",
+          id: id("entry_1"),
+          handler: "onMessage",
+        },
+        [id("handler_1")]: handlerNode,
+      },
+      edges: [],
+    };
     const result = validateIRBindings(graph, ["onMessage"]);
     expect(result.valid).toBe(false);
     expect(result.errors.some((e) => e.includes("steps.process_query"))).toBe(
@@ -164,8 +201,9 @@ describe("validateIRBindings", () => {
     );
   });
 
-  it("fails when onMessage entry has no bundled handler", () => {
+  it("fails when entry's handler is not in bundled modules", () => {
     const graph = makeMinimalGraph();
+    // graph has handler moduleRef "onMessage", but we only provide "steps.process_query"
     const result = validateIRBindings(graph, ["steps.process_query"]);
     expect(result.valid).toBe(false);
     expect(result.errors.some((e) => e.includes("onMessage"))).toBe(true);
@@ -182,8 +220,9 @@ describe("validateIRBindings", () => {
     expect(result.warnings?.some((w) => w.includes("unused_tool"))).toBe(true);
   });
 
-  it("fails for onMessage entry without execution path", () => {
+  it("fails for entry without outgoing edge (no execution path)", () => {
     const graph: IRGraph = {
+      version: 2,
       agentId: "agent",
       entries: { onMessage: id("entry_1") },
       nodes: {
@@ -204,8 +243,9 @@ describe("validateIRBindings", () => {
     ).toBe(true);
   });
 
-  it("skips route entries (no handler expected in v1)", () => {
+  it("validates route entries with handler nodes in v2", () => {
     const graph: IRGraph = {
+      version: 2,
       agentId: "agent",
       entries: {
         onMessage: id("entry_1"),
@@ -220,29 +260,36 @@ describe("validateIRBindings", () => {
         [id("entry_2")]: {
           kind: "entry",
           id: id("entry_2"),
-          handler: "route:GET:/health",
+          handler: "routes.health",
           method: "GET",
           path: "/health",
         },
-        [id("run_1")]: {
-          kind: "run",
-          id: id("run_1"),
-          targetId: "steps.process",
-          targetKind: "step",
+        [id("handler_1")]: {
+          kind: "handler",
+          id: id("handler_1"),
+          moduleRef: "onMessage",
+          handlerType: "lifecycle",
+        },
+        [id("handler_2")]: {
+          kind: "handler",
+          id: id("handler_2"),
+          moduleRef: "routes.health",
+          handlerType: "route",
         },
       },
-      edges: [{ from: id("entry_1"), to: id("run_1"), type: "sequential" }],
+      edges: [
+        { from: id("entry_1"), to: id("handler_1"), type: "sequential" },
+        { from: id("entry_2"), to: id("handler_2"), type: "sequential" },
+      ],
     };
-    const result = validateIRBindings(graph, ["onMessage", "steps.process"]);
+    const result = validateIRBindings(graph, ["onMessage", "routes.health"]);
     expect(result.valid).toBe(true);
-    // Route without IR nodes gets a warning (informational)
-    expect(result.warnings?.some((w) => w.includes("route:GET:/health"))).toBe(
-      true,
-    );
+    expect(result.errors).toHaveLength(0);
   });
 
   it("detects entry pointing to missing node", () => {
     const graph: IRGraph = {
+      version: 2,
       agentId: "agent",
       entries: { onMessage: id("missing_node") },
       nodes: {},
@@ -253,49 +300,9 @@ describe("validateIRBindings", () => {
     expect(result.errors.some((e) => e.includes("missing node"))).toBe(true);
   });
 
-  it("allows terminal branch with null next", () => {
-    const graph: IRGraph = {
-      agentId: "agent",
-      entries: { onMessage: id("entry_1") },
-      nodes: {
-        [id("entry_1")]: {
-          kind: "entry",
-          id: id("entry_1"),
-          handler: "onMessage",
-        },
-        [id("classify_1")]: {
-          kind: "llm.classify",
-          id: id("classify_1"),
-          input: { text: "test", labels: ["a", "b"] },
-          branches: [
-            { label: "a", next: id("run_1") },
-            { label: "b", next: null }, // Terminal branch
-          ],
-        },
-        [id("run_1")]: {
-          kind: "run",
-          id: id("run_1"),
-          targetId: "steps.process",
-          targetKind: "step",
-        },
-      },
-      edges: [
-        { from: id("entry_1"), to: id("classify_1"), type: "sequential" },
-        {
-          from: id("classify_1"),
-          to: id("run_1"),
-          type: "branch",
-          condition: "a",
-        },
-      ],
-    };
-    // Schema should parse without throwing
-    const result = validateIR(graph);
-    expect(result.valid).toBe(true);
-  });
-
-  it("includes path context in issues for invalid classify", () => {
-    const graph: IRGraph = {
+  it("fails v1 graphs with classify nodes", () => {
+    const graph = {
+      version: 2,
       agentId: "agent",
       entries: { onMessage: id("entry_1") },
       nodes: {
@@ -308,24 +315,12 @@ describe("validateIRBindings", () => {
           kind: "llm.classify",
           id: id("classify_1"),
           input: { text: "test", labels: ["a"] },
-          branches: [
-            { label: "a", next: null }, // Terminal (will trigger "dead classify" warning)
-          ],
+          branches: [{ label: "a", next: null }],
         },
       },
-      edges: [
-        { from: id("entry_1"), to: id("classify_1"), type: "sequential" },
-      ],
+      edges: [],
     };
-
-    const result = validateIRBindings(graph, ["onMessage"]);
-
-    // Check that issues exist and have context
-    if (result.issues && result.issues.length > 0) {
-      const issue = result.issues[0];
-      expect(issue.context).toBeDefined();
-      // Should contain handler name
-      expect(issue.context).toMatch(/onMessage/i);
-    }
+    const result = validateIR(graph);
+    expect(result.valid).toBe(false);
   });
 });

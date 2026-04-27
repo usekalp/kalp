@@ -1,108 +1,211 @@
+/**
+ * @kalphq/core — Kalp v2 Orchestration Runtime
+ *
+ * This is the Durable Object entry point. The DO is a thin shell:
+ * - Receives HTTP/WebSocket events from the Worker entrypoint
+ * - Creates adapter instances (persistence, scheduler, transport)
+ * - Delegates all orchestration logic to the {@link OrchestrationReactor}
+ *
+ * @module
+ */
+
 import { DurableObject } from 'cloudflare:workers';
+import type { IRGraph } from '@kalphq/sdk';
+import { OrchestrationReactor } from '@/engine/reactor';
+import type { HandlerModule, RuntimeEvent } from '@/engine/types';
+import type { RuntimeProviders } from '@/engine/context-builder';
+import { DurableObjectPersistence, DurableObjectScheduler, DurableObjectTransport } from '@/adapters/durable-object';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Re-exports for external consumers
+// ────────────────────────────────────────────────────────────────────────────
+
+export { OrchestrationReactor } from '@/engine/reactor';
+export { ExecutionLog } from '@/engine/execution-log';
+export type { ExecutionEvent, RuntimeEvent, ExecutionTask, HandlerModule } from '@/engine/types';
+export type { PersistenceAdapter, SchedulerAdapter, TransportAdapter } from '@/adapters/interfaces';
+export { InMemoryPersistence, InMemoryScheduler, InMemoryTransport } from '@/adapters/in-memory';
+export { DurableObjectPersistence, DurableObjectScheduler, DurableObjectTransport } from '@/adapters/durable-object';
+export { buildHandlerContext } from '@/engine/context-builder';
+export type { RuntimeProviders } from '@/engine/context-builder';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Agent Durable Object
+// ────────────────────────────────────────────────────────────────────────────
 
 /**
- * El "Cerebro" de la sala: Maneja SQL y WebSockets simultáneamente.
+ * Durable Object class for a deployed Kalp agent.
+ *
+ * Each agent instance lives in its own DO. The DO is responsible for:
+ * 1. Bootstrapping adapter instances on first request.
+ * 2. Routing incoming HTTP/WebSocket events to the reactor.
+ * 3. Handling alarms (scheduled wake-ups from `actions.wait`).
+ *
+ * The DO does NOT contain any orchestration logic — that lives in
+ * the {@link OrchestrationReactor}.
  */
-export class MyDurableObject extends DurableObject<Env> {
+export class AgentDurableObject extends DurableObject<Env> {
+	/** The reactor instance, lazily created on first event. */
+	private reactor: OrchestrationReactor | null = null;
+
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
-		// Inicialización de la DB SQLite interna
-		this.ctx.storage.sql.exec(`
-      CREATE TABLE IF NOT EXISTS state (
-        id TEXT PRIMARY KEY,
-        value TEXT
-      )
-    `);
 	}
 
+	/**
+	 * Lazily initializes the reactor with the agent's IR and bundles.
+	 *
+	 * In production, the IR and handler bundles are loaded from storage
+	 * (written during `kalp push`). This method creates the adapter
+	 * instances and wires them to the reactor.
+	 *
+	 * @returns The initialized reactor.
+	 */
+	private async getReactor(): Promise<OrchestrationReactor> {
+		if (this.reactor) return this.reactor;
+
+		// Load IR and bundles from DO storage (written by push endpoint)
+		const irRaw = await this.ctx.storage.get<string>('__ir__');
+		const bundleMapRaw = await this.ctx.storage.get<Record<string, string>>('__bundles__');
+
+		if (!irRaw) {
+			throw new Error('Agent not deployed: IR not found in storage.');
+		}
+
+		const ir = JSON.parse(irRaw) as IRGraph;
+		const bundles = new Map<string, HandlerModule>();
+
+		// Load handler modules from stored code strings
+		if (bundleMapRaw) {
+			for (const [moduleRef, code] of Object.entries(bundleMapRaw)) {
+				// Create a module from the stored code string
+				// In production, these are pre-bundled ESM modules
+				const blob = new Blob([code], { type: 'application/javascript' });
+				const url = URL.createObjectURL(blob);
+				try {
+					const mod = (await import(url)) as HandlerModule;
+					bundles.set(moduleRef, mod);
+				} finally {
+					URL.revokeObjectURL(url);
+				}
+			}
+		}
+
+		// Create adapters
+		const persistence = new DurableObjectPersistence(this.ctx.storage);
+		const scheduler = new DurableObjectScheduler(this.ctx.storage);
+
+		// Stub providers — real implementations will be injected per-request
+		const providers: RuntimeProviders = {
+			ai: {
+				generate: async () => ({ text: '' }),
+				stream: () => (async function* () {})(),
+				classify: async () => ({ label: '', confidence: 0 }),
+			},
+			auth: { userId: '' as any, claims: {}, hasPermission: () => false },
+			memory: { get: async () => [], append: async () => {} },
+			vault: { get: async () => null },
+		};
+
+		this.reactor = new OrchestrationReactor(ir, bundles, persistence, scheduler, providers);
+		return this.reactor;
+	}
+
+	/**
+	 * Handles incoming HTTP requests and WebSocket upgrades.
+	 */
 	async fetch(request: Request): Promise<Response> {
 		const upgradeHeader = request.headers.get('Upgrade');
 
-		// --- CASO 1: CONEXIÓN WEBSOCKET ---
+		// WebSocket upgrade
 		if (upgradeHeader === 'websocket') {
 			const pair = new WebSocketPair();
 			const [client, server] = Object.values(pair);
-
-			// Aceptamos la conexión y la ponemos en modo "hibernación"
 			this.ctx.acceptWebSocket(server as WebSocket);
-
-			return new Response(null, {
-				status: 101,
-				webSocket: client as WebSocket,
-			});
+			return new Response(null, { status: 101, webSocket: client as WebSocket });
 		}
 
-		// --- CASO 2: PETICIÓN HTTP (GET/POST) ---
-		// Esto sirve para el primer render o para clientes que no usan WS
-		if (request.method === 'POST') {
-			const body = await request.text(); // Recibimos el JSON como string
-			this.ctx.storage.sql.exec('INSERT OR REPLACE INTO state (id, value) VALUES (?, ?)', 'main', body);
-			return Response.json({ success: true });
+		// HTTP event dispatch
+		try {
+			const reactor = await this.getReactor();
+			const url = new URL(request.url);
+			const method = request.method.toUpperCase();
+
+			// Determine event type from URL path and method
+			const eventType = url.pathname === '/' || url.pathname === '' ? 'onMessage' : `route:${method}:${url.pathname}`;
+
+			const payload = request.method === 'GET' ? Object.fromEntries(url.searchParams) : await request.json().catch(() => null);
+
+			const event: RuntimeEvent = { type: eventType, payload };
+			const result = await reactor.handleEvent(event);
+
+			return Response.json({ ok: true, result });
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			return Response.json({ ok: false, error: message }, { status: 500 });
 		}
-
-		const cursor = this.ctx.storage.sql.exec("SELECT value FROM state WHERE id = 'main'");
-
-		// El cursor es un iterable. Tomamos el primer elemento manualmente.
-		const row = cursor.next().value; // Si no hay nada, row será undefined
-
-		const bodyToReturn = row?.value ? String(row.value) : JSON.stringify({ message: 'Sala vacía' });
-
-		return new Response(bodyToReturn, {
-			headers: { 'Content-Type': 'application/json' },
-		});
 	}
 
-	async webSocketMessage(ws: WebSocket, message: string) {
-		console.log('Mensaje recibido en el DO:', message);
+	/**
+	 * Handles WebSocket messages by dispatching "onMessage" events.
+	 */
+	async webSocketMessage(ws: WebSocket, message: string): Promise<void> {
+		try {
+			const reactor = await this.getReactor();
+			const payload = JSON.parse(message);
+			const result = await reactor.handleEvent({ type: 'onMessage', payload });
 
-		this.ctx.storage.sql.exec('INSERT OR REPLACE INTO state (id, value) VALUES (?, ?)', 'main', message);
+			// Broadcast result to all connected clients
+			const transport = new DurableObjectTransport(this.ctx, ws);
+			await transport.send(result);
+		} catch (err) {
+			ws.send(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+		}
+	}
 
-		const allSockets = this.ctx.getWebSockets();
-		console.log(`Enviando broadcast a ${allSockets.length - 1} clientes adicionales`);
-
-		allSockets.forEach((client) => {
-			if (client !== ws) {
-				client.send(message);
-			}
-		});
+	/**
+	 * Handles alarm wake-ups from scheduled `actions.wait` calls.
+	 */
+	async alarm(): Promise<void> {
+		const reactor = await this.getReactor();
+		await reactor.handleEvent({ type: 'onTick', payload: { reason: 'alarm' } });
 	}
 }
 
-// --- WORKER ENTRYPOINT ---
+// ────────────────────────────────────────────────────────────────────────────
+// Worker Entrypoint
+// ────────────────────────────────────────────────────────────────────────────
 
 const corsHeaders = {
 	'Access-Control-Allow-Origin': '*',
-	'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-	'Access-Control-Allow-Headers': 'Content-Type',
+	'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+	'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 export default {
 	async fetch(request, env): Promise<Response> {
-		// 1. Manejo de CORS Preflight
 		if (request.method === 'OPTIONS') {
 			return new Response(null, { headers: corsHeaders });
 		}
 
 		const url = new URL(request.url);
-		const roomName = url.pathname.slice(1) || 'default';
-		const id = env.MY_DURABLE_OBJECT.idFromName(roomName);
+		// Agent name is the first path segment (e.g. /myAgent/...)
+		const segments = url.pathname.split('/').filter(Boolean);
+		const agentName = segments[0] || 'default';
+
+		const id = env.MY_DURABLE_OBJECT.idFromName(agentName);
 		const stub = env.MY_DURABLE_OBJECT.get(id);
 
-		// 2. Delegar la petición al Durable Object
 		const response = await stub.fetch(request);
 
-		// --- EL FIX CRÍTICO ---
-		// Si la respuesta es un cambio de protocolo (WebSocket),
-		// la devolvemos DIRECTAMENTE sin tocar los headers ni el body.
-		if (response.status === 101) {
-			return response;
-		}
+		// WebSocket upgrades pass through directly
+		if (response.status === 101) return response;
 
-		// 3. Solo para peticiones HTTP normales inyectamos los headers de CORS
+		// Inject CORS headers for HTTP responses
 		const newHeaders = new Headers(response.headers);
-		Object.entries(corsHeaders).forEach(([key, value]) => {
+		for (const [key, value] of Object.entries(corsHeaders)) {
 			newHeaders.set(key, value);
-		});
+		}
 
 		return new Response(response.body, {
 			status: response.status,

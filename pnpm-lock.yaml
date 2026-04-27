@@ -136,6 +136,10 @@ importers:
         version: 1.6.1(@types/node@22.15.3)(lightningcss@1.32.0)
 
   packages/core:
+    dependencies:
+      '@kalphq/sdk':
+        specifier: workspace:*
+        version: link:../sdk
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20260413.1

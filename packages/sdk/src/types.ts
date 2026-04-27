@@ -265,182 +265,108 @@ export type ExecutableNode = AnyStep | AnyTool | AnyFlow;
  */
 export type RegistryNode = ExecutableNode | Route;
 
-// IR Nodes
+// ────────────────────────────────────────────────────────────────────────────
+// IR v2 — Minimal structural index
+//
+// The IR is intentionally ignorant of runtime effects. It does NOT contain:
+//   - Branch conditions (derived from ai.classify — a runtime effect)
+//   - AI model parameters, storage keys, fetch URLs
+//   - Scheduling, timers, or loop semantics
+//   - Any data that requires dynamic evaluation
+//
+// The real execution graph emerges at runtime via the Execution Log.
+// The compiler only produces a structural index of entrypoints and handlers.
+// ────────────────────────────────────────────────────────────────────────────
 
+/** Branded string type for IR node identifiers. */
 export type IRNodeId = string & { readonly __brand: "IRNodeId" };
 
-export type IRNodeKind =
-  | "entry"
-  | "run"
-  | "wait"
-  | "fetch"
-  | "loop"
-  | "llm.generate"
-  | "llm.stream"
-  | "llm.classify"
-  | "source"
-  | "storage.put"
-  | "storage.get";
+/**
+ * The only two node kinds in the IR.
+ * - `entry` — event-driven entrypoint (lifecycle, route)
+ * - `handler` — opaque reference to a bundled handler module
+ */
+export type IRNodeKind = "entry" | "handler";
 
+/** Base fields shared by all IR nodes. */
 export interface IRNodeBase {
   kind: IRNodeKind;
   id: IRNodeId;
 }
 
-export type RunTargetKind = "step" | "tool";
-
+/**
+ * Entry node — an event-driven entrypoint into the agent.
+ * Maps an event name (e.g. "onMessage", "route:GET:/health") to a handler.
+ */
 export interface EntryIRNode extends IRNodeBase {
   kind: "entry";
+  /** Event name that triggers this entry. */
   handler: string;
+  /** HTTP method (only for route entries). */
+  method?: string;
+  /** URL path (only for route entries). */
+  path?: string;
 }
 
-export interface RouteEntryIRNode extends IRNodeBase {
-  kind: "entry";
-  handler: string;
-  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-  path: string;
-}
+/** The type of handler a HandlerIRNode represents. */
+export type HandlerType = "lifecycle" | "step" | "tool" | "route";
 
-export interface RunIRNode extends IRNodeBase {
-  kind: "run";
-  targetId: string;
-  targetKind: RunTargetKind;
-  input?: unknown;
+/**
+ * Handler node — an opaque reference to a bundled handler module.
+ * The IR does not know what the handler does internally; all effects
+ * (ai, storage, actions, etc.) are intercepted at runtime.
+ */
+export interface HandlerIRNode extends IRNodeBase {
+  kind: "handler";
+  /** Reference to the bundled module (e.g. "onMessage", "steps.processQuery", "tools.search"). */
+  moduleRef: string;
+  /** Discriminator for the handler category. */
+  handlerType: HandlerType;
+  /** Optional JSON Schema for the handler's input. */
   inputSchema?: Record<string, unknown>;
+  /** Optional JSON Schema for the handler's output. */
   outputSchema?: Record<string, unknown>;
 }
 
-export interface WaitIRNode extends IRNodeBase {
-  kind: "wait";
-  duration: string | number;
-}
-
-export interface FetchIRNode extends IRNodeBase {
-  kind: "fetch";
-  url: string;
-  init?: unknown;
-}
-
-export interface GenerateIRNode extends IRNodeBase {
-  kind: "llm.generate";
-  model?: string;
-  input: unknown;
-  schema?: unknown;
-}
-
-export interface StreamIRNode extends IRNodeBase {
-  kind: "llm.stream";
-  model?: string;
-  input: unknown;
-  schema?: unknown;
-}
-
-export interface ClassifyIRNode extends IRNodeBase {
-  kind: "llm.classify";
-  model?: string;
-  input: { text: string; labels: string[] };
-  branches: Array<{ label: string; next?: IRNodeId | null }>;
-  fallback?: IRNodeId;
-  confidenceThreshold?: number;
-}
-
-export interface LoopIRNode extends IRNodeBase {
-  kind: "loop";
-  entry: IRNodeId;
-  detached: true;
-  key?: string;
-  schedule: {
-    type: "interval" | "cron" | "event-driven";
-    value?: string | number;
-  };
-  lifecycle: {
-    onStart?: IRNodeId;
-    onIterationStart?: IRNodeId;
-    onIterationEnd?: IRNodeId;
-    onError?: IRNodeId;
-    onStop?: IRNodeId;
-  };
-  maxIterations?: number;
-  until?: IRNodeId;
-  persistent: true;
-}
+/** Union of all IR node types. */
+export type IRNode = EntryIRNode | HandlerIRNode;
 
 /**
- * Nodo fuente para datos de entrada (message, context, storage)
- * Usado como origen de edges de tipo "data"
+ * The only two edge types in the IR.
+ * - `sequential` — A completes, then B starts.
+ * - `event` — An internal event triggers node B.
  */
-export interface SourceIRNode extends IRNodeBase {
-  kind: "source";
-  sourceType: "message" | "context" | "storage" | "env";
-  field?: string; // ej: "text" para message.text
-}
+export type IREdgeType = "sequential" | "event";
 
 /**
- * Nodo para operación storage.put
- * Scope y sequence se derivan del grafo, NO se almacenan
+ * A directed edge in the IR graph.
+ * Edges define structural relationships only — never runtime logic.
  */
-export interface StoragePutIRNode extends IRNodeBase {
-  kind: "storage.put";
-  key: string;
-  value?: unknown;
-}
-
-/**
- * Nodo para operación storage.get
- * Scope y sequence se derivan del grafo, NO se almacenan
- */
-export interface StorageGetIRNode extends IRNodeBase {
-  kind: "storage.get";
-  key: string;
-}
-
-export type IRNode =
-  | EntryIRNode
-  | RouteEntryIRNode
-  | RunIRNode
-  | WaitIRNode
-  | FetchIRNode
-  | GenerateIRNode
-  | StreamIRNode
-  | ClassifyIRNode
-  | LoopIRNode
-  | SourceIRNode
-  | StoragePutIRNode
-  | StorageGetIRNode;
-
-export type IREdgeType =
-  | "sequential"
-  | "branch"
-  | "nested"
-  | "data"
-  | "cross_scope";
-
 export interface IREdge {
   from: IRNodeId;
   to: IRNodeId;
   type: IREdgeType;
-  condition?: string;
-  /**
-   * Para edges de tipo "data": mapeo de campo fuente → campo destino
-   * Ej: { sourceField: "text", targetField: "prompt" }
-   */
-  mapping?: {
-    sourceField: string;
-    targetField: string;
-  };
-  /**
-   * Para edges de tipo "cross_scope": metadatos de dependencia entre scopes
-   */
-  scopeDependency?: {
-    fromScope: string;
-    toScope: string;
-  };
+  /** Optional descriptive tag. NEVER used as control-flow logic. */
+  label?: string;
 }
 
+/**
+ * The complete IR graph — a minimal structural index of the agent.
+ *
+ * The IR is the sole compile-time artifact. It records which entrypoints
+ * and handlers exist, and how they are structurally connected. All runtime
+ * behavior (branches, loops, effects) is resolved by the Orchestration Reactor.
+ */
 export interface IRGraph {
+  /** IR schema version. */
+  version: 2;
+  /** Agent identifier. */
   agentId: string;
+  /** Map from event name to entry node ID. */
   entries: Record<string, IRNodeId>;
+  /** All nodes keyed by ID. */
   nodes: Record<IRNodeId, IRNode>;
+  /** Directed edges between nodes. */
   edges: IREdge[];
 }
 

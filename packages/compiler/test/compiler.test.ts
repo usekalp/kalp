@@ -1,535 +1,238 @@
 import { describe, expect, it } from "vitest";
-import type {
-  Step,
-  Tool,
-  Flow,
-  Route,
-  IRGraph,
-  IRNode,
-  IRNodeId,
-  EntryIRNode,
-  ClassifyIRNode,
-  RunIRNode,
-  WaitIRNode,
-  GenerateIRNode,
-  StreamIRNode,
-  FetchIRNode,
-  StoragePutIRNode,
-  StorageGetIRNode,
-} from "@kalphq/sdk";
+import type { IRGraph, EntryIRNode, HandlerIRNode } from "@kalphq/sdk";
 import { z } from "zod";
 import { compileAgent } from "../src/compiler";
-import { compileLoop, type LoopCompileResult } from "../src/loop";
-import { compileClassify } from "../src/classify";
-import {
-  recordEmissions,
-  recordWithBranching,
-  type RecordingContext,
-  type BranchingResult,
-} from "../src/proxy";
 import { normalizeGraph } from "../src/normalize";
-import { computeScopes } from "../src/graph";
 
-const createMockStep = (id: string): Step<z.ZodTypeAny, z.ZodTypeAny> => ({
-  kind: "step",
+const createMockStep = (id: string) => ({
+  kind: "step" as const,
   id,
   description: `Mock step ${id}`,
   inputSchema: z.object({ value: z.string() }),
   outputSchema: z.object({ result: z.string() }),
 });
 
-const createMockTool = (id: string): Tool<z.ZodTypeAny, unknown> => ({
-  kind: "tool",
+const createMockTool = (id: string) => ({
+  kind: "tool" as const,
   id,
   description: `Mock tool ${id}`,
   inputSchema: z.object({ query: z.string() }),
 });
 
-const createMockFlow = (
-  id: string,
-  steps: Step[] = [],
-): Flow<unknown, unknown> => ({
-  kind: "flow",
+const createMockRoute = (id: string) => ({
+  kind: "route" as const,
   id,
-  description: `Mock flow ${id}`,
-  steps,
-});
-
-const createMockRoute = (
-  id: string,
-): Route<z.ZodTypeAny | undefined, unknown> => ({
-  kind: "route",
-  id,
-  method: "GET",
+  method: "GET" as const,
   path: `/${id}`,
   inputSchema: undefined,
+  handler: async () => ({ status: "ok" }),
 });
 
-describe("Recording Proxy", () => {
-  it("records run emissions", async () => {
-    const trace = await recordEmissions(async ({ actions }) => {
-      await actions.run({ id: "step_1" }, { value: "test" });
-    });
-
-    expect(trace.nodes).toHaveLength(1);
-    const node = trace.nodes[0] as RunIRNode;
-    expect(node.kind).toBe("run");
-    expect(node.targetId).toBe("steps.step_1");
-    expect(node.input).toEqual({ value: "test" });
-  });
-
-  it("records wait emissions", async () => {
-    const trace = await recordEmissions(async ({ actions }) => {
-      await actions.wait("30m");
-    });
-
-    expect(trace.nodes).toHaveLength(1);
-    const node = trace.nodes[0] as WaitIRNode;
-    expect(node.kind).toBe("wait");
-    expect(node.duration).toBe("30m");
-  });
-
-  it("records fetch emissions", async () => {
-    const trace = await recordEmissions(async ({ actions }) => {
-      await actions.fetch("https://api.example.com/data", { method: "GET" });
-    });
-
-    expect(trace.nodes).toHaveLength(1);
-    const node = trace.nodes[0] as FetchIRNode;
-    expect(node.kind).toBe("fetch");
-    expect(node.url).toBe("https://api.example.com/data");
-  });
-
-  it("records AI generate emissions", async () => {
-    const trace = await recordEmissions(async ({ ai }) => {
-      await ai.generate({
-        prompt: "Hello",
-        model: "openai/gpt-4o",
-        schema: z.object({ greeting: z.string() }),
-      });
-    });
-
-    expect(trace.nodes).toHaveLength(1);
-    const node = trace.nodes[0] as GenerateIRNode;
-    expect(node.kind).toBe("llm.generate");
-    expect(node.model).toBe("openai/gpt-4o");
-    expect(node.schema).toBeDefined();
-  });
-
-  it("records AI stream emissions", async () => {
-    const trace = await recordEmissions(async ({ ai }) => {
-      await ai.stream({
-        prompt: "Stream me",
-        model: "openai/gpt-4o-mini",
-      });
-    });
-
-    expect(trace.nodes).toHaveLength(1);
-    const node = trace.nodes[0] as StreamIRNode;
-    expect(node.kind).toBe("llm.stream");
-    expect(node.model).toBe("openai/gpt-4o-mini");
-  });
-
-  it("records AI classify emissions", async () => {
-    const trace = await recordEmissions(async ({ ai }) => {
-      await ai.classify({
-        input: "This is a question",
-        labels: ["question", "statement", "command"],
-        model: "openai/gpt-4o",
-        confidenceThreshold: 0.8,
-      });
-    });
-
-    expect(trace.nodes).toHaveLength(1);
-    const node = trace.nodes[0] as ClassifyIRNode;
-    expect(node.kind).toBe("llm.classify");
-    expect(node.input.text).toBe("This is a question");
-    expect(node.input.labels).toEqual(["question", "statement", "command"]);
-    expect(node.confidenceThreshold).toBe(0.8);
-    expect(node.branches).toEqual([]);
-  });
-
-  it("records sequential emissions in order", async () => {
-    const trace = await recordEmissions(async ({ actions, ai }) => {
-      await actions.wait("1s");
-      await actions.run({ id: "step_a" });
-      await ai.generate({ prompt: "test", model: "openai/gpt-4o" });
-    });
-
-    expect(trace.nodes).toHaveLength(3);
-    expect(trace.nodes[0]!.kind).toBe("wait");
-    expect(trace.nodes[1]!.kind).toBe("run");
-    expect(trace.nodes[2]!.kind).toBe("llm.generate");
-  });
-
-  it("throws on nested loop", async () => {
-    await expect(
-      recordEmissions(async ({ actions }) => {
-        actions.loop(async () => {
-          await actions.wait("1h");
-        });
-      }),
-    ).rejects.toThrow("Nested loop capture must be compiled via compileLoop.");
-  });
-});
-
-describe("Loop Compiler", () => {
-  it("compiles a basic loop with cyclic subgraph structure", async () => {
-    const result = await compileLoop(async ({ actions }: RecordingContext) => {
-      await actions.run({ id: "process" }, { data: "input" });
-      await actions.wait("1h");
-    });
-
-    // FIX v7: Loop es cyclic subgraph, no container node
-    expect(result.entryId).toBeDefined();
-    expect(result.exitId).toBeDefined();
-    expect(result.bodyIds.length).toBeGreaterThan(0);
-    expect(Object.keys(result.nodes).length).toBeGreaterThan(0);
-    expect(result.edges.length).toBeGreaterThan(0);
-
-    // Verificar estructura de back-edge (exit → first body node)
-    const backEdges = result.edges.filter(
-      (e) => e.from === result.exitId && e.to === result.bodyIds[0],
-    );
-    expect(backEdges.length).toBeGreaterThan(0);
-  });
-
-  it("includes entry and exit nodes in nodes record", async () => {
-    const result = await compileLoop(async ({ actions }: RecordingContext) => {
-      await actions.run({ id: "step_only" });
-    });
-
-    expect(result.nodes[result.entryId]).toBeDefined();
-    expect(result.nodes[result.exitId]).toBeDefined();
-    expect(result.nodes[result.entryId]!.kind).toBe("run");
-  });
-
-  it("body nodes are in execution order", async () => {
-    const result = await compileLoop(async ({ actions }: RecordingContext) => {
-      await actions.wait("5m");
-      await actions.run({ id: "first" });
-      await actions.run({ id: "second" });
-    });
-
-    // bodyIds debe estar en orden de ejecución
-    expect(result.bodyIds.length).toBe(3);
-
-    // Verificar que hay edges secuenciales entre body nodes
-    for (let i = 0; i < result.bodyIds.length - 1; i++) {
-      const from = result.bodyIds[i];
-      const to = result.bodyIds[i + 1];
-      const edge = result.edges.find((e) => e.from === from && e.to === to);
-      expect(edge).toBeDefined();
-      expect(edge!.type).toBe("sequential");
-    }
-  });
-
-  it("creates entry node that points to first body node", async () => {
-    const result = await compileLoop(async ({ actions }: RecordingContext) => {
-      await actions.run({ id: "entry_node" });
-      await actions.wait("1s");
-    });
-
-    const firstBodyId = result.bodyIds[0];
-    const entryEdge = result.edges.find(
-      (e) => e.from === result.entryId && e.to === firstBodyId,
-    );
-    expect(entryEdge).toBeDefined();
-    expect(entryEdge!.type).toBe("sequential");
-  });
-
-  it("throws on empty loop body", async () => {
-    await expect(compileLoop(async () => {})).rejects.toThrow(
-      "Loop body produced no IR nodes.",
-    );
-  });
-});
-
-describe("Classify Compiler", () => {
-  it("compiles basic classify node", () => {
-    const node = compileClassify({
-      input: "Classify this",
-      labels: ["A", "B", "C"],
-    });
-
-    expect(node.kind).toBe("llm.classify");
-    expect(node.input.text).toBe("Classify this");
-    expect(node.input.labels).toEqual(["A", "B", "C"]);
-    expect(node.branches).toEqual([]);
-  });
-
-  it("includes model and confidence threshold", () => {
-    const node = compileClassify({
-      input: "test",
-      labels: ["x", "y"],
-      model: "anthropic/claude-sonnet-4.5",
-      confidenceThreshold: 0.95,
-    });
-
-    expect(node.model).toBe("anthropic/claude-sonnet-4.5");
-    expect(node.confidenceThreshold).toBe(0.95);
-  });
-
-  it("accepts pre-wired branches", () => {
-    const node = compileClassify({
-      input: "route me",
-      labels: ["path_a", "path_b"],
-      branches: [
-        { label: "path_a", next: "node_a" as IRNodeId },
-        { label: "path_b", next: "node_b" as IRNodeId },
-      ],
-      fallback: "fallback_node" as IRNodeId,
-    });
-
-    expect(node.branches).toHaveLength(2);
-    expect(node.branches[0]!.label).toBe("path_a");
-    expect(node.branches[1]!.next).toBe("node_b");
-    expect(node.fallback).toBe("fallback_node");
-  });
-});
-
-describe("Agent Compiler", () => {
-  it("compiles minimal agent with steps", async () => {
+describe("v2 Agent Compiler", () => {
+  it("compiles minimal agent with lifecycle handlers only", () => {
     const agent = {
       id: "test-agent",
-      steps: [createMockStep("step_1"), createMockStep("step_2")],
+      onMessage: async () => ({ status: "ok" }),
     };
 
-    const graph = await compileAgent(agent);
+    const graph = compileAgent(agent);
 
+    expect(graph.version).toBe(2);
     expect(graph.agentId).toBe("test-agent");
     expect(graph.entries.onMessage).toBeDefined();
-    // 1 entry + 2 run nodes
-    expect(Object.keys(graph.nodes).length).toBe(3);
-    // entry→run1, run1→run2
-    expect(graph.edges).toHaveLength(2);
+    // v2: entry + handler node (2 nodes)
+    expect(Object.keys(graph.nodes).length).toBe(2);
+    expect(graph.edges).toHaveLength(1);
+    expect(graph.edges[0]!.type).toBe("sequential");
 
-    // EntryIRNode is the root
+    // Entry node points to handler
     const entryNode = graph.nodes[graph.entries.onMessage!] as EntryIRNode;
     expect(entryNode.kind).toBe("entry");
     expect(entryNode.handler).toBe("onMessage");
   });
 
-  it("populates targetKind on run nodes", async () => {
-    const flowStep = createMockStep("flow_inner");
+  it("compiles agent with steps (v2 handler nodes)", () => {
     const agent = {
-      id: "kind-agent",
-      steps: [createMockStep("s")],
-      tools: [createMockTool("t")],
-      flows: [createMockFlow("f", [flowStep])],
+      id: "step-agent",
+      steps: [createMockStep("step_1"), createMockStep("step_2")],
+      onMessage: async () => ({ status: "ok" }),
     };
 
-    const graph = await compileAgent(agent);
+    const graph = compileAgent(agent);
 
-    const runNodes = Object.values(graph.nodes).filter(
-      (n): n is RunIRNode => n.kind === "run",
+    // v2: entry + handler (onMessage) + handler (step_1) + handler (step_2) = 4 nodes
+    const nodes = Object.values(graph.nodes);
+    expect(nodes.length).toBe(4);
+
+    // Handler nodes have moduleRef pointing to bundled code
+    const handlerNodes = nodes.filter(
+      (n): n is HandlerIRNode => n.kind === "handler",
     );
-    const kinds = runNodes.map((n) => n.targetKind);
-    expect(kinds).toContain("step");
-    expect(kinds).toContain("tool");
-    // flows are expanded at compile-time: no "flow" targetKind in IR
-    expect(kinds).not.toContain("flow");
+    expect(handlerNodes.length).toBe(3); // onMessage, step_1, step_2
+
+    // All handlers should have a handlerType
+    for (const h of handlerNodes) {
+      expect(h.handlerType).toBeDefined();
+    }
+
+    // All edges are sequential
+    for (const edge of graph.edges) {
+      expect(edge.type).toBe("sequential");
+    }
   });
 
-  it("populates inputSchema/outputSchema from zod schemas", async () => {
-    const agent = {
-      id: "schema-agent",
-      steps: [createMockStep("s1")],
-    };
-
-    const graph = await compileAgent(agent);
-
-    const runNode = Object.values(graph.nodes).find(
-      (n): n is RunIRNode => n.kind === "run" && n.targetId === "steps.s1",
-    );
-    expect(runNode).toBeDefined();
-    expect(runNode!.inputSchema).toBeDefined();
-    expect(runNode!.outputSchema).toBeDefined();
-  });
-
-  it("compiles agent with tools", async () => {
+  it("compiles agent with tools as handler nodes", () => {
     const agent = {
       id: "tool-agent",
-      steps: [],
-      tools: [createMockTool("tool_1"), createMockTool("tool_2")],
+      tools: [createMockTool("search"), createMockTool("calc")],
+      onMessage: async () => ({ status: "ok" }),
     };
 
-    const graph = await compileAgent(agent);
+    const graph = compileAgent(agent);
 
-    const toolRuns = Object.values(graph.nodes).filter(
-      (n): n is RunIRNode =>
-        n.kind === "run" && n.targetId.startsWith("tools.tool_"),
+    const handlerNodes = Object.values(graph.nodes).filter(
+      (n): n is HandlerIRNode => n.kind === "handler",
     );
-    expect(toolRuns).toHaveLength(2);
-    expect(toolRuns[0]!.targetKind).toBe("tool");
+
+    // 1 onMessage + 2 tools = 3 handlers
+    expect(handlerNodes.length).toBe(3);
+
+    // Tool handlers have moduleRef like "tools.<id>"
+    const toolHandlers = handlerNodes.filter((h) =>
+      h.moduleRef.startsWith("tools."),
+    );
+    expect(toolHandlers.length).toBe(2);
+
+    // All tool handlers should have handlerType "tool"
+    for (const h of toolHandlers) {
+      expect(h.handlerType).toBe("tool");
+    }
   });
 
-  it("compiles agent with flows (expanded inline)", async () => {
-    const step = createMockStep("flow_step");
-    const flow = createMockFlow("my_flow", [step]);
-
+  it("compiles agent with routes as handler nodes", () => {
     const agent = {
-      id: "flow-agent",
-      steps: [step],
-      flows: [flow],
+      id: "route-agent",
+      routes: [createMockRoute("health"), createMockRoute("status")],
+      onMessage: async () => ({ status: "ok" }),
     };
 
-    const graph = await compileAgent(agent);
+    const graph = compileAgent(agent);
 
-    // flows are expanded at compile-time: no run node for "my_flow" itself
-    const flowByFlowId = Object.values(graph.nodes).filter(
-      (n): n is RunIRNode => n.kind === "run" && n.targetId === "steps.my_flow",
-    );
-    expect(flowByFlowId).toHaveLength(0);
+    // Route entries should exist
+    expect(graph.entries["route:GET:/health"]).toBeDefined();
+    expect(graph.entries["route:GET:/status"]).toBeDefined();
 
-    // instead, the steps inside the flow appear as run nodes
-    const expandedStep = Object.values(graph.nodes).find(
-      (n): n is RunIRNode =>
-        n.kind === "run" && n.targetId === "steps.flow_step",
+    const handlerNodes = Object.values(graph.nodes).filter(
+      (n): n is HandlerIRNode => n.kind === "handler",
     );
-    expect(expandedStep).toBeDefined();
-    expect(expandedStep!.targetKind).toBe("step");
+
+    // 1 onMessage + 2 routes = 3 handlers
+    expect(handlerNodes.length).toBe(3);
+
+    // Route handlers have moduleRef like "routes.<id>"
+    const routeHandlers = handlerNodes.filter((h) =>
+      h.moduleRef.startsWith("routes."),
+    );
+    expect(routeHandlers.length).toBe(2);
+
+    // All route handlers should have handlerType "route"
+    for (const h of routeHandlers) {
+      expect(h.handlerType).toBe("route");
+    }
   });
 
-  it("compiles complete agent with all components", async () => {
-    const step = createMockStep("process");
-    const tool = createMockTool("search");
-    const flow = createMockFlow("pipeline", [step]);
-
+  it("compiles agent with onInit and onTick lifecycle handlers", () => {
     const agent = {
-      id: "complete-agent",
-      steps: [step],
-      tools: [tool],
-      flows: [flow],
+      id: "lifecycle-agent",
+      onMessage: async () => ({ status: "ok" }),
+      onInit: async () => ({ initialized: true }),
+      onTick: async () => ({ ticked: true }),
     };
 
-    const graph = await compileAgent(agent);
+    const graph = compileAgent(agent);
 
-    expect(graph.agentId).toBe("complete-agent");
-    // 1 entry + 3 run
-    expect(Object.keys(graph.nodes).length).toBe(4);
-    // entry→run1, run1→run2, run2→run3
-    expect(graph.edges).toHaveLength(3);
+    // Entries should exist
+    expect(graph.entries.onMessage).toBeDefined();
+    expect(graph.entries.onInit).toBeDefined();
+    expect(graph.entries.onTick).toBeDefined();
 
-    const runNodes = Object.values(graph.nodes).filter(
-      (n): n is RunIRNode => n.kind === "run",
+    // Handler nodes for each lifecycle
+    const handlerNodes = Object.values(graph.nodes).filter(
+      (n): n is HandlerIRNode => n.kind === "handler",
     );
-    expect(runNodes).toHaveLength(3);
+    expect(handlerNodes.length).toBe(3);
+
+    const moduleRefs = handlerNodes.map((h) => h.moduleRef);
+    expect(moduleRefs).toContain("onMessage");
+    expect(moduleRefs).toContain("onInit");
+    expect(moduleRefs).toContain("onTick");
+
+    // All lifecycle handlers should have handlerType "lifecycle"
+    for (const h of handlerNodes) {
+      expect(h.handlerType).toBe("lifecycle");
+    }
   });
 
-  it("creates valid sequential edges between runs", async () => {
-    const agent = {
-      id: "sequential-agent",
-      steps: [createMockStep("s1"), createMockStep("s2"), createMockStep("s3")],
-    };
-
-    const graph = await compileAgent(agent);
-
-    // entry→s1, s1→s2, s2→s3
-    expect(graph.edges).toHaveLength(3);
-
-    // Entry node edges to first run
-    const entryEdge = graph.edges.find(
-      (e) => e.from === graph.entries.onMessage,
-    );
-    expect(entryEdge).toBeDefined();
-  });
-
-  it("throws on non-object agent", async () => {
-    await expect(compileAgent(null)).rejects.toThrow("agent must be an object");
-    await expect(compileAgent("string")).rejects.toThrow(
+  it("throws on non-object agent", () => {
+    expect(() => compileAgent(null as any)).toThrow("agent must be an object");
+    expect(() => compileAgent("string" as any)).toThrow(
       "agent must be an object",
     );
   });
 
-  it("uses recording wiring when onMessage is a function", async () => {
-    const agent = {
-      id: "fn-agent",
-      steps: [createMockStep("process_query")],
-      tools: [createMockTool("search")],
-      onMessage: async (ctx: any) => {
-        await ctx.actions.run({ id: "process_query" });
-        await ctx.actions.run({ id: "search", kind: "tool" });
-      },
-    };
-
-    const graph = await compileAgent(agent);
-
-    expect(graph.agentId).toBe("fn-agent");
-    expect(graph.entries.onMessage).toBeDefined();
-
-    // Should have entry + 2 run nodes
-    const entryNode = graph.nodes[graph.entries.onMessage!];
-    expect(entryNode?.kind).toBe("entry");
-
-    const runNodes = Object.values(graph.nodes).filter(
-      (n) => n.kind === "run",
-    ) as RunIRNode[];
-    expect(runNodes).toHaveLength(2);
-    expect(runNodes[0]!.targetId).toBe("steps.process_query");
-    expect(runNodes[1]!.targetId).toBe("tools.search");
-
-    // All edges should be sequential and typed
-    for (const edge of graph.edges) {
-      expect(edge.type).toBe("sequential");
-    }
-    // entry → run1, run1 → run2
-    expect(graph.edges).toHaveLength(2);
-  });
-
-  it("enriches schemas from registry on recorded run nodes", async () => {
-    const agent = {
-      id: "schema-fn-agent",
-      steps: [createMockStep("s1")],
-      onMessage: async (ctx: any) => {
-        await ctx.actions.run({ id: "s1" });
-      },
-    };
-
-    const graph = await compileAgent(agent);
-
-    const runNode = Object.values(graph.nodes).find(
-      (n): n is RunIRNode => n.kind === "run" && n.targetId === "steps.s1",
+  it("throws when agent id is missing", () => {
+    expect(() => compileAgent({} as any)).toThrow(
+      "compileAgent: agent.id is required",
     );
-    expect(runNode).toBeDefined();
-    expect(runNode!.inputSchema).toBeDefined();
-    expect(runNode!.outputSchema).toBeDefined();
   });
-});
 
-describe("Graph Normalizer", () => {
-  it("validates valid graph with entries", () => {
-    const graph: IRGraph = {
-      agentId: "test",
-      entries: { onMessage: "entry_1" as IRNodeId },
-      nodes: {
-        ["entry_1" as IRNodeId]: {
-          kind: "entry",
-          id: "entry_1" as IRNodeId,
-          handler: "onMessage",
-        } as EntryIRNode,
-        ["run_1" as IRNodeId]: {
-          kind: "run",
-          id: "run_1" as IRNodeId,
-          targetId: "x",
-          targetKind: "step",
-        } as RunIRNode,
-      },
-      edges: [
-        {
-          from: "entry_1" as IRNodeId,
-          to: "run_1" as IRNodeId,
-          type: "sequential" as const,
-        },
-      ],
+  it("handler nodes have undefined schemas by default", () => {
+    const agent = {
+      id: "schema-agent",
+      onMessage: async () => ({ status: "ok" }),
     };
+
+    const graph = compileAgent(agent);
+    const handlerNode = Object.values(graph.nodes).find(
+      (n): n is HandlerIRNode => n.kind === "handler",
+    );
+
+    expect(handlerNode).toBeDefined();
+    expect(handlerNode!.inputSchema).toBeUndefined();
+    expect(handlerNode!.outputSchema).toBeUndefined();
+  });
+
+  it("creates sequential edges between entry and all handlers", () => {
+    const agent = {
+      id: "edge-agent",
+      steps: [createMockStep("s1")],
+      tools: [createMockTool("t1")],
+      onMessage: async () => ({ status: "ok" }),
+    };
+
+    const graph = compileAgent(agent);
+
+    // All edges should be sequential (v2 only has sequential and event)
+    for (const edge of graph.edges) {
+      expect(["sequential", "event"]).toContain(edge.type);
+    }
+  });
+
+  it("graph normalizer validates v2 IR", () => {
+    const graph = compileAgent({
+      id: "norm-agent",
+      onMessage: async () => ({ status: "ok" }),
+    });
 
     const normalized = normalizeGraph(graph);
-    expect(normalized.agentId).toBe("test");
+    expect(normalized.agentId).toBe("norm-agent");
+    expect(normalized.version).toBe(2);
   });
 
   it("throws on empty entries", () => {
+    // This shouldn't happen with compileAgent but normalizeGraph should catch it
     const graph: IRGraph = {
+      version: 2,
       agentId: "test",
       entries: {},
       nodes: {},
@@ -539,460 +242,5 @@ describe("Graph Normalizer", () => {
     expect(() => normalizeGraph(graph)).toThrow(
       "Graph must have at least one entry point.",
     );
-  });
-
-  it("throws on missing entry node", () => {
-    const graph: IRGraph = {
-      agentId: "test",
-      entries: { onMessage: "missing" as IRNodeId },
-      nodes: {},
-      edges: [],
-    };
-
-    expect(() => normalizeGraph(graph)).toThrow(
-      "Missing node missing referenced by entries.onMessage.",
-    );
-  });
-
-  it("throws on dangling edge source", () => {
-    const graph: IRGraph = {
-      agentId: "test",
-      entries: { onMessage: "run_1" as IRNodeId },
-      nodes: {
-        ["run_1" as IRNodeId]: {
-          kind: "run",
-          id: "run_1" as IRNodeId,
-          targetId: "x",
-          targetKind: "step",
-        } as RunIRNode,
-      },
-      edges: [
-        {
-          from: "missing" as IRNodeId,
-          to: "run_1" as IRNodeId,
-          type: "sequential" as const,
-        },
-      ],
-    };
-
-    expect(() => normalizeGraph(graph)).toThrow(
-      "Missing node missing referenced by edge.from.",
-    );
-  });
-
-  it("throws on dangling edge target", () => {
-    const graph: IRGraph = {
-      agentId: "test",
-      entries: { onMessage: "run_1" as IRNodeId },
-      nodes: {
-        ["run_1" as IRNodeId]: {
-          kind: "run",
-          id: "run_1" as IRNodeId,
-          targetId: "x",
-          targetKind: "step",
-        } as RunIRNode,
-      },
-      edges: [
-        {
-          from: "run_1" as IRNodeId,
-          to: "missing" as IRNodeId,
-          type: "sequential" as const,
-        },
-      ],
-    };
-
-    expect(() => normalizeGraph(graph)).toThrow(
-      "Missing node missing referenced by edge.to.",
-    );
-  });
-
-  it("validates classify branch references", () => {
-    const graph: IRGraph = {
-      agentId: "test",
-      entries: { onMessage: "classify_1" as IRNodeId },
-      nodes: {
-        ["classify_1" as IRNodeId]: {
-          kind: "llm.classify",
-          id: "classify_1" as IRNodeId,
-          input: { text: "test", labels: ["a", "b"] },
-          branches: [
-            { label: "a", next: "run_a" as IRNodeId },
-            { label: "b", next: "run_b" as IRNodeId },
-          ],
-        } as ClassifyIRNode,
-        ["run_a" as IRNodeId]: {
-          kind: "run",
-          id: "run_a" as IRNodeId,
-          targetId: "a",
-          targetKind: "step",
-        } as RunIRNode,
-        ["run_b" as IRNodeId]: {
-          kind: "run",
-          id: "run_b" as IRNodeId,
-          targetId: "b",
-          targetKind: "step",
-        } as RunIRNode,
-      },
-      edges: [],
-    };
-
-    const normalized = normalizeGraph(graph);
-    expect(normalized.agentId).toBe("test");
-  });
-
-  it("throws on missing classify branch target", () => {
-    const graph: IRGraph = {
-      agentId: "test",
-      entries: { onMessage: "classify_1" as IRNodeId },
-      nodes: {
-        ["classify_1" as IRNodeId]: {
-          kind: "llm.classify",
-          id: "classify_1" as IRNodeId,
-          input: { text: "test", labels: ["a"] },
-          branches: [{ label: "a", next: "missing" as IRNodeId }],
-        } as ClassifyIRNode,
-      },
-      edges: [],
-    };
-
-    expect(() => normalizeGraph(graph)).toThrow(
-      "Missing node missing referenced by classify.branch.",
-    );
-  });
-
-  it("validates cyclic loop structure with entry and exit", () => {
-    // FIX v7: Loop es cyclic subgraph, no container node
-    const graph: IRGraph = {
-      agentId: "test",
-      entries: { onMessage: "loop_entry" as IRNodeId },
-      nodes: {
-        ["loop_entry" as IRNodeId]: {
-          kind: "run",
-          id: "loop_entry" as IRNodeId,
-          targetId: "loop:entry",
-          targetKind: "step",
-        } as RunIRNode,
-        ["body_1" as IRNodeId]: {
-          kind: "wait",
-          id: "body_1" as IRNodeId,
-          duration: "1h",
-        } as WaitIRNode,
-        ["loop_exit" as IRNodeId]: {
-          kind: "run",
-          id: "loop_exit" as IRNodeId,
-          targetId: "loop:check",
-          targetKind: "step",
-        } as RunIRNode,
-      },
-      edges: [
-        {
-          from: "loop_entry" as IRNodeId,
-          to: "body_1" as IRNodeId,
-          type: "sequential",
-        },
-        {
-          from: "body_1" as IRNodeId,
-          to: "loop_exit" as IRNodeId,
-          type: "sequential",
-        },
-        {
-          from: "loop_exit" as IRNodeId,
-          to: "body_1" as IRNodeId,
-          type: "sequential",
-        }, // back-edge
-      ],
-    };
-
-    const normalized = normalizeGraph(graph);
-    expect(normalized.agentId).toBe("test");
-  });
-});
-
-describe("Two-Phase Recording (recordWithBranching)", () => {
-  it("returns simple trace when no classify", async () => {
-    const result = await recordWithBranching(async ({ actions }) => {
-      await actions.run({ id: "step_1" });
-      await actions.wait("5s");
-    });
-
-    expect("nodes" in result).toBe(true);
-    const trace = result as { nodes: IRNode[] };
-    expect(trace.nodes).toHaveLength(2);
-  });
-
-  it("detects classify and produces branching result", async () => {
-    const result = await recordWithBranching(async ({ actions, ai }) => {
-      await actions.run({ id: "pre_step" });
-
-      const intent = await ai.classify({
-        input: "test",
-        labels: ["a", "b"],
-      });
-
-      if (intent === "a") {
-        await actions.run({ id: "branch_a" });
-      }
-      if (intent === "b") {
-        await actions.run({ id: "branch_b" });
-      }
-    });
-
-    expect("branches" in result).toBe(true);
-    const branching = result as BranchingResult;
-    expect(branching.preTrace).toHaveLength(1);
-    expect(branching.preTrace[0]!.kind).toBe("run");
-    expect(branching.classify.labels).toEqual(["a", "b"]);
-    expect(branching.branches.size).toBe(2);
-
-    const branchA = branching.branches.get("a")!;
-    const branchB = branching.branches.get("b")!;
-    expect(branchA).toHaveLength(1);
-    expect((branchA[0] as RunIRNode).targetId).toBe("steps.branch_a");
-    expect(branchB).toHaveLength(1);
-    expect((branchB[0] as RunIRNode).targetId).toBe("steps.branch_b");
-  });
-
-  it("handles empty branches", async () => {
-    const result = await recordWithBranching(async ({ actions, ai }) => {
-      const intent = await ai.classify({
-        input: "test",
-        labels: ["active", "noop"],
-      });
-
-      if (intent === "active") {
-        await actions.run({ id: "do_stuff" });
-      }
-      // noop branch is empty
-    });
-
-    const branching = result as BranchingResult;
-    expect(branching.branches.get("active")!).toHaveLength(1);
-    expect(branching.branches.get("noop")!).toHaveLength(0);
-  });
-
-  it("throws on multiple classify calls", async () => {
-    await expect(
-      recordWithBranching(async ({ ai }) => {
-        await ai.classify({ input: "a", labels: ["x"] });
-        await ai.classify({ input: "b", labels: ["y"] });
-      }),
-    ).rejects.toThrow("Only one ai.classify() per handler is supported.");
-  });
-
-  it("preserves label order", async () => {
-    const result = await recordWithBranching(async ({ ai }) => {
-      await ai.classify({
-        input: "test",
-        labels: ["z", "a", "m"],
-      });
-    });
-
-    const branching = result as BranchingResult;
-    const keys = [...branching.branches.keys()];
-    expect(keys).toEqual(["z", "a", "m"]);
-  });
-
-  it("loop inside branch only appears in correct branch", async () => {
-    const result = await recordWithBranching(async ({ actions, ai }) => {
-      const intent = await ai.classify({
-        input: "test",
-        labels: ["research", "chat"],
-      });
-
-      if (intent === "research") {
-        await actions.run({ id: "loop_step" });
-        await actions.wait("1h");
-      }
-    });
-
-    const branching = result as BranchingResult;
-    expect(branching.branches.get("research")!.length).toBeGreaterThan(0);
-    expect(branching.branches.get("chat")!).toHaveLength(0);
-  });
-});
-
-describe("Integration: Full Agent with Loop and Classify", () => {
-  it("compiles agent with loop cyclic subgraph", async () => {
-    const step = createMockStep("processor");
-
-    const agent = {
-      id: "loop-agent",
-      steps: [step],
-    };
-
-    // Compile loop como cyclic subgraph
-    const loopResult = await compileLoop(
-      async ({ actions }: RecordingContext) => {
-        await actions.run({ id: "processor" });
-        await actions.wait("30m");
-      },
-    );
-
-    // FIX v7: Verificar estructura cyclic
-    expect(loopResult.entryId).toBeDefined();
-    expect(loopResult.exitId).toBeDefined();
-    expect(loopResult.bodyIds.length).toBeGreaterThan(0);
-
-    // Verificar que el entry node existe
-    expect(loopResult.nodes[loopResult.entryId]).toBeDefined();
-    expect(loopResult.nodes[loopResult.entryId]!.kind).toBe("run");
-  });
-
-  it("records full workflow trace (simpleMode)", async () => {
-    const trace = await recordEmissions(async ({ actions, ai }) => {
-      await actions.run({ id: "fetch_data" });
-      await ai.classify({
-        input: "What to do next?",
-        labels: ["process", "skip"],
-      });
-      await actions.wait("5s");
-      await ai.generate({ prompt: "Complete", model: "openai/gpt-4o" });
-    });
-
-    expect(trace.nodes).toHaveLength(4);
-    expect(trace.nodes[0]!.kind).toBe("run");
-    expect(trace.nodes[1]!.kind).toBe("llm.classify");
-    expect(trace.nodes[2]!.kind).toBe("wait");
-    expect(trace.nodes[3]!.kind).toBe("llm.generate");
-  });
-});
-
-describe("Storage Operations (v7)", () => {
-  it("records storage.put as IR node", async () => {
-    const trace = await recordEmissions(async ({ storage }) => {
-      await storage.put("intent", { value: "positive" });
-    });
-
-    expect(trace.nodes).toHaveLength(1);
-    const node = trace.nodes[0] as StoragePutIRNode;
-    expect(node.kind).toBe("storage.put");
-    expect(node.key).toBe("intent");
-    expect(node.value).toEqual({ value: "positive" });
-  });
-
-  it("records storage.get as IR node", async () => {
-    const trace = await recordEmissions(async ({ storage }) => {
-      await storage.get("user_pref");
-    });
-
-    expect(trace.nodes).toHaveLength(1);
-    const node = trace.nodes[0] as StorageGetIRNode;
-    expect(node.kind).toBe("storage.get");
-    expect(node.key).toBe("user_pref");
-  });
-
-  it("records multiple storage operations in order", async () => {
-    const trace = await recordEmissions(async ({ storage }) => {
-      await storage.put("key1", "value1");
-      await storage.get("key2");
-      await storage.put("key3", { data: true });
-    });
-
-    expect(trace.nodes).toHaveLength(3);
-    expect((trace.nodes[0] as StoragePutIRNode).kind).toBe("storage.put");
-    expect((trace.nodes[0] as StoragePutIRNode).key).toBe("key1");
-    expect((trace.nodes[1] as StorageGetIRNode).kind).toBe("storage.get");
-    expect((trace.nodes[1] as StorageGetIRNode).key).toBe("key2");
-    expect((trace.nodes[2] as StoragePutIRNode).kind).toBe("storage.put");
-    expect((trace.nodes[2] as StoragePutIRNode).key).toBe("key3");
-  });
-});
-
-describe("Graph-Derived Semantics (v7)", () => {
-  it("computes scopes from entry nodes", () => {
-    const graph: IRGraph = {
-      agentId: "test",
-      entries: { onMessage: "entry_1" as IRNodeId },
-      nodes: {
-        ["entry_1" as IRNodeId]: {
-          kind: "entry",
-          id: "entry_1" as IRNodeId,
-          handler: "onMessage",
-        } as EntryIRNode,
-        ["node_a" as IRNodeId]: {
-          kind: "run",
-          id: "node_a" as IRNodeId,
-          targetId: "steps.a",
-          targetKind: "step",
-        } as RunIRNode,
-        ["node_b" as IRNodeId]: {
-          kind: "run",
-          id: "node_b" as IRNodeId,
-          targetId: "steps.b",
-          targetKind: "step",
-        } as RunIRNode,
-      },
-      edges: [
-        {
-          from: "entry_1" as IRNodeId,
-          to: "node_a" as IRNodeId,
-          type: "sequential",
-        },
-        {
-          from: "node_a" as IRNodeId,
-          to: "node_b" as IRNodeId,
-          type: "sequential",
-        },
-      ],
-    };
-
-    const scopes = computeScopes(graph);
-
-    // All nodes should be in scope of entry_1
-    expect(scopes.get("entry_1" as IRNodeId)).toBe("entry_1");
-    expect(scopes.get("node_a" as IRNodeId)).toBe("entry_1");
-    expect(scopes.get("node_b" as IRNodeId)).toBe("entry_1");
-  });
-
-  it("scope boundary is defined by cross_scope edges", () => {
-    const graph: IRGraph = {
-      agentId: "test",
-      entries: {
-        onMessage: "entry_1" as IRNodeId,
-        onTick: "entry_2" as IRNodeId,
-      },
-      nodes: {
-        ["entry_1" as IRNodeId]: {
-          kind: "entry",
-          id: "entry_1" as IRNodeId,
-          handler: "onMessage",
-        } as EntryIRNode,
-        ["entry_2" as IRNodeId]: {
-          kind: "entry",
-          id: "entry_2" as IRNodeId,
-          handler: "onTick",
-        } as EntryIRNode,
-        ["node_a" as IRNodeId]: {
-          kind: "run",
-          id: "node_a" as IRNodeId,
-          targetId: "steps.a",
-          targetKind: "step",
-        } as RunIRNode,
-      },
-      edges: [
-        // cross_scope edge: entry_1 calls into entry_2's scope
-        {
-          from: "entry_1" as IRNodeId,
-          to: "entry_2" as IRNodeId,
-          type: "cross_scope",
-          scopeDependency: { fromScope: "entry_1", toScope: "entry_2" },
-        },
-        // node_a is part of entry_2's scope (reachable from entry_2)
-        {
-          from: "entry_2" as IRNodeId,
-          to: "node_a" as IRNodeId,
-          type: "sequential",
-        },
-      ],
-    };
-
-    const scopes = computeScopes(graph);
-
-    // entry_1 is in its own scope
-    expect(scopes.get("entry_1" as IRNodeId)).toBe("entry_1");
-    // entry_2 and node_a are in entry_2's scope
-    // (entry_2 is reachable from entry_1 via cross_scope, but entry_2 itself defines its scope)
-    expect(scopes.get("entry_2" as IRNodeId)).toBe("entry_2");
-    expect(scopes.get("node_a" as IRNodeId)).toBe("entry_2");
   });
 });

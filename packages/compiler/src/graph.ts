@@ -1,211 +1,125 @@
 /**
- * Graph-derived computation utilities for v7 execution semantics
- * 
- * Scope y Sequence NO son campos en nodos — se derivan del grafo
+ * Graph utilities for IR v2.
+ *
+ * In v2 the IR is a minimal structural index (entries + handlers + edges).
+ * These helpers provide compile-time graph analysis: reachability, adjacency,
+ * handler resolution, and topological ordering.
  */
 
-import type { IRGraph, IRNodeId, IREdge, IRNode } from "@kalphq/sdk";
+import type { IRGraph, IRNodeId, IRNode, HandlerIRNode } from "@kalphq/sdk";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Adjacency
+// ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Control edge types que definen orden de ejecución
- * Data edges NO definen orden, solo dependencia de datos
+ * Builds a forward adjacency list from the IR edges.
+ *
+ * @param ir - The IR graph.
+ * @returns A map from each node ID to its list of successor node IDs.
  */
-const CONTROL_EDGE_TYPES = ["sequential", "branch", "nested"];
-
-/**
- * Computa scopeId para cada nodo basado en:
- * - Entry node como raíz del scope
- * - Reachability SIN cruzar edges type: "cross_scope"
- * 
- * Scope es un concepto DERIVADO, no almacenado
- */
-export function computeScopes(ir: IRGraph): Map<IRNodeId, IRNodeId> {
-  const scopes = new Map<IRNodeId, IRNodeId>();
-  
-  // Para cada entry, computar su scope
-  for (const [entryKey, entryNodeId] of Object.entries(ir.entries)) {
-    const scopeNodes = getScopeNodes(ir, entryNodeId);
-    
-    // Asignar scope a todos los nodos alcanzables desde este entry
-    for (const nodeId of scopeNodes) {
-      // Si un nodo ya tiene scope asignado, verificar que sea el mismo
-      // (si no, hay un error de estructura — cross_scope edge debería existir)
-      const existingScope = scopes.get(nodeId);
-      if (existingScope && existingScope !== entryNodeId) {
-        // Este caso indica que el nodo es alcanzable desde múltiples entries
-        // sin cruzar cross_scope edges — es ambigüedad estructural
-        // El validador debe detectar esto
-      }
-      scopes.set(nodeId, entryNodeId);
-    }
+export function buildAdjacency(ir: IRGraph): Map<IRNodeId, IRNodeId[]> {
+  const adj = new Map<IRNodeId, IRNodeId[]>();
+  for (const edge of ir.edges) {
+    const list = adj.get(edge.from) ?? [];
+    list.push(edge.to);
+    adj.set(edge.from, list);
   }
-  
-  return scopes;
+  return adj;
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Reachability
+// ────────────────────────────────────────────────────────────────────────────
+
 /**
- * Obtiene todos los nodos en el scope de un entry node
- * Reachability DFS sin cruzar cross_scope edges
+ * Returns the set of all node IDs reachable from a given starting node via
+ * directed edges (DFS).
+ *
+ * @param ir - The IR graph.
+ * @param startId - The node to start traversal from.
+ * @returns A set of reachable node IDs (including `startId` itself).
  */
-function getScopeNodes(ir: IRGraph, entryNodeId: IRNodeId): Set<IRNodeId> {
+export function getReachableNodes(
+  ir: IRGraph,
+  startId: IRNodeId,
+): Set<IRNodeId> {
   const visited = new Set<IRNodeId>();
-  const stack: IRNodeId[] = [entryNodeId];
-  
+  const stack: IRNodeId[] = [startId];
+
   while (stack.length > 0) {
     const current = stack.pop()!;
     if (visited.has(current)) continue;
     visited.add(current);
-    
-    // Encontrar edges que parten de este nodo
+
     for (const edge of ir.edges) {
-      if (edge.from !== current) continue;
-      
-      // cross_scope edges definen el límite del scope
-      // el target está en OTRO scope, no en este
-      if (edge.type === "cross_scope") continue;
-      
-      // Otros edges mantienen el scope
-      stack.push(edge.to);
+      if (edge.from === current) {
+        stack.push(edge.to);
+      }
     }
   }
-  
+
   return visited;
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Handler lookup
+// ────────────────────────────────────────────────────────────────────────────
+
 /**
- * Computa sequenceId para cada nodo en un scope
- * 
- * sequenceId = índice en orden topológico del scope subgraph
- * Basado SOLO en control edges (NO data edges)
+ * Returns all handler nodes in the IR, keyed by their `moduleRef`.
+ *
+ * @param ir - The IR graph.
+ * @returns A map from moduleRef to the corresponding {@link HandlerIRNode}.
  */
-export function computeSequence(
+export function getHandlersByModuleRef(
   ir: IRGraph,
-  scopeEntryId: IRNodeId,
-): Map<IRNodeId, number> {
-  const sequence = new Map<IRNodeId, number>();
-  const scopeNodes = getScopeNodes(ir, scopeEntryId);
-  
-  // Filtrar edges a solo control edges DENTRO del scope
-  const scopeControlEdges = ir.edges.filter(
-    e => scopeNodes.has(e.from) && 
-         scopeNodes.has(e.to) &&
-         CONTROL_EDGE_TYPES.includes(e.type)
+): Map<string, HandlerIRNode> {
+  const handlers = new Map<string, HandlerIRNode>();
+  for (const node of Object.values(ir.nodes)) {
+    if (node.kind === "handler") {
+      handlers.set(node.moduleRef, node);
+    }
+  }
+  return handlers;
+}
+
+/**
+ * Resolves the handler node that a given entry leads to via its first
+ * sequential edge, or `undefined` if no such handler exists.
+ *
+ * @param ir - The IR graph.
+ * @param entryKey - The event name (e.g. "onMessage", "route:GET:/health").
+ * @returns The target {@link HandlerIRNode}, or `undefined`.
+ */
+export function resolveEntryHandler(
+  ir: IRGraph,
+  entryKey: string,
+): HandlerIRNode | undefined {
+  const entryId = ir.entries[entryKey];
+  if (!entryId) return undefined;
+
+  const edge = ir.edges.find(
+    (e) => e.from === entryId && e.type === "sequential",
   );
-  
-  // Calcular in-degrees para Kahn's algorithm
-  const inDegree = new Map<IRNodeId, number>();
-  for (const nodeId of scopeNodes) {
-    inDegree.set(nodeId, 0);
-  }
-  for (const edge of scopeControlEdges) {
-    inDegree.set(edge.to, (inDegree.get(edge.to) || 0) + 1);
-  }
-  
-  // Kahn's algorithm para orden topológico
-  const queue: IRNodeId[] = [];
-  for (const [nodeId, degree] of inDegree.entries()) {
-    if (degree === 0) queue.push(nodeId);
-  }
-  
-  let seqIndex = 0;
-  while (queue.length > 0) {
-    // Orden estable para determinismo
-    queue.sort();
-    const current = queue.shift()!;
-    sequence.set(current, seqIndex++);
-    
-    // Reducir in-degree de vecinos
-    for (const edge of scopeControlEdges) {
-      if (edge.from !== current) continue;
-      const newDegree = (inDegree.get(edge.to) || 0) - 1;
-      inDegree.set(edge.to, newDegree);
-      if (newDegree === 0) queue.push(edge.to);
-    }
-  }
-  
-  // Si quedan nodos sin visitar, hay ciclo en el grafo
-  // (loops intencionales deben ser manejados especialmente)
-  for (const nodeId of scopeNodes) {
-    if (!sequence.has(nodeId)) {
-      // Asignar sequence -1 para indicar "en ciclo"
-      sequence.set(nodeId, -1);
-    }
-  }
-  
-  return sequence;
+  if (!edge) return undefined;
+
+  const target = ir.nodes[edge.to];
+  return target?.kind === "handler" ? target : undefined;
 }
 
-/**
- * Encuentra todos los ciclos en el grafo (para detectar loops mal formados)
- */
-export function findCycles(ir: IRGraph): IRNodeId[][] {
-  const cycles: IRNodeId[][] = [];
-  const visited = new Set<IRNodeId>();
-  const stack: IRNodeId[] = [];
-  const inStack = new Set<IRNodeId>();
-  
-  // Solo considerar control edges para detección de ciclos
-  const controlEdges = ir.edges.filter(e => CONTROL_EDGE_TYPES.includes(e.type));
-  const adj = new Map<IRNodeId, IRNodeId[]>();
-  for (const edge of controlEdges) {
-    if (!adj.has(edge.from)) adj.set(edge.from, []);
-    adj.get(edge.from)!.push(edge.to);
-  }
-  
-  function dfs(node: IRNodeId) {
-    visited.add(node);
-    stack.push(node);
-    inStack.add(node);
-    
-    for (const neighbor of adj.get(node) || []) {
-      if (!visited.has(neighbor)) {
-        dfs(neighbor);
-      } else if (inStack.has(neighbor)) {
-        // Encontramos un ciclo
-        const cycleStart = stack.indexOf(neighbor);
-        cycles.push(stack.slice(cycleStart));
-      }
-    }
-    
-    stack.pop();
-    inStack.delete(node);
-  }
-  
-  for (const nodeId of Object.keys(ir.nodes) as IRNodeId[]) {
-    if (!visited.has(nodeId)) dfs(nodeId);
-  }
-  
-  return cycles;
-}
+// ────────────────────────────────────────────────────────────────────────────
+// Path checking
+// ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Verifica si existe path de A a B usando control edges
+ * Returns `true` if there is a directed path from `from` to `to` in the graph.
+ *
+ * @param ir - The IR graph.
+ * @param from - The source node ID.
+ * @param to - The target node ID.
+ * @returns Whether a path exists.
  */
-export function hasControlPath(
-  ir: IRGraph,
-  from: IRNodeId,
-  to: IRNodeId,
-): boolean {
-  const visited = new Set<IRNodeId>();
-  const stack: IRNodeId[] = [from];
-  
-  const controlEdges = ir.edges.filter(e => CONTROL_EDGE_TYPES.includes(e.type));
-  const adj = new Map<IRNodeId, IRNodeId[]>();
-  for (const edge of controlEdges) {
-    if (!adj.has(edge.from)) adj.set(edge.from, []);
-    adj.get(edge.from)!.push(edge.to);
-  }
-  
-  while (stack.length > 0) {
-    const current = stack.pop()!;
-    if (current === to) return true;
-    if (visited.has(current)) continue;
-    visited.add(current);
-    
-    for (const neighbor of adj.get(current) || []) {
-      if (!visited.has(neighbor)) stack.push(neighbor);
-    }
-  }
-  
-  return false;
+export function hasPath(ir: IRGraph, from: IRNodeId, to: IRNodeId): boolean {
+  return getReachableNodes(ir, from).has(to);
 }

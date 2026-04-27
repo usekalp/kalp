@@ -98,6 +98,17 @@ function buildWrappers(agentPath: string, agentConfig: unknown): WrapperSpec[] {
     }
   }
 
+  for (const route of asArray(raw.routes)) {
+    const rec = asRecord(route);
+    const id = rec ? asString(rec.id) : undefined;
+    if (!id) continue;
+    const safeName = `routes.${id}`;
+    wrappers.push({
+      name: safeName,
+      code: `import agent from "${escapedPath}";\nconst _r = Array.isArray(agent.routes) ? agent.routes.find((r) => r.id === "${id}") : null;\nexport default _r?.handler ?? null;\n`,
+    });
+  }
+
   return wrappers;
 }
 
