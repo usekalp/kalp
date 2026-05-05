@@ -54,6 +54,14 @@ export class InMemoryStateStore implements StateStore {
   }
 
   /** @inheritdoc */
+  async increment(key: string, amount: number): Promise<number> {
+    const current = (this.data.get(key) as number) ?? 0;
+    const next = current + amount;
+    this.data.set(key, next);
+    return next;
+  }
+
+  /** @inheritdoc */
   async transaction<T>(fn: (tx: StateStore) => Promise<T>): Promise<T> {
     // In-memory: no real transaction isolation, just execute inline.
     return fn(this);

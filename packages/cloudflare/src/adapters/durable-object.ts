@@ -97,6 +97,14 @@ export class DOStateStore implements StateStore {
   }
 
   /** @inheritdoc */
+  async increment(key: string, amount: number): Promise<number> {
+    const current = (await this.get(key)) as number | null;
+    const next = (current ?? 0) + amount;
+    await this.set(key, next);
+    return next;
+  }
+
+  /** @inheritdoc */
   async transaction<T>(fn: (tx: StateStore) => Promise<T>): Promise<T> {
     // DO storage operations within a single request are already atomic.
     // Wrap in storage.transaction for multi-key atomicity.

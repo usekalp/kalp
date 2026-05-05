@@ -196,11 +196,44 @@ export type ExecutionEvent =
       timestamp: number;
     }
   | {
+      type: "action.ask";
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "action.approval";
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "action.call";
+      contract: string;
+      input: unknown;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
       type: "execution.untracked";
       source: UntrackedIOSource;
       location?: string;
       nodeId?: IRNodeId;
       action?: string;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "log";
+      level: "debug" | "info" | "warn" | "error";
+      msg: string;
+      data?: Record<string, unknown>;
       executionId: string;
       traceId: string;
       threadId: string;

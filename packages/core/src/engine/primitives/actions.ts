@@ -219,5 +219,24 @@ export function createActionsPrimitive(
 
       return response;
     },
+
+    async ask(options: any): Promise<any> {
+      await log.emit({ type: "action.ask", ...options, ...ids, timestamp: Date.now() });
+      return { text: "stub response" };
+    },
+
+    async requestApproval(options: any): Promise<boolean> {
+      await log.emit({ type: "action.approval", ...options, ...ids, timestamp: Date.now() });
+      return true;
+    },
+
+    async emit(event: string, payload: any, options?: any): Promise<void> {
+      await log.emit({ type: "action.emit", event, payload, ...options, ...ids, timestamp: Date.now() });
+    },
+
+    async callAgent(contract: any, input: any): Promise<any> {
+      await log.emit({ type: "action.call", contract: contract.agentId, input, ...ids, timestamp: Date.now() });
+      return {};
+    },
   };
 }

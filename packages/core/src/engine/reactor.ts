@@ -200,6 +200,14 @@ export class OrchestrationReactor {
           this.scheduler,
           dispatch,
           this.providers,
+          { 
+            executionId, 
+            traceId: "", 
+            threadId: this.threadId,
+            untrackedIOCount: 0,
+            untrackedIOByType: { network: 0, timer: 0, fs: 0, unknown: 0 },
+            hasUntrustedPlugins: false
+          },
         );
 
         // Execute handler in sandboxed context

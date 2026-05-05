@@ -7,19 +7,10 @@
  * @module
  */
 
+import type { StoragePrimitive } from "@kalphq/sdk";
 import type { StateStore } from "@/adapters/interfaces";
 import type { ExecutionLog } from "@/engine/execution-log";
 import type { ExecutionContext } from "@/engine/types";
-
-/**
- * The shape of the `storage` primitive exposed to handler context.
- * Matches the SDK's `HandlerContext.storage` interface exactly.
- */
-export interface StoragePrimitive {
-  get: <T = unknown>(key: string) => Promise<T | null>;
-  put: (key: string, value: unknown) => Promise<void>;
-  delete: (key: string) => Promise<void>;
-}
 
 /**
  * Creates an intercepted storage primitive that emits events for every operation.
@@ -42,7 +33,7 @@ export function createStoragePrimitive(
 
   return {
     async get<T = unknown>(key: string): Promise<T | null> {
-      const value = await stateStore.get(key);
+      const value = (await stateStore.get(key)) as T | null;
       await log.emit({
         type: "state.read",
         key,
@@ -50,7 +41,7 @@ export function createStoragePrimitive(
         ...ids,
         timestamp: Date.now(),
       });
-      return value as T | null;
+      return value;
     },
 
     async put(key: string, value: unknown): Promise<void> {
@@ -72,6 +63,28 @@ export function createStoragePrimitive(
         value: undefined,
         ...ids,
         timestamp: Date.now(),
+      });
+    },
+
+    async increment(key: string, amount: number = 1): Promise<number> {
+      const newValue = await stateStore.increment(key, amount);
+      await log.emit({
+        type: "state.write",
+        key,
+        value: newValue,
+        ...ids,
+        timestamp: Date.now(),
+      });
+      return newValue;
+    },
+
+    async transaction<T>(
+      callback: (tx: any) => Promise<T>,
+      _options?: any,
+    ): Promise<T> {
+      // Basic transaction wrapping (without full interceptor for tx context yet)
+      return stateStore.transaction(async (tx) => {
+        return callback(tx as any);
       });
     },
   };

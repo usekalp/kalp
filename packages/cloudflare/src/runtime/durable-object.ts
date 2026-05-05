@@ -73,7 +73,12 @@ export class AgentDurableObject extends DurableObject<Env> {
 
     const providers: RuntimeProviders = {
       ai: stubAI,
-      auth: { userId: asUserId(""), claims: {}, hasPermission: () => false },
+      auth: { 
+        userId: asUserId(""), 
+        providerId: "anonymous",
+        claims: {}, 
+        hasPermission: () => false 
+      },
       memory: {
         list: async () => ({ items: [] }),
         append: async () => {},

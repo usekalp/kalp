@@ -49,6 +49,15 @@ export interface StateStore {
   delete(key: string): Promise<void>;
 
   /**
+   * Atomically increments a numeric value.
+   *
+   * @param key - The key to increment.
+   * @param amount - The amount to add.
+   * @returns The new value.
+   */
+  increment(key: string, amount: number): Promise<number>;
+
+  /**
    * Executes a function within an atomic transaction.
    *
    * @param fn - The transactional function receiving a scoped store.
