@@ -9,5 +9,5 @@ export default defineConfig({
   clean: true,
   minify: false,
   treeshake: true,
-  external: ["@kalphq/sdk"],
+  external: ["@kalphq/sdk", "esbuild", "jiti"],
 });

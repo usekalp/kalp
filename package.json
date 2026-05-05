@@ -13,7 +13,8 @@
     "version-packages": "changeset version",
     "version:snapshot": "changeset version --snapshot",
     "release": "turbo build && changeset publish",
-    "dev-release": "node scripts/dev-release.mjs"
+    "dev-release": "node scripts/dev-release.mjs",
+    "check-boundaries": "bash scripts/check-boundaries.sh"
   },
   "devDependencies": {
     "@changesets/cli": "^2.30.0",

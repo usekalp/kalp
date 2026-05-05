@@ -1,0 +1,23 @@
+{
+  "name": "@kalphq/test-utils",
+  "version": "0.0.0-dev-20260427013932",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup"
+  },
+  "dependencies": {
+    "@kalphq/core": "workspace:*",
+    "@kalphq/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.5.2"
+  }
+}

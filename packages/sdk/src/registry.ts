@@ -15,14 +15,10 @@
  * @module
  */
 
-import type { Node } from "@/types";
+import { captureFilePath } from "@/utils";
 
 /**
  * Entry in the node registry.
- *
- * @property kind - Whether this is a `"step"` or `"tool"`.
- * @property id - The node's unique identifier (from its config).
- * @property ref - The runtime reference to the node object.
  */
 export interface RegistryEntry {
   kind: "step" | "tool";
@@ -30,48 +26,54 @@ export interface RegistryEntry {
   ref: unknown;
 }
 
-/**
- * Internal mutable registry map.
- * Key format: `"steps.<id>"` or `"tools.<id>"`.
- */
-let registry = new Map<string, RegistryEntry>();
+// Use a global symbol to ensure the registry is a singleton across multiple SDK instances.
+const REGISTRY_SYMBOL = Symbol.for("@kalphq/sdk/registry");
+
+function getRegistryMap(): Map<string, RegistryEntry> {
+  if (!(globalThis as any)[REGISTRY_SYMBOL]) {
+    (globalThis as any)[REGISTRY_SYMBOL] = new Map<string, RegistryEntry>();
+  }
+  return (globalThis as any)[REGISTRY_SYMBOL];
+}
 
 /**
  * Registers a step or tool node in the global registry.
- *
- * Called internally by `defineStep()` and `defineTool()` — zero extra DX cost.
- * Developers never call this directly.
- *
- * @param kind - The node kind (`"step"` or `"tool"`).
- * @param id - The node's unique identifier.
- * @param ref - The runtime node object reference.
  */
 export function registerNode(
   kind: "step" | "tool",
   id: string,
   ref: unknown,
 ): void {
-  registry.set(`${kind}s.${id}`, { kind, id, ref });
+  const map = getRegistryMap();
+  const key = `${kind}s.${id}`;
+
+  if (map.has(key)) {
+    throw new Error(
+      `Node ID collision: ${id} is already registered as a ${kind}.`,
+    );
+  }
+
+  const internalId = Symbol(id);
+  const filePath = captureFilePath();
+
+  if (ref && typeof ref === "object") {
+    (ref as any).__internalId = internalId;
+    (ref as any).__filePath = filePath;
+  }
+
+  getRegistryMap().set(`${kind}s.${id}`, { kind, id, ref });
 }
 
 /**
  * Returns the current registry as a read-only Map.
- *
- * Used by the CLI/compiler after loading the agent module to discover
- * all steps and tools that need bundling.
- *
- * @returns The current registry entries.
  */
 export function getRegistry(): ReadonlyMap<string, RegistryEntry> {
-  return registry;
+  return getRegistryMap();
 }
 
 /**
  * Clears the registry.
- *
- * **Must be called** before loading each agent module to prevent
- * cross-contamination between agents, test runs, or hot reloads.
  */
 export function clearRegistry(): void {
-  registry = new Map();
+  getRegistryMap().clear();
 }

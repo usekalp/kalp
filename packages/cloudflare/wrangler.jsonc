@@ -1,0 +1,33 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "core",
+  "main": "src/runtime/worker.ts",
+  "compatibility_date": "2026-04-13",
+  "migrations": [
+    {
+      "new_sqlite_classes": ["MyDurableObject"],
+      "tag": "v1",
+    },
+    {
+      "new_sqlite_classes": ["AgentDurableObject"],
+      "tag": "v2",
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "class_name": "AgentDurableObject",
+        "name": "KALP_RUNTIME_CLOUDFLARE",
+      },
+    ],
+  },
+  "observability": {
+    "enabled": true,
+  },
+  "upload_source_maps": true,
+  "compatibility_flags": ["nodejs_compat"],
+}

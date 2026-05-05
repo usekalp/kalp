@@ -107,11 +107,36 @@ importers:
         specifier: ^5.0.0
         version: 5.9.2
 
+  packages/cloudflare:
+    dependencies:
+      '@kalphq/core':
+        specifier: workspace:*
+        version: link:../core
+      '@kalphq/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
+      typescript:
+        specifier: ^5.5.2
+        version: 5.9.2
+      wrangler:
+        specifier: ^4.82.2
+        version: 4.82.2(@cloudflare/workers-types@4.20260413.1)
+
   packages/compiler:
     dependencies:
       '@kalphq/sdk':
         specifier: workspace:*
         version: link:../sdk
+      esbuild:
+        specifier: 0.25.0
+        version: 0.25.0
+      jiti:
+        specifier: ^2.6.1
+        version: 2.6.1
       ts-morph:
         specifier: ^24.0.0
         version: 24.0.0
@@ -141,18 +166,12 @@ importers:
         specifier: workspace:*
         version: link:../sdk
     devDependencies:
-      '@cloudflare/workers-types':
-        specifier: ^4.20260413.1
-        version: 4.20260413.1
-      '@types/node':
-        specifier: ^25.6.0
-        version: 25.6.0
+      tsup:
+        specifier: ^8.3.5
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.9)(typescript@5.9.2)
       typescript:
         specifier: ^5.5.2
         version: 5.9.2
-      wrangler:
-        specifier: ^4.82.2
-        version: 4.82.2(@cloudflare/workers-types@4.20260413.1)
 
   packages/create-kalp:
     dependencies:
@@ -252,6 +271,22 @@ importers:
       vitest:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@22.15.3)(lightningcss@1.32.0)
+
+  packages/test-utils:
+    dependencies:
+      '@kalphq/core':
+        specifier: workspace:*
+        version: link:../core
+      '@kalphq/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+    devDependencies:
+      tsup:
+        specifier: ^8.3.5
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.9)(typescript@5.9.2)
+      typescript:
+        specifier: ^5.5.2
+        version: 5.9.2
 
   packages/typescript-config: {}
 
@@ -4008,7 +4043,8 @@ snapshots:
   '@cloudflare/workerd-windows-64@1.20260410.1':
     optional: true
 
-  '@cloudflare/workers-types@4.20260413.1': {}
+  '@cloudflare/workers-types@4.20260413.1':
+    optional: true
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:

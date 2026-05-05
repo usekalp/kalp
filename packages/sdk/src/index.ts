@@ -1,51 +1,170 @@
-import { z } from "zod";
-import type {
-  HandlerContext,
-  KalpAuth,
-  Route,
-  RouteConfig,
-  Step,
-  StepConfig,
-  Tool,
-  ToolConfig,
-} from "@/types";
-import { registerNode } from "@/registry";
+export { z } from "zod";
 
-export type { HandlerContext, KalpAuth };
-export type { KalpCtx, AgentResponse } from "@/types";
+// ============================================================================
+// Identity Module
+// ============================================================================
+
+// Branded types
 export type {
-  Node,
+  UserId,
+  AgentId,
+  ThreadId,
+  ExecutionId,
+  TraceId,
+} from "@/identity";
+
+// Type constructors (runtime functions)
+export {
+  asUserId,
+  asAgentId,
+  asThreadId,
+  asExecutionId,
+  asTraceId,
+} from "@/identity";
+
+// Identity configuration & auth strategies
+export type {
+  IdentityConfig,
+  JwtPayload,
+  JwksStrategy,
+  SymmetricStrategy,
+  ApiKeyStrategy,
+  AuthStrategy,
+} from "@/identity";
+
+// ============================================================================
+// Contracts Module (RPC)
+// ============================================================================
+
+export type { AgentContract } from "@/contracts";
+export { defineContract } from "@/contracts";
+
+// ============================================================================
+// Primitives Module
+// ============================================================================
+
+export type {
+  // AI
+  ModelMap,
+  ProviderName,
+  LocalModelId,
+  KalpModelId,
+  AIParams,
+  KalpAI,
+  KalpHistoryMessage,
+  // Memory
+  MemoryListParams,
+  MemoryListResult,
+  KalpMemory,
+  // Vault
+  KalpVault,
+  SecretsRegistry,
+  RegisteredSecrets,
+  SecretKey,
+  // Logging
+  KalpLog,
+  LogLevel,
+  // Storage
+  StoragePrimitive,
+  StoragePutOptions,
+  StorageTransaction,
+  TransactionOptions,
+} from "@/primitives";
+
+// ============================================================================
+// Actions Module
+// ============================================================================
+
+export type {
+  WakeReason,
+  AskOptions,
+  EmitOptions,
+  KalpActions,
+  TypedActions,
+} from "@/actions";
+
+// ============================================================================
+// Nodes Module
+// ============================================================================
+
+export type {
   NodeKind,
+  Node,
+  Step,
+  Tool,
+  AnyStep,
+  AnyTool,
+  Route,
+  StepConfig,
+  ToolConfig,
+  RouteConfig,
   ExecutableNode,
   RegistryNode,
-  Step,
-  Tool,
-  Route,
-  IRGraph,
-  IREdge,
-  IREdgeType,
-  IRNode,
-  IRNodeBase,
+} from "@/nodes";
+
+// ============================================================================
+// Context Module
+// ============================================================================
+
+export type {
+  InferNodes,
+  KalpAuth,
+  HandlerContext,
+  KalpCtx,
+  AgentContext,
+  TypedAgentContext,
+  AgentResponse,
+} from "@/context";
+
+// ============================================================================
+// IR Module
+// ============================================================================
+
+export type {
   IRNodeId,
   IRNodeKind,
+  IRNodeBase,
   EntryIRNode,
-  HandlerIRNode,
   HandlerType,
-  InputOf,
-  OutputOf,
-  StepConfig,
-  ToolConfig,
-  RouteConfig,
-  KalpActions,
-  KalpAI,
-  KalpMemory,
-  KalpVault,
-  WakeReason,
-} from "@/types";
-export { asAgentId, asUserId } from "@/types";
+  HandlerIRNode,
+  IRNode,
+  IREdgeType,
+  IREdge,
+  IRGraph,
+} from "@/ir";
+
+// ============================================================================
+// Utils Module
+// ============================================================================
+
+export type { InputOf, OutputOf } from "@/utils";
+
+// ============================================================================
+// Agent Definition
+// ============================================================================
+
 export { defineAgent } from "@/agent";
+
+// ============================================================================
+// Factory Functions (Definitions)
+// ============================================================================
+
+export { defineStep, defineTool } from "@/definitions";
+export { defineRoute } from "@/definitions";
+export { defineConfig } from "@/project";
+export type { KalpProjectConfig } from "@/project";
+
+// ============================================================================
+// Registry
+// ============================================================================
+
 export { getRegistry, clearRegistry } from "@/registry";
 export type { RegistryEntry } from "@/registry";
+
+// ============================================================================
+// Errors
+// ============================================================================
+
 export {
   KalpError,
   KalpValidationError,
@@ -54,78 +173,3 @@ export {
   isKalpError,
   normalizeKalpError,
 } from "@/errors";
-
-// Factory functions
-
-/**
- * Defines a typed {@link Step} with automatic `"step"` kind discriminant.
- *
- * @typeParam I - Zod schema for the step's input.
- * @typeParam O - Zod schema for the step's output.
- */
-export const defineStep = <
-  I extends z.ZodTypeAny = z.ZodTypeAny,
-  O extends z.ZodTypeAny = z.ZodTypeAny,
->(
-  config: StepConfig<I, O>,
-): Step<I, O> => {
-  const node: Step<I, O> = { ...config, kind: "step" };
-  registerNode("step", config.id, node);
-  return node;
-};
-
-/**
- * Defines a typed {@link Tool} with automatic `"tool"` kind discriminant.
- *
- * @typeParam I - Zod schema for the tool's input.
- * @typeParam R - The tool's return type.
- */
-export const defineTool = <I extends z.ZodTypeAny = z.ZodTypeAny, R = unknown>(
-  config: ToolConfig<I, R>,
-): Tool<I, R> => {
-  const node: Tool<I, R> = { ...config, kind: "tool" };
-  registerNode("tool", config.id, node);
-  return node;
-};
-
-/**
- * Defines an HTTP route exposed by the agent.
- *
- * @typeParam I - Optional Zod schema for request body validation.
- * @typeParam R - The route handler's return type.
- */
-export const defineRoute = <
-  I extends z.ZodTypeAny | undefined = undefined,
-  R = unknown,
->(
-  config: RouteConfig<I, R>,
-): Route<I, R> => ({
-  ...config,
-  kind: "route",
-});
-
-// Project configuration
-
-/** Top-level Kalp project configuration, defined in `kalp.config.ts`. */
-export interface KalpProjectConfig<TSecrets extends string[] = string[]> {
-  secrets: TSecrets;
-}
-
-/**
- * Defines the Kalp project configuration with type checking.
- * Place this in your `kalp.config.ts` at the project root.
- *
- * @example
- * ```ts
- * import { defineConfig } from "@kalphq/sdk";
- *
- * export default defineConfig({
- *   secrets: ["STRIPE_SECRET_KEY", "OPENAI_API_KEY"],
- * } as const);
- * ```
- */
-export function defineConfig<TSecrets extends string[]>(
-  config: KalpProjectConfig<TSecrets>,
-): KalpProjectConfig<TSecrets> {
-  return config;
-}

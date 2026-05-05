@@ -1,2 +1,7 @@
-export { scaffoldProject, scaffoldAgent, TEMPLATES_DIR } from "@/scaffold";
+export {
+  scaffoldProject,
+  scaffoldAgent,
+  type ScaffoldProjectOptions,
+  type ScaffoldAgentOptions,
+} from "@/scaffold";
 export { installDeps, ensureDirectory } from "@/fs";

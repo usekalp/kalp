@@ -1,5 +1,4 @@
 import { resolve, basename } from "node:path";
-import { readdir, access } from "node:fs/promises";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import {
@@ -8,47 +7,13 @@ import {
   installDeps,
   ensureDirectory,
 } from "@kalphq/project";
+import {
+  isExistingKalpProject,
+  isDirEmpty,
+  validateProjectForAddAgent,
+} from "@/utils";
 
 const LOGO = "🦋";
-
-async function isExistingKalpProject(dir: string): Promise<boolean> {
-  try {
-    await access(resolve(dir, "kalp.config.ts"));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function isDirEmpty(dir: string): Promise<boolean> {
-  try {
-    const entries = await readdir(dir);
-    return entries.length === 0;
-  } catch {
-    return true;
-  }
-}
-
-async function validateProjectForAddAgent(dir: string): Promise<{
-  valid: boolean;
-  missing: string[];
-}> {
-  const checks = [
-    { path: resolve(dir, "kalp.config.ts"), name: "kalp.config.ts" },
-    { path: resolve(dir, "agents"), name: "agents/" },
-  ];
-
-  const missing: string[] = [];
-  for (const check of checks) {
-    try {
-      await access(check.path);
-    } catch {
-      missing.push(check.name);
-    }
-  }
-
-  return { valid: missing.length === 0, missing };
-}
 
 async function main(): Promise<void> {
   p.intro(`${LOGO} ${pc.bold("create-kalp")}`);

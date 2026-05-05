@@ -1,0 +1,85 @@
+import { vi } from "vitest";
+import type {
+  HandlerContext,
+  KalpAI,
+  KalpMemory,
+  KalpVault,
+  KalpAuth,
+  KalpActions,
+  KalpLog,
+  StoragePrimitive,
+  asUserId,
+  WakeReason,
+} from "../src";
+
+/**
+ * Creates a fully typed mock HandlerContext for testing.
+ * All primitives are mocked with vitest.fn() for easy spying.
+ */
+export const createMockContext = (): HandlerContext => ({
+  ai: {
+    generate: vi.fn(),
+    stream: vi.fn(),
+    classify: vi.fn(),
+  } as unknown as KalpAI,
+
+  memory: {
+    list: vi.fn(),
+    append: vi.fn(),
+    summarize: vi.fn(),
+  } as unknown as KalpMemory,
+
+  vault: {
+    get: vi.fn().mockResolvedValue("secret-value"),
+  } as unknown as KalpVault,
+
+  storage: {
+    get: vi.fn().mockResolvedValue(null),
+    put: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+    increment: vi.fn().mockResolvedValue(1),
+    transaction: vi.fn((callback) =>
+      callback({
+        get: vi.fn().mockResolvedValue(null),
+        put: vi.fn(),
+        delete: vi.fn(),
+        keys: vi.fn().mockReturnValue([]),
+      }),
+    ),
+  } as unknown as StoragePrimitive,
+
+  auth: {
+    userId: "u-1" as ReturnType<typeof asUserId>,
+    providerId: "test-provider",
+    claims: {},
+    hasPermission: vi.fn().mockReturnValue(false),
+  } as unknown as KalpAuth,
+
+  actions: {
+    run: vi.fn(),
+    wait: vi.fn().mockResolvedValue({ type: "timeout" } as WakeReason),
+    loop: vi.fn(),
+    fetch: vi.fn().mockResolvedValue(new Response()),
+    ask: vi.fn(),
+    requestApproval: vi.fn(),
+    emit: vi.fn(),
+    callAgent: vi.fn(),
+  } as unknown as KalpActions,
+
+  log: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  } as unknown as KalpLog,
+});
+
+/**
+ * Helper to create a mock context with custom overrides.
+ */
+export const createMockContextWith = (
+  overrides: Partial<HandlerContext>,
+): HandlerContext => ({
+  ...createMockContext(),
+  ...overrides,
+});

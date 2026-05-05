@@ -1,202 +1,203 @@
-import type {
-  EntryIRNode,
-  HandlerIRNode,
-  HandlerType,
-  IRGraph,
-  IREdge,
-  IRNodeId,
-} from "@kalphq/sdk";
-import { zodToJsonSchema } from "zod-to-json-schema";
-import { createIdGenerator } from "@/ids";
-import { normalizeGraph } from "@/normalize";
+import { createJiti } from "jiti";
+import { getRegistry, clearRegistry } from "@kalphq/sdk";
+import { bundleHandler, ensureHandlersDir } from "./bundler";
+import { buildSchemaIR, sortKeys } from "./ir-generator";
+import { createHash } from "crypto";
+import fs from "fs";
+import path from "path";
 
-// ────────────────────────────────────────────────────────────────────────────
-// Helpers for parsing raw agent config objects
-// ────────────────────────────────────────────────────────────────────────────
+// Assert unique IDs
+function assertUniqueIds(registry: ReturnType<typeof getRegistry>) {
+  const seen = new Set<string>();
+  for (const [key, entry] of registry.entries()) {
+    if (seen.has(entry.id)) {
+      throw new Error(`Duplicate node id: ${entry.id}`);
+    }
+    seen.add(entry.id);
+  }
+}
 
-/** Safely cast unknown to a record, or return undefined. */
-const asRecord = (v: unknown): Record<string, unknown> | undefined =>
-  v != null && typeof v === "object" && !Array.isArray(v)
-    ? (v as Record<string, unknown>)
-    : undefined;
-
-/** Safely cast unknown to a string, or return undefined. */
-const asString = (v: unknown): string | undefined =>
-  typeof v === "string" ? v : undefined;
-
-/** Safely cast unknown to an array, defaulting to empty. */
-const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-
-/** Detect Zod schema objects by checking for `_def`. */
-const isZodSchema = (v: unknown): boolean =>
-  v != null && typeof v === "object" && typeof (v as any)._def === "object";
-
-/** Try to convert a Zod schema to JSON Schema, returning undefined on failure. */
-const tryJsonSchema = (v: unknown): Record<string, unknown> | undefined => {
-  if (!isZodSchema(v)) return undefined;
+export async function buildAgent(entryPath: string, outDir: string) {
   try {
-    return zodToJsonSchema(v as any) as Record<string, unknown>;
-  } catch {
-    return undefined;
-  }
-};
+    clearRegistry();
 
-// ────────────────────────────────────────────────────────────────────────────
-// Compiler v2 — Pure declarative index builder
-// ────────────────────────────────────────────────────────────────────────────
+    // Normalize path for Windows
+    const entryFullPath = path.resolve(entryPath);
 
-/**
- * Compiles an agent configuration into an {@link IRGraph}.
- *
- * This is a **pure, synchronous** function that produces a minimal structural
- * index of the agent. It does NOT:
- * - Execute any handler functions
- * - Record execution traces
- * - Infer branches, loops, or runtime control flow
- * - Touch any IO or side-effects
- *
- * The resulting IR only records which entrypoints and handlers exist, and how
- * they are structurally connected. All runtime behavior (branches, loops,
- * effects) is resolved by the Orchestration Reactor at execution time.
- *
- * @param agent - The raw agent configuration object (from `defineAgent()`).
- * @returns A normalized {@link IRGraph} ready for deployment.
- * @throws If `agent` is not an object or has no valid entries.
- */
-export const compileAgent = (agent: unknown): IRGraph => {
-  const raw = asRecord(agent);
-  if (!raw) {
-    throw new Error("compileAgent: agent must be an object.");
-  }
+    // Ensure handlers directory exists
+    ensureHandlersDir(outDir);
 
-  const agentId = asString(raw.id) ?? asString(raw.name);
-  if (!agentId) {
-    throw new Error("compileAgent: agent.id is required.");
-  }
-  const steps = asArray(raw.steps);
-  const tools = asArray(raw.tools);
-  const routes = asArray(raw.routes);
+    // Use import.meta.url to ensure correct resolution of workspace packages
+    const jiti = createJiti(import.meta.url, { interopDefault: true });
+    await jiti.import(entryFullPath);
 
-  const createId = createIdGenerator("root");
-  const nodes: IRGraph["nodes"] = {};
-  const edges: IREdge[] = [];
-  const entries: IRGraph["entries"] = {};
-  const handlerIndex: IRGraph["handlerIndex"] = {};
+    // After importing, the default export should be our agent config
+    const mod = await jiti.import(entryFullPath);
+    const agentConfig: any = (mod as any).default || mod;
 
-  // ── Lifecycle handlers → entry + handler + sequential edge ──
+    const registry = getRegistry();
+    assertUniqueIds(registry);
 
-  const lifecycleHandlers = ["onMessage", "onInit", "onTick"] as const;
-
-  for (const lifecycle of lifecycleHandlers) {
-    if (raw[lifecycle] == null) continue;
-
-    const entryId = createId("entry", lifecycle);
-    const handlerId = createId("handler", lifecycle);
-
-    const entryNode: EntryIRNode = {
-      kind: "entry",
-      id: entryId,
-      handler: lifecycle,
+    const ir: any = {
+      agent: {
+        id: agentConfig.id || "agent",
+        name: agentConfig.name,
+        description: agentConfig.description,
+        hooks: {},
+      },
+      steps: {},
+      tools: {},
+      routes: {},
     };
 
-    const handlerNode: HandlerIRNode = {
-      kind: "handler",
-      id: handlerId,
-      moduleRef: lifecycle,
-      handlerType: "lifecycle",
-    };
+    if (agentConfig.systemPrompt) {
+      if (typeof agentConfig.systemPrompt === "function") {
+        ir.agent.systemPrompt = {
+          type: "function",
+          dynamic: true,
+          runtime: "required",
+        };
+      } else {
+        ir.agent.systemPrompt = agentConfig.systemPrompt;
+      }
+    }
 
-    nodes[entryId] = entryNode;
-    nodes[handlerId] = handlerNode;
-    edges.push({ from: entryId, to: handlerId, type: "sequential" });
-    entries[lifecycle] = entryId;
-    handlerIndex[lifecycle] = handlerId;
+    if (agentConfig.contract) {
+      const { schema: inputSchema } = buildSchemaIR(
+        agentConfig.contract.inputSchema,
+      );
+      const { schema: outputSchema } = buildSchemaIR(
+        agentConfig.contract.outputSchema,
+      );
+      ir.agent.contract = {
+        agentId: agentConfig.contract.agentId,
+        inputSchema,
+        outputSchema,
+      };
+    }
+
+    // Resolve exports dynamically and bundle
+    const fileExportsCache = new Map<string, any>();
+    async function getModuleExports(filePath: string) {
+      const resolvedPath = path.resolve(filePath);
+      if (!fileExportsCache.has(resolvedPath)) {
+        fileExportsCache.set(resolvedPath, await jiti.import(resolvedPath));
+      }
+      return fileExportsCache.get(resolvedPath);
+    }
+
+    // Process registry steps & tools
+    for (const [key, entry] of registry.entries()) {
+      const { kind, id, ref } = entry;
+      const node = ref as any;
+      const internalId = node.__internalId;
+      const filePath = node.__filePath;
+
+      if (!filePath) throw new Error(`Missing filePath for node ${id}`);
+
+      const modExports = await getModuleExports(filePath);
+      const exported = Object.entries(modExports).find(
+        ([_, value]) => (value as any)?.__internalId === internalId,
+      );
+
+      if (!exported) {
+        throw new Error(
+          `Cannot resolve handler export for node "${id}" in ${filePath}`,
+        );
+      }
+
+      // bundleHandler(filePath, outDir, exportName, isNode)
+      const bundleRes = await bundleHandler(filePath, outDir, exported[0], true);
+
+      const { schema: inSchema, meta: inMeta } = buildSchemaIR(
+        node.inputSchema,
+      );
+      const { schema: outSchema } = buildSchemaIR(node.outputSchema);
+
+      const irNode = {
+        id,
+        description: node.description,
+        kind,
+        inputSchema: inSchema,
+        inputSchemaMeta: inMeta,
+        outputSchema: outSchema,
+        handlerFile: bundleRes.handlerFile,
+        handlerVersion: bundleRes.hash,
+      };
+
+      if (kind === "step") ir.steps[id] = irNode;
+      if (kind === "tool") ir.tools[id] = irNode;
+    }
+
+    // Process hooks
+    const hooks = ["onMessage", "onCall", "onInit", "onTick"];
+    for (const hook of hooks) {
+      if (agentConfig[hook]) {
+        const bundleRes = await bundleHandler(entryFullPath, outDir, hook, false);
+        ir.agent.hooks[hook] = {
+          type: "agent_entry",
+          signature: "agent_context",
+          handlerFile: bundleRes.handlerFile,
+          handlerVersion: bundleRes.hash,
+        };
+      }
+    }
+
+    // Process routes
+    if (Array.isArray(agentConfig.routes)) {
+      for (const route of agentConfig.routes) {
+        const internalId = route.__internalId;
+        const filePath = route.__filePath;
+
+        if (!filePath)
+          throw new Error(
+            `Missing filePath for route ${route.id || route.path}`,
+          );
+
+        const modExports = await getModuleExports(filePath);
+        const exported = Object.entries(modExports).find(
+          ([_, value]) => (value as any)?.__internalId === internalId,
+        );
+
+        if (!exported) {
+          throw new Error(
+            `Cannot resolve handler export for route in ${filePath}`,
+          );
+        }
+
+        const id = route.id || `${route.method}:${route.path}`;
+        const routeKey = `${route.method}:${route.path}`;
+
+        const bundleRes = await bundleHandler(filePath, outDir, exported[0], false);
+
+        const { schema: inSchema, meta: inMeta } = buildSchemaIR(
+          route.inputSchema,
+        );
+
+        ir.routes[routeKey] = {
+          method: route.method,
+          path: route.path,
+          inputSchema: inSchema,
+          inputSchemaMeta: inMeta,
+          handlerFile: bundleRes.handlerFile,
+          handlerVersion: bundleRes.hash,
+        };
+      }
+    }
+
+    // Hash and write
+    const sortedIR = sortKeys(ir);
+    const irHash = createHash("sha256")
+      .update(JSON.stringify(sortedIR))
+      .digest("hex");
+    sortedIR.irHash = irHash;
+
+    fs.writeFileSync(
+      path.join(outDir, "ir.json"),
+      JSON.stringify(sortedIR, null, 2),
+      "utf-8",
+    );
+  } finally {
+    clearRegistry();
   }
-
-  // ── Steps → handler nodes (no entry — invoked via actions.run at runtime) ──
-
-  for (const step of steps) {
-    const rec = asRecord(step);
-    if (!rec) continue;
-    const id = asString(rec.id);
-    if (!id) continue;
-
-    const handlerId = createId("handler", `steps.${id}`);
-    const handlerNode: HandlerIRNode = {
-      kind: "handler",
-      id: handlerId,
-      moduleRef: `steps.${id}`,
-      handlerType: "step",
-      inputSchema: tryJsonSchema(rec.inputSchema ?? rec.input),
-      outputSchema: tryJsonSchema(rec.outputSchema ?? rec.output),
-    };
-    nodes[handlerId] = handlerNode;
-    handlerIndex[`steps.${id}`] = handlerId;
-  }
-
-  // ── Tools → handler nodes (no entry — invoked via runtime tool calls) ──
-
-  for (const tool of tools) {
-    const rec = asRecord(tool);
-    if (!rec) continue;
-    const id = asString(rec.id);
-    if (!id) continue;
-
-    const handlerId = createId("handler", `tools.${id}`);
-    const handlerNode: HandlerIRNode = {
-      kind: "handler",
-      id: handlerId,
-      moduleRef: `tools.${id}`,
-      handlerType: "tool",
-      inputSchema: tryJsonSchema(rec.inputSchema ?? rec.input),
-    };
-    nodes[handlerId] = handlerNode;
-    handlerIndex[`tools.${id}`] = handlerId;
-  }
-
-  // ── Routes → entry + handler nodes ──
-
-  for (const route of routes) {
-    const rec = asRecord(route);
-    if (!rec) continue;
-    const id = asString(rec.id);
-    if (!id) continue;
-
-    const path = (asString(rec.path) ?? "/unknown").replace(/\/+$/, "") || "/";
-    const method = (asString(rec.method) ?? "GET").toUpperCase();
-    const routeKey = `route:${method}:${path}`;
-
-    const entryId = createId("entry", routeKey);
-    const handlerId = createId("handler", `routes.${id}`);
-
-    const entryNode: EntryIRNode = {
-      kind: "entry",
-      id: entryId,
-      handler: routeKey,
-      method,
-      path,
-    };
-
-    const handlerNode: HandlerIRNode = {
-      kind: "handler",
-      id: handlerId,
-      moduleRef: `routes.${id}`,
-      handlerType: "route",
-    };
-
-    nodes[entryId] = entryNode;
-    nodes[handlerId] = handlerNode;
-    edges.push({ from: entryId, to: handlerId, type: "sequential" });
-    entries[routeKey] = entryId;
-    handlerIndex[`routes.${id}`] = handlerId;
-  }
-
-  return normalizeGraph({
-    version: 2,
-    agentId,
-    entries,
-    nodes,
-    edges,
-    handlerIndex,
-  });
-};
+}
