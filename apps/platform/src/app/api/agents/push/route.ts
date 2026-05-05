@@ -4,16 +4,10 @@ import {
   validateIRBindings,
   analyzeHandler,
 } from "@kalphq/compiler";
-import { billing, estimateFromIR } from "@/lib/billing";
 import { logPush, type NamedAnalysis } from "@/lib/logger";
-import fs from "fs";
 
 export async function POST(req: Request) {
   const body = (await req.json()) as Record<string, unknown>;
-
-  console.log(body);
-
-  fs.writeFileSync("body.json", JSON.stringify(body));
 
   const agentName = body.agentName as string | undefined;
   const ir = body.ir;
@@ -61,26 +55,10 @@ export async function POST(req: Request) {
     }),
   );
 
-  const allBlockers = analysis.flatMap((a) =>
-    a.blockers.map((b) => `${b} in ${a.name}`),
-  );
-  if (allBlockers.length > 0) {
-    return NextResponse.json(
-      {
-        ok: false,
-        phase: "analysis",
-        errors: allBlockers,
-        blockers: allBlockers,
-      },
-      { status: 400 },
-    );
-  }
-
-  billing.consume({
-    unit: "push",
-    agentId: agentName,
-    estimatedCost: estimateFromIR(irGraph),
-  });
+  const allWarnings = analysis.flatMap((a) => [
+    ...a.warnings.map((w) => `${w} in ${a.name}`),
+    ...a.blockers.map((b) => `[Analysis Blocker] ${b} in ${a.name}`),
+  ]);
 
   logPush({
     agentName,
@@ -92,10 +70,6 @@ export async function POST(req: Request) {
     analysis,
     timestamp: new Date().toISOString(),
   });
-
-  const allWarnings = analysis.flatMap((a) =>
-    a.warnings.map((w) => `${w} in ${a.name}`),
-  );
 
   return NextResponse.json({
     ok: true,

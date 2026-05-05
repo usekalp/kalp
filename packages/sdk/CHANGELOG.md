@@ -1,5 +1,107 @@
 # @kalphq/sdk
 
+## 0.0.0-dev-20260505081231
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505080921
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505080217
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505075652
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505075404
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505075017
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505074401
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505074040
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505073736
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505073225
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505072907
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505072427
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505072314
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505071855
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505070643
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505065905
+
+### Patch Changes
+
+- dev release
+
+## 0.0.0-dev-20260505065504
+
+### Patch Changes
+
+- dev release
+
 ## 0.0.0-dev-20260505064336
 
 ### Patch Changes

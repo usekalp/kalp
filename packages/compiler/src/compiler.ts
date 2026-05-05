@@ -3,8 +3,8 @@ import { getRegistry, clearRegistry } from "@kalphq/sdk";
 import { bundleHandler, ensureHandlersDir } from "./bundler";
 import { buildSchemaIR, sortKeys } from "./ir-generator";
 import { createHash } from "crypto";
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 
 // Assert unique IDs
 function assertUniqueIds(registry: ReturnType<typeof getRegistry>) {
@@ -17,19 +17,25 @@ function assertUniqueIds(registry: ReturnType<typeof getRegistry>) {
   }
 }
 
-export async function buildAgent(entryPath: string, outDir: string) {
+export async function buildAgent(
+  entryPath: string,
+  outDir: string,
+  projectRoot?: string,
+) {
   try {
     clearRegistry();
 
-    // Normalize path for Windows
+    // Normalize paths
     const entryFullPath = path.resolve(entryPath);
+    const jitiBase = projectRoot ? path.resolve(projectRoot) : path.dirname(entryFullPath);
 
     // Ensure handlers directory exists
     ensureHandlersDir(outDir);
 
-    // Use import.meta.url to ensure correct resolution of workspace packages
-    const jiti = createJiti(import.meta.url, { interopDefault: true });
-    await jiti.import(entryFullPath);
+    // Create jiti instance (using jitiBase as root for resolution)
+    const jiti = createJiti(jitiBase, {
+      interopDefault: true,
+    });
 
     // After importing, the default export should be our agent config
     const mod = await jiti.import(entryFullPath);

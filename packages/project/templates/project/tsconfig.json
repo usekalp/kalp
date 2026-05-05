@@ -7,10 +7,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "outDir": "dist",
-    "rootDir": ".",
-    "paths": {
-      "@/*": ["./agents/*"]
-    }
+    "rootDir": "."
   },
   "include": ["agents/**/*.ts", "kalp.config.ts", "kalp.d.ts"],
   "exclude": ["node_modules", "dist"]

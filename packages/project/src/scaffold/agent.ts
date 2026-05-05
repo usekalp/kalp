@@ -19,10 +19,9 @@ export async function scaffoldAgent(opts: ScaffoldAgentOptions): Promise<void> {
 
   const agentIndex = `
 import { defineAgent } from "@kalphq/sdk";
-import { processQuery } from "@/${agentName}/steps/process-query";
-import { formatResponse } from "@/${agentName}/steps/format-response";
-import { searchTool } from "@/${agentName}/tools/search";
-import { healthRoute } from "@/${agentName}/routes/health";
+import { processQuery } from "./steps/process-query";
+import { searchTool } from "./tools/search";
+import { healthRoute } from "./routes/health";
 
 export default defineAgent({
   name: "${agentName}",

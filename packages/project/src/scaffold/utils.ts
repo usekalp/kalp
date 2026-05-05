@@ -1,4 +1,4 @@
-import { writeFile, readFile, readdir, mkdir, access } from "node:fs/promises";
+import { writeFile, readFile, readdir, mkdir, access, copyFile } from "node:fs/promises";
 import { join } from "node:path";
 import { format } from "prettier";
 
@@ -69,5 +69,22 @@ export async function writeFileIfNotExists(
     await access(filePath);
   } catch {
     await writeFile(filePath, content, "utf-8");
+  }
+}
+
+/**
+ * Recursively copies a directory.
+ */
+export async function copyDir(src: string, dest: string): Promise<void> {
+  await mkdir(dest, { recursive: true });
+  const entries = await readdir(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = join(src, entry.name);
+    const destPath = join(dest, entry.name);
+    if (entry.isDirectory()) {
+      await copyDir(srcPath, destPath);
+    } else {
+      await copyFile(srcPath, destPath);
+    }
   }
 }

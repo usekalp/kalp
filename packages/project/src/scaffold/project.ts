@@ -1,11 +1,16 @@
-import { writeFile, access } from "node:fs/promises";
-import { join } from "node:path";
-import { createRequire } from "node:module";
-import { ensureDir, writeFileIfNotExists, replacePlaceholders } from "./utils";
+import { writeFile, rename } from "node:fs/promises";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { ensureDir, writeFileIfNotExists, replacePlaceholders, copyDir } from "./utils";
+import pkg from "../../package.json";
 
-// Get version from package.json
-const require = createRequire(import.meta.url);
-const { version: CLI_VERSION } = require("../../package.json");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+// dist/index.js -> templates is at ../templates
+const TEMPLATES_ROOT = resolve(__dirname, "..", "templates");
+
+// Get version from bundled package.json
+const CLI_VERSION = pkg.version;
 
 export interface ScaffoldProjectOptions {
   projectName: string;
@@ -18,32 +23,30 @@ export interface ScaffoldProjectOptions {
 export async function scaffoldProject(opts: ScaffoldProjectOptions): Promise<void> {
   const { projectName, targetDir } = opts;
 
-  await ensureDir(targetDir);
-  await ensureDir(join(targetDir, "agents"));
+  const projectTemplateDir = join(TEMPLATES_ROOT, "project");
 
-  // Create .gitignore if it doesn't exist
-  const gitignorePath = join(targetDir, ".gitignore");
-  await writeFileIfNotExists(
-    gitignorePath,
-    "node_modules/\ndist/\n.turbo/\n.temp/\n.env\n*.log\n",
-  );
+  // Copy template files
+  await copyDir(projectTemplateDir, targetDir);
 
-  // Create version tracking
+  // Handle gitignore renaming (npm ignores .gitignore, so we store it as gitignore in templates)
+  const gitignorePath = join(targetDir, "gitignore");
+  try {
+    await rename(gitignorePath, join(targetDir, ".gitignore"));
+  } catch {
+    // Ignore if template didn't have it
+  }
+
+  // Replace placeholders in the entire project
+  await replacePlaceholders(targetDir, {
+    __PROJECT_NAME__: projectName,
+    __CLI_VERSION__: CLI_VERSION,
+  });
+
+  // Create .temp for version tracking (if not in template)
   const tempDir = join(targetDir, ".temp");
   await ensureDir(tempDir);
 
-  const versionInfo = {
-    cliVersion: CLI_VERSION,
-    createdAt: new Date().toISOString(),
-    projectName,
-  };
-  await writeFile(
-    join(tempDir, "version.json"),
-    JSON.stringify(versionInfo, null, 2),
-    "utf-8",
-  );
-
-  // Create kalp.config.ts with Clerk identity example
+  // kalp.config.ts is usually not in template to allow better customization
   const kalpConfig = `import { defineConfig, UserId } from "@kalphq/sdk";
 
 export default defineConfig({
@@ -81,5 +84,5 @@ export default defineConfig({
   enforceGlobalAuth: true,
 });
 `;
-  await writeFile(join(targetDir, "kalp.config.ts"), kalpConfig, "utf-8");
+  await writeFileIfNotExists(join(targetDir, "kalp.config.ts"), kalpConfig);
 }

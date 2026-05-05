@@ -23,8 +23,14 @@ export function analyzeHandler(code: string): {
   }
 
   // Environment Check: Node-specific globals
-  if (/\bprocess\b/.test(code) && !code.includes("typeof process")) {
-    blockers.push("Reference to 'process' found. Handlers must be environment-agnostic.");
+  // We allow 'process.env' (common for library environment checks like Zod)
+  // but block actual Node runtime control APIs
+  if (/\bprocess\.(nextTick|exit|stdout|stderr|stdin|cwd|chdir|kill)\b/.test(code)) {
+    blockers.push("Reference to Node.js-specific process APIs found. Handlers must be environment-agnostic.");
+  }
+  
+  if (/\bprocess\b/.test(code) && !code.includes("process.env") && !code.includes("typeof process")) {
+    warnings.push("Potential reference to 'process' found. Ensure your code does not depend on Node.js globals.");
   }
   
   // Capabilities Detection

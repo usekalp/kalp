@@ -1,5 +1,175 @@
 # @kalphq/cli
 
+## 0.0.0-dev-20260505081231
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505081231
+  - @kalphq/project@0.0.0-dev-20260505081231
+  - @kalphq/sdk@0.0.0-dev-20260505081231
+
+## 0.0.0-dev-20260505080921
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505080921
+  - @kalphq/project@0.0.0-dev-20260505080921
+  - @kalphq/sdk@0.0.0-dev-20260505080921
+
+## 0.0.0-dev-20260505080217
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505080217
+  - @kalphq/project@0.0.0-dev-20260505080217
+  - @kalphq/sdk@0.0.0-dev-20260505080217
+
+## 0.0.0-dev-20260505075652
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505075652
+  - @kalphq/project@0.0.0-dev-20260505075652
+  - @kalphq/sdk@0.0.0-dev-20260505075652
+
+## 0.0.0-dev-20260505075404
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505075404
+  - @kalphq/project@0.0.0-dev-20260505075404
+  - @kalphq/sdk@0.0.0-dev-20260505075404
+
+## 0.0.0-dev-20260505075017
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505075017
+  - @kalphq/project@0.0.0-dev-20260505075017
+  - @kalphq/sdk@0.0.0-dev-20260505075017
+
+## 0.0.0-dev-20260505074401
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505074401
+  - @kalphq/project@0.0.0-dev-20260505074401
+  - @kalphq/sdk@0.0.0-dev-20260505074401
+
+## 0.0.0-dev-20260505074040
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505074040
+  - @kalphq/project@0.0.0-dev-20260505074040
+  - @kalphq/sdk@0.0.0-dev-20260505074040
+
+## 0.0.0-dev-20260505073736
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505073736
+  - @kalphq/project@0.0.0-dev-20260505073736
+  - @kalphq/sdk@0.0.0-dev-20260505073736
+
+## 0.0.0-dev-20260505073225
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505073225
+  - @kalphq/project@0.0.0-dev-20260505073225
+  - @kalphq/sdk@0.0.0-dev-20260505073225
+
+## 0.0.0-dev-20260505072907
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505072907
+  - @kalphq/project@0.0.0-dev-20260505072907
+  - @kalphq/sdk@0.0.0-dev-20260505072907
+
+## 0.0.0-dev-20260505072427
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505072427
+  - @kalphq/project@0.0.0-dev-20260505072427
+  - @kalphq/sdk@0.0.0-dev-20260505072427
+
+## 0.0.0-dev-20260505072314
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505072314
+  - @kalphq/project@0.0.0-dev-20260505072314
+  - @kalphq/sdk@0.0.0-dev-20260505072314
+
+## 0.0.0-dev-20260505071855
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505071855
+  - @kalphq/project@0.0.0-dev-20260505071855
+  - @kalphq/sdk@0.0.0-dev-20260505071855
+
+## 0.0.0-dev-20260505070643
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505070643
+  - @kalphq/project@0.0.0-dev-20260505070643
+  - @kalphq/sdk@0.0.0-dev-20260505070643
+
+## 0.0.0-dev-20260505065905
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505065905
+  - @kalphq/project@0.0.0-dev-20260505065905
+  - @kalphq/sdk@0.0.0-dev-20260505065905
+
+## 0.0.0-dev-20260505065504
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260505065504
+  - @kalphq/project@0.0.0-dev-20260505065504
+  - @kalphq/sdk@0.0.0-dev-20260505065504
+
 ## 0.0.0-dev-20260505064336
 
 ### Patch Changes

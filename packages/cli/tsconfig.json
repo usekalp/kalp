@@ -9,6 +9,7 @@
     },
     "types": ["node"],
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "esModuleInterop": true
   },
   "include": ["src"],

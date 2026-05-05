@@ -1,6 +1,6 @@
 {
   "name": "@kalphq/core",
-  "version": "0.0.0-dev-20260505064336",
+  "version": "0.0.0-dev-20260505081231",
   "private": true,
   "type": "module",
   "exports": {

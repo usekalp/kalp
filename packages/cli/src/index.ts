@@ -1,10 +1,7 @@
 import { defineCommand, runMain } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
-const pkg = require("../package.json");
+import pkg from "../package.json";
 
 const LOGO = "🦋";
 

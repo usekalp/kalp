@@ -3,5 +3,5 @@ export {
   scaffoldAgent,
   type ScaffoldProjectOptions,
   type ScaffoldAgentOptions,
-} from "@/scaffold";
-export { installDeps, ensureDirectory } from "@/fs";
+} from "./scaffold";
+export { installDeps, ensureDirectory } from "./fs";

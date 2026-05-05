@@ -1,8 +1,8 @@
 // packages/compiler/src/bundler.ts
 import { build } from "esbuild";
-import { readFileSync, writeFileSync } from "fs";
+import fs from "node:fs";
 import { createHash } from "crypto";
-import path from "path";
+import path from "node:path";
 
 /**
  * Bundles a single handler by extracting it from its source file.
@@ -33,14 +33,15 @@ export async function bundleHandler(
     const exportName = "${exportName}";
     
     // Resolve target: check named exports first, then properties of the default export
+    // We use (mod as any) to avoid esbuild static analysis warnings about missing default exports
     let target = mod[exportName];
-    if (target === undefined && mod.default && typeof mod.default === 'object') {
-      target = mod.default[exportName];
+    if (target === undefined && (mod as any).default && typeof (mod as any).default === 'object') {
+      target = (mod as any).default[exportName];
     }
     
     // Fallback to default export if exportName matches or if target still undefined
     if (target === undefined) {
-      target = mod.default;
+      target = (mod as any).default;
     }
 
     // Extract handler if it's a node/route object
@@ -69,9 +70,12 @@ export async function bundleHandler(
     write: true,
     outfile: outFile,
     metafile: true,
+    logOverride: {
+      "import-is-undefined": "silent",
+    },
   });
 
-  const code = readFileSync(outFile, "utf-8");
+  const code = fs.readFileSync(outFile, "utf-8");
   const normalized = code.replace(/\r\n/g, "\n").trim();
   const hash = createHash("sha256")
     .update(normalized)
@@ -83,10 +87,9 @@ export async function bundleHandler(
     "handlers",
     `${name}.${hash}.js`
   );
-  writeFileSync(hashedFile, normalized, "utf-8");
+  fs.writeFileSync(hashedFile, normalized, "utf-8");
   
   try {
-    const fs = require("fs");
     fs.unlinkSync(outFile);
   } catch {}
   
@@ -99,7 +102,6 @@ export async function bundleHandler(
  */
 export function ensureHandlersDir(outDir: string) {
   const dir = path.join(outDir, "handlers");
-  const fs = require("fs");
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
