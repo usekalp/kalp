@@ -18,12 +18,12 @@ function assertUniqueIds(registry: ReturnType<typeof getRegistry>) {
   }
 }
 
-// NPM-safe SDK version retrieval
-const require = createRequire(import.meta.url);
-
+// NPM-safe SDK version retrieval (bundler-safe)
 function getSdkVersion(): string {
   try {
-    // Resolves @kalphq/sdk from node_modules (works in monorepo + user installs)
+    // String-based require to avoid esbuild trying to resolve at build time
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const require = (0, eval)("require");
     const pkgPath = require.resolve("@kalphq/sdk/package.json");
     const pkg = require(pkgPath);
     return pkg.version;
