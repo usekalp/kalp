@@ -1,6 +1,6 @@
 {
   "name": "@kalphq/platform",
-  "version": "0.0.0-dev-20260505081231",
+  "version": "0.0.0-dev-20260506065806",
   "private": true,
   "scripts": {
     "dev": "next dev",

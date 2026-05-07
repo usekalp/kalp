@@ -1,6 +1,20 @@
 import type { IdentityConfig } from "@/identity";
 
 /**
+ * MCP (Model Context Protocol) server configuration.
+ *
+ * @module
+ */
+export interface McpServerConfig {
+  /** URL of the MCP server. */
+  url: string;
+  /** Transport protocol for communication. */
+  transport: "sse" | "stdio";
+  /** Authentication configuration. */
+  auth?: { token: string } | { headers: Record<string, string> };
+}
+
+/**
  * Project-level configuration types for Kalp.
  *
  * @module
@@ -75,4 +89,22 @@ export interface KalpProjectConfig<
    * @default true
    */
   enforceGlobalAuth?: boolean;
+
+  /**
+   * MCP (Model Context Protocol) server configurations.
+   * Servers defined here can be bound to specific agents via `mcp: ["serverName"]`
+   * in their defineAgent configuration.
+   *
+   * @example
+   * ```typescript
+   * mcp: {
+   *   github: {
+   *     url: "https://mcp.github.com/sse",
+   *     transport: "sse",
+   *     auth: { token: process.env.GITHUB_TOKEN }
+   *   }
+   * }
+   * ```
+   */
+  mcp?: Record<string, McpServerConfig>;
 }

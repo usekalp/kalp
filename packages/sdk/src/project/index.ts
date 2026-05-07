@@ -7,5 +7,5 @@
  * @module
  */
 
-export type { KalpProjectConfig } from "@/project/types";
+export type { KalpProjectConfig, McpServerConfig } from "@/project/types";
 export { defineConfig } from "@/project/config";

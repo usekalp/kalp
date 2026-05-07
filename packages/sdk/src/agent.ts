@@ -3,7 +3,8 @@ import type { AgentContract } from "@/contracts";
 import type { Route } from "@/nodes";
 import type {
   HandlerContext,
-  TypedAgentContext,
+  AgentContext,
+  AgentMessage,
   AgentResponse,
 } from "@/context";
 
@@ -25,12 +26,21 @@ interface AgentConfigBase<
    * @example "Sales Bot" → id: "sales-bot"
    */
   name: string;
-  id?: string;
   description?: string;
-  systemPrompt?: string | ((context: HandlerContext) => string | Promise<string>);
+  systemPrompt?:
+    | string
+    | ((context: HandlerContext) => string | Promise<string>);
   routes?: readonly Route[];
   /** Contract declaration — injects types for onCall handler. */
   contract?: TContract;
+  /** MCP server bindings for this agent. References servers from kalp.config.ts. */
+  mcp?: readonly string[];
+  /** Scheduled cron jobs for this agent. */
+  cron?: readonly {
+    expression: string;
+    handler: () => Promise<void>;
+    timezone?: string;
+  }[];
 }
 
 /**
@@ -69,7 +79,8 @@ export function defineAgent<const TContract extends AgentContract<any, any>>(
     onTick?: (context: HandlerContext) => Promise<void>;
     /** Called when a message is received (chat interface). */
     onMessage?: (
-      ctx: TypedAgentContext<AgentConfigBase>,
+      message: AgentMessage,
+      ctx: AgentContext,
     ) => Promise<AgentResponse | ReadableStream>;
     /**
      * Called when the agent is invoked via RPC.

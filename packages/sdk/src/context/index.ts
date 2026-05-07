@@ -11,5 +11,6 @@ export type {
   KalpCtx,
   AgentContext,
   TypedAgentContext,
+  AgentMessage,
   AgentResponse,
 } from "@/context/types";

@@ -18,7 +18,8 @@ export type WakeReason =
   | { type: "interrupt"; from: UserId | AgentId }
   | { type: "human_response"; askId: string; response: unknown }
   | { type: "agent_call_completed"; callId: string; result: unknown }
-  | { type: "event"; eventName: string; payload: unknown };
+  | { type: "event"; eventName: string; payload: unknown }
+  | { type: "scheduled_time_reached"; scheduledAt: string };
 
 /**
  * Options for the ask primitive (HITL).
@@ -106,6 +107,37 @@ export interface KalpActions {
     contract: TContract,
     input: z.infer<TContract["inputSchema"]>,
   ) => Promise<z.infer<TContract["outputSchema"]>>;
+
+  /**
+   * Pausa el agente hasta que ocurra un evento externo.
+   * @param eventName - Nombre del evento a esperar.
+   * @param timeout - Timeout opcional (ms o string como "2h").
+   * @returns WakeReason con type: "event".
+   */
+  waitForEvent: (
+    eventName: string,
+    timeout?: string | number,
+  ) => Promise<WakeReason>;
+
+  /**
+   * Pausa el agente hasta una fecha específica (bloqueante).
+   * @param date - Date object, ISO string, o Unix timestamp (ms).
+   * @returns WakeReason con type: "scheduled_time_reached".
+   */
+  waitUntil: (date: Date | string | number) => Promise<WakeReason>;
+
+  /**
+   * Programa un nodo (step/tool) para ejecución futura sin bloquear.
+   * @param node - El nodo a ejecutar.
+   * @param date - Cuándo ejecutarlo.
+   * @param input - Input opcional para el nodo.
+   * @returns Objeto con scheduleId.
+   */
+  schedule: <T extends ExecutableNode>(
+    node: T,
+    date: Date | string | number,
+    ...args: InputOf<T> extends never ? [] : [input: InputOf<T>]
+  ) => Promise<{ scheduleId: string }>;
 }
 
 /**
@@ -133,4 +165,14 @@ export interface TypedActions<TNodes> {
     contract: TContract,
     input: z.infer<TContract["inputSchema"]>,
   ) => Promise<z.infer<TContract["outputSchema"]>>;
+  waitForEvent: (
+    eventName: string,
+    timeout?: string | number,
+  ) => Promise<WakeReason>;
+  waitUntil: (date: Date | string | number) => Promise<WakeReason>;
+  schedule: <T extends TNodes>(
+    node: T,
+    date: Date | string | number,
+    ...args: InputOf<T> extends never ? [] : [input: InputOf<T>]
+  ) => Promise<{ scheduleId: string }>;
 }

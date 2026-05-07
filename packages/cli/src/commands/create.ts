@@ -27,7 +27,7 @@ export default defineCommand({
     }
 
     // ── Agent prompts ────────────────────────────────────────────────────
-    const agentAnswers = await promptAgentDetails();
+    const agentAnswers = await promptAgentDetails({ includeTemplate: true });
 
     const s = p.spinner();
 
@@ -36,8 +36,13 @@ export default defineCommand({
     await scaffoldAgent({
       agentName: agentAnswers.name,
       cwd,
+      template: agentAnswers.template,
     });
-    s.stop("Agent created");
+    s.stop(
+      agentAnswers.template
+        ? `Agent created (${agentAnswers.template} template)`
+        : "Agent created",
+    );
 
     p.note(
       [

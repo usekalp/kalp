@@ -1,4 +1,38 @@
 import * as p from "@clack/prompts";
+import type { TemplateId } from "@kalphq/project";
+
+/**
+ * Prompt user to select an agent template.
+ */
+export async function promptTemplateSelection(): Promise<TemplateId> {
+  const answer = await p.select({
+    message: "Choose an agent template:",
+    options: [
+      {
+        value: "researcher",
+        label: "🔬 Researcher",
+        hint: "Deterministic scheduling - pause 24h and auto-resume",
+      },
+      {
+        value: "support",
+        label: "🎧 Support Agent",
+        hint: "Human-in-the-Loop - pause for days until resolved",
+      },
+      {
+        value: "blank",
+        label: "⬜ Blank",
+        hint: "Minimal structure with modern Kalp v1 syntax",
+      },
+    ],
+  });
+
+  if (p.isCancel(answer)) {
+    p.cancel("Cancelled.");
+    process.exit(0);
+  }
+
+  return answer as TemplateId;
+}
 
 export async function promptProjectName(opts?: {
   message?: string;
@@ -32,8 +66,11 @@ export async function promptProjectName(opts?: {
   return answer.trim();
 }
 
-export async function promptAgentDetails(): Promise<{
+export async function promptAgentDetails(opts?: {
+  includeTemplate?: boolean;
+}): Promise<{
   name: string;
+  template?: TemplateId;
 }> {
   const answers = await p.group(
     {
@@ -48,6 +85,9 @@ export async function promptAgentDetails(): Promise<{
             }
           },
         }),
+      ...(opts?.includeTemplate && {
+        template: () => promptTemplateSelection(),
+      }),
     },
     {
       onCancel: () => {
@@ -59,5 +99,6 @@ export async function promptAgentDetails(): Promise<{
 
   return {
     name: answers.name,
+    template: answers.template as TemplateId | undefined,
   };
 }

@@ -27,7 +27,9 @@ export async function buildAgent(
 
     // Normalize paths
     const entryFullPath = path.resolve(entryPath);
-    const jitiBase = projectRoot ? path.resolve(projectRoot) : path.dirname(entryFullPath);
+    const jitiBase = projectRoot
+      ? path.resolve(projectRoot)
+      : path.dirname(entryFullPath);
 
     // Ensure handlers directory exists
     ensureHandlersDir(outDir);
@@ -46,27 +48,20 @@ export async function buildAgent(
 
     const ir: any = {
       agent: {
-        id: agentConfig.id || "agent",
         name: agentConfig.name,
         description: agentConfig.description,
+        systemPrompt: agentConfig.systemPrompt
+          ? typeof agentConfig.systemPrompt === "function"
+            ? { type: "function", dynamic: true }
+            : agentConfig.systemPrompt
+          : undefined,
         hooks: {},
       },
       steps: {},
       tools: {},
       routes: {},
+      schedules: {},
     };
-
-    if (agentConfig.systemPrompt) {
-      if (typeof agentConfig.systemPrompt === "function") {
-        ir.agent.systemPrompt = {
-          type: "function",
-          dynamic: true,
-          runtime: "required",
-        };
-      } else {
-        ir.agent.systemPrompt = agentConfig.systemPrompt;
-      }
-    }
 
     if (agentConfig.contract) {
       const { schema: inputSchema } = buildSchemaIR(
@@ -113,7 +108,12 @@ export async function buildAgent(
       }
 
       // bundleHandler(filePath, outDir, exportName, isNode)
-      const bundleRes = await bundleHandler(filePath, outDir, exported[0], true);
+      const bundleRes = await bundleHandler(
+        filePath,
+        outDir,
+        exported[0],
+        true,
+      );
 
       const { schema: inSchema, meta: inMeta } = buildSchemaIR(
         node.inputSchema,
@@ -139,7 +139,12 @@ export async function buildAgent(
     const hooks = ["onMessage", "onCall", "onInit", "onTick"];
     for (const hook of hooks) {
       if (agentConfig[hook]) {
-        const bundleRes = await bundleHandler(entryFullPath, outDir, hook, false);
+        const bundleRes = await bundleHandler(
+          entryFullPath,
+          outDir,
+          hook,
+          false,
+        );
         ir.agent.hooks[hook] = {
           type: "agent_entry",
           signature: "agent_context",
@@ -174,7 +179,12 @@ export async function buildAgent(
         const id = route.id || `${route.method}:${route.path}`;
         const routeKey = `${route.method}:${route.path}`;
 
-        const bundleRes = await bundleHandler(filePath, outDir, exported[0], false);
+        const bundleRes = await bundleHandler(
+          filePath,
+          outDir,
+          exported[0],
+          false,
+        );
 
         const { schema: inSchema, meta: inMeta } = buildSchemaIR(
           route.inputSchema,
@@ -185,6 +195,32 @@ export async function buildAgent(
           path: route.path,
           inputSchema: inSchema,
           inputSchemaMeta: inMeta,
+          handlerFile: bundleRes.handlerFile,
+          handlerVersion: bundleRes.hash,
+        };
+      }
+    }
+
+    // Process cron schedules
+    if (Array.isArray(agentConfig.cron)) {
+      for (let i = 0; i < agentConfig.cron.length; i++) {
+        const schedule = agentConfig.cron[i];
+        const scheduleId = `schedule:${i}`;
+
+        // Bundle the cron handler
+        const bundleRes = await bundleHandler(
+          entryFullPath,
+          outDir,
+          `cron[${i}]`,
+          false,
+        );
+
+        ir.schedules[scheduleId] = {
+          kind: "schedule",
+          id: scheduleId,
+          cron: schedule.expression,
+          handler: scheduleId,
+          timezone: schedule.timezone,
           handlerFile: bundleRes.handlerFile,
           handlerVersion: bundleRes.hash,
         };

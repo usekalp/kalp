@@ -37,3 +37,11 @@ export type {
   SecretKey,
   KalpVault,
 } from "@/primitives/auth";
+
+export type { KalpMcp } from "@/primitives/mcp";
+
+export type { AgentIntrospection } from "@/primitives/agent-meta";
+
+export type { KalpDate } from "@/primitives/date";
+
+export type { KalpMath } from "@/primitives/math";

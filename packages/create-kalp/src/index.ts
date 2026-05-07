@@ -6,12 +6,46 @@ import {
   scaffoldAgent,
   installDeps,
   ensureDirectory,
+  type TemplateId,
 } from "@kalphq/project";
 import {
   isExistingKalpProject,
   isDirEmpty,
   validateProjectForAddAgent,
 } from "@/utils";
+
+/**
+ * Prompt user to select an agent template.
+ */
+async function promptTemplateSelection(): Promise<TemplateId> {
+  const answer = await p.select({
+    message: "Choose an agent template:",
+    options: [
+      {
+        value: "researcher",
+        label: "🔬 Researcher",
+        hint: "Deterministic scheduling - pause 24h and auto-resume",
+      },
+      {
+        value: "support",
+        label: "🎧 Support Agent",
+        hint: "Human-in-the-Loop - pause for days until resolved",
+      },
+      {
+        value: "blank",
+        label: "⬜ Blank",
+        hint: "Minimal structure with modern Kalp v1 syntax",
+      },
+    ],
+  });
+
+  if (p.isCancel(answer)) {
+    p.cancel("Cancelled.");
+    process.exit(0);
+  }
+
+  return answer as TemplateId;
+}
 
 const LOGO = "🦋";
 
@@ -90,10 +124,17 @@ async function main(): Promise<void> {
         process.exit(0);
       }
 
+      // ── Template selection ───────────────────────────────────────────────
+      const template = await promptTemplateSelection();
+
       const s = p.spinner();
       s.start(`Scaffolding agent ${pc.cyan(agentName.trim())}`);
-      await scaffoldAgent({ agentName: agentName.trim(), cwd: targetDir });
-      s.stop("Agent created");
+      await scaffoldAgent({
+        agentName: agentName.trim(),
+        cwd: targetDir,
+        template,
+      });
+      s.stop(`Agent created (${template} template)`);
 
       p.outro(
         `${LOGO} ${pc.green(`Agent ${pc.bold(agentName.trim())} is ready.`)}`,
@@ -132,6 +173,9 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  // ── Template selection ───────────────────────────────────────────────────
+  const template = await promptTemplateSelection();
+
   const s = p.spinner();
 
   // ── Create target directory if needed ──────────────────────────────────
@@ -146,8 +190,12 @@ async function main(): Promise<void> {
 
   // ── Scaffold agent ────────────────────────────────────────────────────
   s.start(`Scaffolding agent ${pc.cyan(agentName.trim())}`);
-  await scaffoldAgent({ agentName: agentName.trim(), cwd: targetDir });
-  s.stop("Agent created");
+  await scaffoldAgent({
+    agentName: agentName.trim(),
+    cwd: targetDir,
+    template,
+  });
+  s.stop(`Agent created (${template} template)`);
 
   // ── Install deps ──────────────────────────────────────────────────────
   s.start("Installing dependencies");

@@ -6,15 +6,8 @@ import pc from "picocolors";
 import { ensureConfig } from "@/utils/fs";
 import { readAgentManifest, computePushHash } from "@/utils/manifest";
 import { renderLegacyError } from "@/utils/issues";
-import packageJson from "../../package.json" with { type: "json" };
 
 const LOGO = "🦋";
-
-const CLI_VERSION: string = packageJson.version;
-const IS_DEV_VERSION = CLI_VERSION.includes("dev");
-const CLOUD_API =
-  process.env.KALP_CLOUD_URL ||
-  (IS_DEV_VERSION ? "http://localhost:3000" : "https://app.usekalp.com");
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -121,7 +114,7 @@ export default defineCommand({
     );
     s.start(`Pushing to cloud`);
 
-    const response = await fetch(`${CLOUD_API}/api/agents/push`, {
+    const response = await fetch(`http://localhost:3000/api/agents/push`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -149,7 +142,7 @@ export default defineCommand({
     s.stop(pc.green("Pushed successfully"));
     printPushResult(agentName, hash, manifest.handlers);
 
-    const dashboardUrl = `${CLOUD_API}/a/${agentName}`;
+    const dashboardUrl = `http://localhost:3000/a/${agentName}`;
     p.outro(`${LOGO} ${pc.green("Agent live at")} ${pc.cyan(dashboardUrl)}`);
   },
 });

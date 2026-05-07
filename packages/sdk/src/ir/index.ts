@@ -11,8 +11,10 @@ export type {
   EntryIRNode,
   HandlerType,
   HandlerIRNode,
+  ScheduleIRNode,
   IRNode,
   IREdgeType,
   IREdge,
+  AgentMetadata,
   IRGraph,
 } from "@/ir/types";

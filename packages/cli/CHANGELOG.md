@@ -1,12 +1,40 @@
 # @kalphq/cli
 
+## 0.0.0-dev-20260506065806
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260506065806
+  - @kalphq/project@0.0.0-dev-20260506065806
+  - @kalphq/sdk@0.0.0-dev-20260506065806
+
+## 0.0.0-dev-20260506063248
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260506063248
+  - @kalphq/project@0.0.0-dev-20260506063248
+  - @kalphq/sdk@0.0.0-dev-20260506063248
+
+## 0.0.0-dev-20260506062515
+
+### Patch Changes
+
+- dev release
+- Updated dependencies
+  - @kalphq/compiler@0.0.0-dev-20260506062515
+  - @kalphq/project@0.0.0-dev-20260506062515
+  - @kalphq/sdk@0.0.0-dev-20260506062515
 
 ## 0.2.0
 
 ### Minor Changes
 
 - fix version
-
 
 ## 0.1.0
 
@@ -20,7 +48,6 @@
   - @kalphq/compiler@0.1.0
   - @kalphq/sdk@0.3.0
 
-
 ## 0.0.1
 
 ### Patch Changes
@@ -29,14 +56,12 @@
 - Updated dependencies
   - @kalphq/project@0.1.1
 
-
 ## 0.0.0
 
 ### Patch Changes
 
 - Updated dependencies
   - @kalphq/project@0.1.0
-
 
 ## 0.1.0
 
@@ -48,7 +73,6 @@
 
 - Updated dependencies
   - @kalphq/sdk@0.2.0
-
 
 ## 0.0.2
 

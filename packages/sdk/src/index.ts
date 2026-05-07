@@ -69,6 +69,13 @@ export type {
   StoragePutOptions,
   StorageTransaction,
   TransactionOptions,
+  // MCP
+  KalpMcp,
+  // Agent Introspection
+  AgentIntrospection,
+  // Deterministic Primitives
+  KalpDate,
+  KalpMath,
 } from "@/primitives";
 
 // ============================================================================
@@ -113,6 +120,7 @@ export type {
   KalpCtx,
   AgentContext,
   TypedAgentContext,
+  AgentMessage,
   AgentResponse,
 } from "@/context";
 
@@ -127,9 +135,11 @@ export type {
   EntryIRNode,
   HandlerType,
   HandlerIRNode,
+  ScheduleIRNode,
   IRNode,
   IREdgeType,
   IREdge,
+  AgentMetadata,
   IRGraph,
 } from "@/ir";
 
@@ -152,7 +162,7 @@ export { defineAgent } from "@/agent";
 export { defineStep, defineTool } from "@/definitions";
 export { defineRoute } from "@/definitions";
 export { defineConfig } from "@/project";
-export type { KalpProjectConfig } from "@/project";
+export type { KalpProjectConfig, McpServerConfig } from "@/project";
 
 // ============================================================================
 // Registry

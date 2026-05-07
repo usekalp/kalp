@@ -12,7 +12,7 @@ export type IRNodeId = string & { readonly __brand: "IRNodeId" };
  * - `entry` - event-driven entrypoint (lifecycle, route)
  * - `handler` - opaque reference to a bundled handler module
  */
-export type IRNodeKind = "entry" | "handler";
+export type IRNodeKind = "entry" | "handler" | "schedule";
 
 /** Base fields shared by all IR nodes. */
 export interface IRNodeBase {
@@ -54,8 +54,18 @@ export interface HandlerIRNode extends IRNodeBase {
   outputSchema?: Record<string, unknown>;
 }
 
+/**
+ * Schedule node - a cron-based scheduled entrypoint.
+ */
+export interface ScheduleIRNode extends IRNodeBase {
+  kind: "schedule";
+  cron: string;
+  handler: IRNodeId;
+  timezone?: string;
+}
+
 /** Union of all IR node types. */
-export type IRNode = EntryIRNode | HandlerIRNode;
+export type IRNode = EntryIRNode | HandlerIRNode | ScheduleIRNode;
 
 /**
  * The only two edge types in the IR.
@@ -76,6 +86,16 @@ export interface IREdge {
 }
 
 /**
+ * Agent metadata for introspection (static compile-time info).
+ * Runtime IDs (agentId, runId) are injected by the runtime, not stored here.
+ */
+export interface AgentMetadata {
+  name: string;
+  systemPrompt: string | { type: "function"; dynamic: true };
+  metadata?: Record<string, unknown>;
+}
+
+/**
  * The complete IR graph - a minimal structural index of the agent.
  *
  * The IR is the sole compile-time artifact. It records which entrypoints
@@ -85,8 +105,10 @@ export interface IREdge {
 export interface IRGraph {
   /** IR schema version. */
   version: 2;
-  /** Agent identifier. */
+  /** Agent identifier (generated server-side as ag_<ulid>). */
   agentId: string;
+  /** Agent metadata for introspection. */
+  agentMetadata: AgentMetadata;
   /** Map from event name to entry node ID. */
   entries: Record<string, IRNodeId>;
   /** All nodes keyed by ID. */
@@ -95,4 +117,6 @@ export interface IRGraph {
   edges: IREdge[];
   /** O(1) lookup: moduleRef → handler node ID. Built by the compiler. */
   handlerIndex: Record<string, IRNodeId>;
+  /** Scheduled cron jobs. */
+  schedules?: Record<string, ScheduleIRNode>;
 }

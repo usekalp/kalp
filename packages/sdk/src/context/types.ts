@@ -5,8 +5,13 @@ import type {
   KalpMemory,
   KalpVault,
   StoragePrimitive,
+  KalpMcp,
+  AgentIntrospection,
+  KalpDate,
+  KalpMath,
 } from "@/primitives";
 import type { KalpActions, TypedActions } from "@/actions/types";
+import type { ExecutableNode } from "@/nodes";
 import { UserId } from "@/identity";
 
 /**
@@ -42,10 +47,12 @@ export interface KalpAuth {
 
 /**
  * Extracts the union of all executable nodes registered in an agent config.
+ * Falls back to ExecutableNode when using autodiscovery (no explicit steps/tools arrays).
  */
 export type InferNodes<C> =
   | (C extends { steps: readonly (infer S)[] } ? S : never)
-  | (C extends { tools: readonly (infer T)[] } ? T : never);
+  | (C extends { tools: readonly (infer T)[] } ? T : never)
+  | ExecutableNode;
 
 /**
  * Context passed to all handlers (steps, tools, routes).
@@ -59,16 +66,32 @@ export interface HandlerContext {
   auth: KalpAuth;
   actions: KalpActions;
   log: KalpLog;
+  /** MCP (Model Context Protocol) server proxy. */
+  mcp: KalpMcp;
+  /** Agent introspection - runtime metadata and IDs. */
+  agent: AgentIntrospection;
+  /** Deterministic date primitive for Event Sourcing. */
+  date: KalpDate;
+  /** Deterministic math primitive for Event Sourcing. */
+  math: KalpMath;
 }
 
 /** Convenience alias for {@link HandlerContext}. */
 export type KalpCtx = HandlerContext;
 
 /**
- * Extended context for `onMessage` with conversation state.
+ * Data payload for an incoming message.
+ */
+export interface AgentMessage {
+  text: string;
+  data?: unknown;
+  senderId: UserId;
+}
+
+/**
+ * Extended context for conversation handlers with conversation state.
  */
 export interface AgentContext extends HandlerContext {
-  message: { text: string; data?: unknown; senderId: UserId };
   history: KalpHistoryMessage[];
   state: Record<string, unknown>;
 }
@@ -76,11 +99,8 @@ export interface AgentContext extends HandlerContext {
 /**
  * Agent context with type-safe actions bound to the agent's registered nodes.
  */
-export interface TypedAgentContext<C> extends Omit<HandlerContext, "actions"> {
-  message: { text: string; data?: unknown; senderId: UserId };
+export interface TypedAgentContext<C> extends Omit<AgentContext, "actions"> {
   actions: TypedActions<InferNodes<C>>;
-  history: KalpHistoryMessage[];
-  state: Record<string, unknown>;
 }
 
 /** Response from an agent's `onMessage` handler. */

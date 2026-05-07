@@ -5,6 +5,7 @@ import {
   analyzeHandler,
 } from "@kalphq/compiler";
 import { logPush, type NamedAnalysis } from "@/lib/logger";
+import fs from "node:fs";
 
 export async function POST(req: Request) {
   const body = (await req.json()) as Record<string, unknown>;
@@ -70,6 +71,17 @@ export async function POST(req: Request) {
     analysis,
     timestamp: new Date().toISOString(),
   });
+
+  // Export the full agent pack (IR + Bundled Handlers) to a single JSON for debugging/archival
+  try {
+    const agentPack = {
+      ...ir,
+      bundle,
+    };
+    fs.writeFileSync("agent-pack.json", JSON.stringify(agentPack, null, 2));
+  } catch (e) {
+    console.error("Failed to export agent-pack.json", e);
+  }
 
   return NextResponse.json({
     ok: true,

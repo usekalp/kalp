@@ -1,5 +1,21 @@
-import type { ValidationIssue, Severity } from "@kalphq/compiler";
 import p from "picocolors";
+
+/**
+ * Severity level for a validation issue.
+ */
+export type Severity = "error" | "warning" | "info";
+
+/**
+ * A structured validation issue found during agent analysis or compilation.
+ */
+export interface ValidationIssue {
+  severity: Severity;
+  message: string;
+  context?: string;
+  location?: string;
+  fix?: string;
+  debug?: string;
+}
 
 interface RenderOptions {
   format?: "pretty" | "json" | "minimal";
@@ -111,8 +127,12 @@ export function renderIssues(
 
   // Sort by severity: errors first, then warnings, then info
   const sorted = [...issues].sort((a, b) => {
-    const severityOrder = { error: 0, warning: 1, info: 2 };
-    return severityOrder[a.severity] - severityOrder[b.severity];
+    const severityOrder: Record<Severity, number> = {
+      error: 0,
+      warning: 1,
+      info: 2,
+    };
+    return severityOrder[a.severity]! - severityOrder[b.severity]!;
   });
 
   switch (format) {

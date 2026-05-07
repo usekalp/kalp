@@ -4,11 +4,7 @@
  * @module
  */
 
-export {
-  scaffoldProject,
-  type ScaffoldProjectOptions,
-} from "./project";
-export { scaffoldAgent, type ScaffoldAgentOptions } from "./agent";
+export { scaffoldProject, type ScaffoldProjectOptions } from "./project";
 export {
   formatGeneratedFile,
   replacePlaceholders,
