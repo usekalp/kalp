@@ -19,7 +19,11 @@ import type {
   InputOf,
   OutputOf,
   WakeReason,
+  AskOptions,
+  EmitOptions,
+  AgentContract,
 } from "@kalphq/sdk";
+import { z } from "@kalphq/sdk";
 import type { ExecutionLog } from "@/engine/execution-log";
 import type { SchedulerAdapter } from "@/adapters/interfaces";
 import type { ExecutionContext } from "@/engine/types";
@@ -95,7 +99,7 @@ export function createActionsPrimitive(
       node: T,
       ...args: InputOf<T> extends never ? [] : [input: InputOf<T>]
     ): Promise<OutputOf<T>> {
-      const target = `${(node as any).kind}s.${(node as any).id}`;
+      const target = `${node.kind}s.${node.id}`;
       const input = args[0];
 
       await log.emit({
@@ -159,7 +163,7 @@ export function createActionsPrimitive(
         });
 
         let iteration = 0;
-        // eslint-disable-next-line no-constant-condition
+
         while (true) {
           await log.emit({
             type: "action.loop.iteration",
@@ -220,23 +224,141 @@ export function createActionsPrimitive(
       return response;
     },
 
-    async ask(options: any): Promise<any> {
-      await log.emit({ type: "action.ask", ...options, ...ids, timestamp: Date.now() });
-      return { text: "stub response" };
+    async ask<T extends z.ZodTypeAny>(
+      _prompt: string,
+      _schema: T,
+      _options?: AskOptions,
+    ): Promise<z.infer<T>> {
+      await log.emit({
+        type: "action.ask",
+        ...ids,
+        timestamp: Date.now(),
+      });
+      return { text: "stub response" } as z.infer<T>;
     },
 
-    async requestApproval(options: any): Promise<boolean> {
-      await log.emit({ type: "action.approval", ...options, ...ids, timestamp: Date.now() });
+    async requestApproval(
+      _reason: string,
+      _options?: AskOptions,
+    ): Promise<boolean> {
+      await log.emit({
+        type: "action.approval",
+        ...ids,
+        timestamp: Date.now(),
+      });
       return true;
     },
 
-    async emit(event: string, payload: any, options?: any): Promise<void> {
-      await log.emit({ type: "action.emit", event, payload, ...options, ...ids, timestamp: Date.now() });
+    emit(eventName: string, payload: unknown, _options?: EmitOptions): void {
+      void log.emit({
+        type: "action.emit",
+        event: eventName,
+        payload,
+        ...ids,
+        timestamp: Date.now(),
+      });
     },
 
-    async callAgent(contract: any, input: any): Promise<any> {
-      await log.emit({ type: "action.call", contract: contract.agentId, input, ...ids, timestamp: Date.now() });
-      return {};
+    async callAgent<TContract extends AgentContract<any, any>>(
+      contract: TContract,
+      input: z.infer<TContract["inputSchema"]>,
+    ): Promise<z.infer<TContract["outputSchema"]>> {
+      await log.emit({
+        type: "action.call",
+        contract: contract.agentId,
+        input,
+        ...ids,
+        timestamp: Date.now(),
+      });
+      return {} as z.infer<TContract["outputSchema"]>;
+    },
+
+    /**
+     * Pauses the agent until an external event occurs.
+     * Emits an action.wait event with duration and schedules a timeout alarm if specified.
+     */
+    async waitForEvent(
+      eventName: string,
+      timeout?: string | number,
+    ): Promise<WakeReason> {
+      const duration = timeout ? parseDuration(timeout) : 0;
+
+      await log.emit({
+        type: "action.wait",
+        duration,
+        ...ids,
+        timestamp: Date.now(),
+      });
+
+      if (timeout) {
+        await scheduler.schedule(Date.now() + duration);
+      }
+
+      // The reactor will resolve this when the event arrives or timeout fires
+      return { type: "event", eventName, payload: undefined };
+    },
+
+    /**
+     * Pauses the agent until a specific date/time.
+     * Emits an action.wait event with the duration and schedules an alarm for the target time.
+     */
+    async waitUntil(date: Date | string | number): Promise<WakeReason> {
+      const targetTime =
+        typeof date === "number"
+          ? date
+          : typeof date === "string"
+            ? new Date(date).getTime()
+            : date.getTime();
+
+      const now = Date.now();
+      const duration = Math.max(0, targetTime - now);
+
+      await log.emit({
+        type: "action.wait",
+        duration,
+        ...ids,
+        timestamp: Date.now(),
+      });
+
+      await scheduler.schedule(targetTime);
+
+      return {
+        type: "scheduled_time_reached",
+        scheduledAt: new Date(targetTime).toISOString(),
+      };
+    },
+
+    /**
+     * Schedules a node for future non-blocking execution.
+     * Emits an action.schedule event and schedules the execution via the scheduler.
+     */
+    async schedule<T extends ExecutableNode>(
+      node: T,
+      date: Date | string | number,
+      ...args: InputOf<T> extends never ? [] : [input: InputOf<T>]
+    ): Promise<{ scheduleId: string }> {
+      const targetTime =
+        typeof date === "number"
+          ? date
+          : typeof date === "string"
+            ? new Date(date).getTime()
+            : date.getTime();
+
+      const target = `${node.kind}s.${node.id}`;
+      const input = args[0];
+      const scheduleId = `schedule_${target}_${targetTime}`;
+
+      await log.emit({
+        type: "action.schedule",
+        at: targetTime,
+        payload: { scheduleId, target, input },
+        ...ids,
+        timestamp: Date.now(),
+      });
+
+      await scheduler.schedule(targetTime);
+
+      return { scheduleId };
     },
   };
 }

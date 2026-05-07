@@ -30,6 +30,10 @@ import type { DispatchAction } from "@/engine/primitives/actions";
 import { createAIPrimitive } from "@/engine/primitives/ai";
 import { createStoragePrimitive } from "@/engine/primitives/storage";
 import { createActionsPrimitive } from "@/engine/primitives/actions";
+import { createMcpPrimitive } from "@/engine/primitives/mcp";
+import { createDatePrimitive } from "@/engine/primitives/date";
+import { createMathPrimitive } from "@/engine/primitives/math";
+import { createAgentMetaPrimitive } from "@/engine/primitives/agent-meta";
 import type { ExecutionContext } from "@/engine/types";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -68,6 +72,7 @@ export interface RuntimeProviders {
  * @param dispatch - Callback to enqueue handler tasks in the reactor.
  * @param providers - External providers (ai, auth, memory, vault).
  * @param execCtx - Optional execution context for event identity.
+ * @param agentConfig - Optional agent configuration for metadata.
  * @returns A complete {@link HandlerContext} matching the SDK interface.
  */
 export function buildHandlerContext(
@@ -77,6 +82,11 @@ export function buildHandlerContext(
   dispatch: DispatchAction,
   providers: RuntimeProviders,
   execCtx?: ExecutionContext,
+  agentConfig?: {
+    name: string;
+    systemPrompt: string;
+    metadata?: Record<string, unknown>;
+  },
 ): HandlerContext {
   const ids = {
     executionId: execCtx?.executionId ?? "",
@@ -91,14 +101,50 @@ export function buildHandlerContext(
     auth: providers.auth,
     memory: providers.memory,
     vault: providers.vault,
+    mcp: createMcpPrimitive(log, execCtx),
+    agent: createAgentMetaPrimitive(log, execCtx, agentConfig),
+    date: createDatePrimitive(log, execCtx),
+    math: createMathPrimitive(log, execCtx),
     log: {
-      debug: (msg, data) => void log.emit({ type: "log", level: "debug", msg, data, ...ids, timestamp: Date.now() }),
-      info: (msg, data) => void log.emit({ type: "log", level: "info", msg, data, ...ids, timestamp: Date.now() }),
-      warn: (msg, data) => void log.emit({ type: "log", level: "warn", msg, data, ...ids, timestamp: Date.now() }),
+      debug: (msg, data) =>
+        void log.emit({
+          type: "log",
+          level: "debug",
+          msg,
+          data,
+          ...ids,
+          timestamp: Date.now(),
+        }),
+      info: (msg, data) =>
+        void log.emit({
+          type: "log",
+          level: "info",
+          msg,
+          data,
+          ...ids,
+          timestamp: Date.now(),
+        }),
+      warn: (msg, data) =>
+        void log.emit({
+          type: "log",
+          level: "warn",
+          msg,
+          data,
+          ...ids,
+          timestamp: Date.now(),
+        }),
       error: (err, data) => {
         const msg = err instanceof Error ? err.message : String(err);
-        const errorData = err instanceof Error ? { ...data, stack: err.stack } : data;
-        void log.emit({ type: "log", level: "error", msg, data: errorData, ...ids, timestamp: Date.now() });
+        const errorData =
+          err instanceof Error ? { ...data, stack: err.stack } : data;
+        void log.emit({
+          type: "log",
+          level: "error",
+          msg,
+          data: errorData,
+          ...ids,
+          timestamp: Date.now(),
+        });
       },
     },
   };
