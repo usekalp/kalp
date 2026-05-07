@@ -106,7 +106,7 @@ export interface KalpAI {
    * @param params - The generation parameters including prompt and optional schema.
    * @returns The generated text or validated object.
    */
-  generate: <T extends z.ZodTypeAny = never>(
+  generate: <T extends z.ZodTypeAny | undefined = undefined>(
     params: AIParams & { schema?: T },
   ) => Promise<T extends z.ZodTypeAny ? z.infer<T> : string>;
 
@@ -117,7 +117,7 @@ export interface KalpAI {
    * @param params - The generation parameters.
    * @returns Async iterable of tokens or partial objects.
    */
-  stream: <T extends z.ZodTypeAny = never>(
+  stream: <T extends z.ZodTypeAny | undefined = undefined>(
     params: AIParams & { schema?: T },
   ) => T extends z.ZodTypeAny
     ? AsyncIterable<Partial<z.infer<T>>>
@@ -127,12 +127,12 @@ export interface KalpAI {
    * Classifies text into one of the provided labels.
    *
    * @param params - Classification parameters including input text and labels.
-   * @returns The selected label.
+   * @returns The selected label from the provided labels array.
    */
-  classify: (params: {
+  classify: <T extends string>(params: {
     input: string;
-    labels: string[];
+    labels: readonly T[];
     model?: KalpModelId;
     confidenceThreshold?: number;
-  }) => Promise<string>;
+  }) => Promise<T>;
 }

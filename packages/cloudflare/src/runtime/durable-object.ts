@@ -68,16 +68,16 @@ export class AgentDurableObject extends DurableObject<Env> {
         (async function* () {
           /* noop */
         })() as never,
-      classify: async () => "",
+      classify: async () => "" as never,
     };
 
     const providers: RuntimeProviders = {
       ai: stubAI,
-      auth: { 
-        userId: asUserId(""), 
+      auth: {
+        userId: asUserId(""),
         providerId: "anonymous",
-        claims: {}, 
-        hasPermission: () => false 
+        claims: {},
+        hasPermission: () => false,
       },
       memory: {
         list: async () => ({ items: [] }),

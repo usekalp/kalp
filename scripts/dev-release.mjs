@@ -65,4 +65,11 @@ try {
       "Could not auto-revert. Run: git checkout -- .changeset/ packages/*/package.json",
     );
   }
+  // Clean up dev releases from changelogs after publish
+  console.log("\n🧹 Cleaning dev releases from changelogs...");
+  try {
+    run("node scripts/clean-dev-changelogs.mjs");
+  } catch {
+    console.warn("Could not clean changelogs. Run: pnpm clean-dev-changelogs");
+  }
 }

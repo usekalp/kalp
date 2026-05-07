@@ -1,6 +1,8 @@
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { scaffoldAgent } from "@kalphq/project";
 import { isProjectInitialized } from "@/utils/fs";
 import { promptAgentDetails } from "@/utils/ui";
@@ -29,6 +31,19 @@ export default defineCommand({
     // ── Agent prompts ────────────────────────────────────────────────────
     const agentAnswers = await promptAgentDetails({ includeTemplate: true });
 
+    // ── Check if agent already exists ────────────────────────────────────
+    const agentDir = join(cwd, "agents", agentAnswers.name);
+    if (existsSync(agentDir)) {
+      p.log.error(`Agent "${agentAnswers.name}" already exists.`);
+      console.log("");
+      console.log(`  ${pc.dim("Location:")} ${pc.cyan(agentDir)}`);
+      console.log("");
+      console.log(
+        `  ${pc.dim("Choose a different name or remove the existing agent.")}`,
+      );
+      process.exit(1);
+    }
+
     const s = p.spinner();
 
     // ── Scaffold agent ───────────────────────────────────────────────────
@@ -46,11 +61,12 @@ export default defineCommand({
 
     p.note(
       [
-        `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/index.ts`)}`,
-        `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/steps/`)}`,
-        `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/tools/`)}`,
-        `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/routes/`)}`,
-        `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/flows/`)}`,
+        `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/index.ts`)} ${pc.dim("— Agent entrypoint with config")}`,
+        `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/contract/`)} ${pc.dim("— RPC contract definition")}`,
+        `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/hooks/`)} ${pc.dim("— Lifecycle hooks (onInit, onTick)")}`,
+        `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/routes/`)} ${pc.dim("— HTTP endpoints")}`,
+        `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/steps/`)} ${pc.dim("— Reusable workflow steps")}`,
+        `${pc.dim("•")} ${pc.cyan(`agents/${agentAnswers.name}/tools/`)} ${pc.dim("— Callable agent tools")}`,
       ].join("\n"),
       "Created",
     );

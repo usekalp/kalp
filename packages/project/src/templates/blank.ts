@@ -1,7 +1,5 @@
 /**
- * Blank template - minimal structure with modern Kalp v1 syntax.
- *
- * Uses autodiscovery (no explicit IDs) and clean handler signatures.
+ * Blank template - minimal structure for a Kalp agent.
  *
  * @module
  */
@@ -20,83 +18,88 @@ async function generateBlank(opts: {
   const { agentName, cwd } = opts;
   const agentDir = join(cwd, "agents", agentName);
 
-  // Main agent file - minimal with modern syntax
+  // Main agent file
   const agentIndex = [
     'import { defineAgent } from "@kalphq/sdk";',
+    'import { onInit } from "./hooks/onInit";',
+    'import { onTick } from "./hooks/onTick";',
+    'import { exampleContract } from "./contract/example-contract";',
     'import { healthRoute } from "./routes/health";',
     "",
     "/**",
-    " * A blank agent with modern Kalp v1 syntax.",
-    " *",
-    " * This template uses:",
-    " * - Autodiscovery (no explicit IDs in defineStep/defineTool)",
-    " * - Modern handler signatures with ctx as first param",
-    ' * - Server-side ID generation from the "name" field',
+    " * A blank agent ready for your custom logic.",
     " */",
     "export default defineAgent({",
     '  name: "' + agentName + '",',
     '  description: "A helpful AI assistant",',
     "",
+    "  contract: exampleContract,",
+    "",
+    "  systemPrompt: () => {",
+    '    return "You are a helpful AI assistant. Answer questions and help users with their tasks.";',
+    "  },",
+    "",
+    "  onInit,",
+    "  onTick,",
+    "",
+    "  onCall: async (input, ctx) => {",
+    "    return { success: true };",
+    "  },",
+    "",
     "  routes: [healthRoute],",
     "",
-    "  async onMessage(ctx) {",
-    "    // Access the message via ctx.message",
-    "    const userText = ctx.message.text;",
+    "  async onMessage(message, ctx) {",
+    "    // Access the message directly",
+    "    const userText = message.text;",
     "",
     "    // TODO: Implement your agent logic here",
-    "    // Available: ctx.actions.run(), ctx.ai.generate(), ctx.storage.put(), etc.",
     "",
     '    return { text: "" };',
     "  },",
     "});",
   ].join("\n");
 
-  // Example step with modern syntax (no 'id', uses 'name')
+  // Step: example
   const exampleStep = [
     'import { defineStep, z } from "@kalphq/sdk";',
     "",
     "/**",
-    " * An example step showing modern Kalp v1 syntax.",
-    " *",
-    ' * Note: We use "name" (not "id") and "input"/"output" (not "inputSchema"/"outputSchema").',
-    " * The ID is auto-generated server-side from the kebab-case version of the name.",
+    " * An example step that processes text and returns the uppercase version.",
     " */",
     "export const exampleStep = defineStep({",
-    '  name: "example_step",',
-    '  description: "An example step",',
-    "  input: z.object({ text: z.string() }),",
-    "  output: z.object({ processed: z.string() }),",
-    "  async handler(ctx, { text }) {",
-    "    // ctx provides access to all primitives",
-    '    ctx.log.info("Processing: " + text);',
+    '  id: "example_step",',
+    '  description: "An example step that processes text",',
+    "  inputSchema: z.object({ text: z.string() }),",
+    "  outputSchema: z.object({ processed: z.string() }),",
+    "  handler: async ({ text }, ctx) => {",
+    "    // Process the text",
     "",
     "    return { processed: text.toUpperCase() };",
     "  },",
     "});",
   ].join("\n");
 
-  // Example tool with modern syntax
+  // Tool: example
   const exampleTool = [
     'import { defineTool, z } from "@kalphq/sdk";',
     "",
     "/**",
-    " * An example tool showing modern Kalp v1 syntax.",
+    " * An example tool that searches for documentation.",
     " */",
     "export const exampleTool = defineTool({",
-    '  name: "example_tool",',
+    '  id: "example_tool",',
     '  description: "An example tool that returns empty results",',
-    "  input: z.object({ query: z.string() }),",
-    "  output: z.object({ results: z.array(z.string()) }),",
-    "  async handler(ctx, { query }) {",
+    "  inputSchema: z.object({ query: z.string() }),",
+    "  handler: async ({ query }, ctx) => {",
+    '    ctx.log.info("Query: " + query);',
     "    // TODO: Implement tool logic",
-    "    // Example: Call external API, search database, etc.",
     "",
     "    return { results: [] };",
     "  },",
     "});",
   ].join("\n");
 
-  // Health route
+  // Route: health check
   const healthRoute = [
     'import { defineRoute } from "@kalphq/sdk";',
     "",
@@ -104,65 +107,54 @@ async function generateBlank(opts: {
     " * Health check endpoint.",
     " */",
     "export const healthRoute = defineRoute({",
-    '  name: "health",',
+    '  id: "health",',
     '  method: "GET",',
     '  path: "/health",',
-    "  handler: async (req, res) => {",
+    "  handler: async (req, res, ctx) => {",
     "    res.json({",
     '      status: "ok",',
     '      agent: "' + agentName + '",',
-    "      timestamp: new Date().toISOString(),",
+    "      timestamp: ctx.date.toISOString(),",
     "    });",
     "  },",
     "});",
   ].join("\n");
 
-  // Empty hooks with proper return types
+  // Hook: onInit
   const onInitHook = [
+    'import { HandlerContext } from "@kalphq/sdk";',
+    "",
     "/**",
     " * Runs when the agent starts up.",
     " * Initialize any required state here.",
     " */",
-    "export async function onInit(): Promise<void> {",
+    "export async function onInit(ctx: HandlerContext): Promise<void> {",
     "  // TODO: Add initialization logic",
     "  // Example: Load configuration, warm up caches, connect to databases",
     "}",
   ].join("\n");
 
+  // Hook: onTick
   const onTickHook = [
+    'import { HandlerContext } from "@kalphq/sdk";',
+    "",
     "/**",
-    " * Runs periodically if cron is configured in defineAgent.",
-    " * Check schedules or perform background tasks.",
+    " * Runs periodically to perform background tasks.",
+    " * Configure the schedule in kalp.config.ts",
     " */",
-    "export async function onTick(): Promise<void> {",
+    "export async function onTick(ctx: HandlerContext): Promise<void> {",
     "  // TODO: Add periodic task logic",
     "}",
   ].join("\n");
 
-  const onCallHook = [
-    'import type { HandlerContext } from "@kalphq/sdk";',
-    "",
-    "/**",
-    " * Runs when the agent is called via its contract (RPC).",
-    " * Implement RPC methods here.",
-    " */",
-    "export async function onCall(ctx: HandlerContext): Promise<unknown> {",
-    "  // TODO: Implement RPC handling",
-    "  return { success: true };",
-    "}",
-  ].join("\n");
-
-  // Contract placeholder
+  // Contract: example
   const contractFile = [
     'import { defineContract, z } from "@kalphq/sdk";',
     "",
     "/**",
-    " * Contract for external systems to call this agent via RPC.",
-    " *",
-    " * Uncomment and modify to enable RPC calls to this agent.",
+    " * Contract for external systems to call this agent.",
     " */",
-    "export const exampleContract = defineContract({",
-    '  name: "example",',
+    'export const exampleContract = defineContract("example", {',
     "  input: z.object({",
     "    action: z.string(),",
     "    data: z.record(z.unknown()),",
@@ -189,7 +181,6 @@ async function generateBlank(opts: {
   await writeTemplateFile(join(agentDir, "routes"), "health.ts", healthRoute);
   await writeTemplateFile(join(agentDir, "hooks"), "onInit.ts", onInitHook);
   await writeTemplateFile(join(agentDir, "hooks"), "onTick.ts", onTickHook);
-  await writeTemplateFile(join(agentDir, "hooks"), "onCall.ts", onCallHook);
   await writeTemplateFile(
     join(agentDir, "contract"),
     "example-contract.ts",
@@ -203,8 +194,7 @@ async function generateBlank(opts: {
 export const blankTemplate: TemplateDefinition = {
   id: "blank",
   name: "Blank",
-  description:
-    "Minimal structure with modern Kalp v1 syntax (autodiscovery, no explicit IDs)",
+  description: "Minimal structure to start building your agent",
   icon: "⬜",
   generate: generateBlank,
 };

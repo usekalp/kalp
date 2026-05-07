@@ -3,6 +3,7 @@ import { getRegistry, clearRegistry } from "@kalphq/sdk";
 import { bundleHandler, ensureHandlersDir } from "./bundler";
 import { buildSchemaIR, sortKeys } from "./ir-generator";
 import { createHash } from "crypto";
+import { createRequire } from "module";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -14,6 +15,20 @@ function assertUniqueIds(registry: ReturnType<typeof getRegistry>) {
       throw new Error(`Duplicate node id: ${entry.id}`);
     }
     seen.add(entry.id);
+  }
+}
+
+// NPM-safe SDK version retrieval
+const require = createRequire(import.meta.url);
+
+function getSdkVersion(): string {
+  try {
+    // Resolves @kalphq/sdk from node_modules (works in monorepo + user installs)
+    const pkgPath = require.resolve("@kalphq/sdk/package.json");
+    const pkg = require(pkgPath);
+    return pkg.version;
+  } catch {
+    return "unknown";
   }
 }
 
@@ -227,11 +242,18 @@ export async function buildAgent(
       }
     }
 
-    // Hash and write
+    // Hash and write (hash excludes meta for stable identity)
     const sortedIR = sortKeys(ir);
     const irHash = createHash("sha256")
       .update(JSON.stringify(sortedIR))
       .digest("hex");
+
+    // Add metadata after hash calculation (meta is not part of identity)
+    sortedIR.meta = {
+      kalpVersion: getSdkVersion(),
+      buildTimestamp: Date.now(),
+      nodeVersion: process.version,
+    };
     sortedIR.irHash = irHash;
 
     fs.writeFileSync(
