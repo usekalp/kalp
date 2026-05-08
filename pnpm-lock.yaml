@@ -175,6 +175,9 @@ importers:
       typescript:
         specifier: ^5.5.2
         version: 5.9.2
+      vitest:
+        specifier: ^1.6.0
+        version: 1.6.1(@types/node@22.15.3)(lightningcss@1.32.0)
 
   packages/create-kalp:
     dependencies:

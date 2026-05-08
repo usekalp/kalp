@@ -66,14 +66,21 @@ export class EventLogBuffer {
     let events: IntentEvent[];
 
     if (filters?.threadId) {
-      events = (await eventStore.loadByThread(filters.threadId)) as IntentEvent[];
+      events = (await eventStore.loadByThread(
+        filters.threadId,
+      )) as IntentEvent[];
     } else if (filters?.traceId) {
       events = (await eventStore.loadByTrace(filters.traceId)) as IntentEvent[];
     } else {
       events = (await eventStore.loadAll()) as IntentEvent[];
     }
 
-    // Group by executionId and sort by seq
+    // CRITICAL: Sort by seq to ensure deterministic ordering.
+    // Promise.all can cause events with higher seq to be persisted before
+    // events with lower seq in SQLite. We must sort here for correct replay.
+    events.sort((a, b) => a.seq - b.seq);
+
+    // Group by executionId
     for (const event of events) {
       if (!this.eventsByExecution.has(event.executionId)) {
         this.eventsByExecution.set(event.executionId, []);

@@ -284,16 +284,42 @@ export type ExecutionEvent =
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Runtime event types matching IR V3 entries.
+ * Includes lifecycle hooks, routes, schedules, and resume events.
+ */
+export type RuntimeEventType =
+  | "onMessage"
+  | "onCall"
+  | "onInit"
+  | "onTick"
+  | `route:${string}`
+  | `schedule:${string}`
+  | `event:${string}`
+  | "resume";
+
+/**
  * An external event that enters the reactor from the host adapter.
  * Each event maps to an entry in the IR via `type` → `ir.entries[type]`.
  */
 export interface RuntimeEvent {
   /** Event name matching an IR entry key (e.g. "onMessage", "route:GET:/health"). */
-  type: string;
+  type: RuntimeEventType;
   /** Arbitrary payload associated with the event. */
   payload: unknown;
   /** Opaque thread identifier. Adapter sets this from infrastructure (DO id, etc.). */
   threadId?: string;
+  /** Per-handleEvent call identifier for grouping executions. */
+  traceId?: string;
+}
+
+/**
+ * Contract validation result for input/output checking.
+ */
+export interface ContractValidation {
+  /** Whether the validation passed. */
+  valid: boolean;
+  /** Validation error messages if failed. */
+  errors?: string[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────

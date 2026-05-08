@@ -31,6 +31,8 @@ export interface SuspensionState {
   nodeId: string;
   /** The task to re-enqueue when resuming. */
   task: ExecutionTask;
+  /** Sequence counter at suspension time for exact replay positioning. */
+  seqCounter: number;
 }
 
 /**
@@ -47,11 +49,13 @@ export class SuspensionException extends Error {
    * @param resumeAt - Timestamp when to wake up.
    * @param wakeReason - Why we're waking ("timer", "external", etc.).
    * @param checkpoint - Serializable state to restore context.
+   * @param seqCounter - Sequence counter at suspension for exact replay.
    */
   constructor(
     public readonly resumeAt: number,
     public readonly wakeReason: string,
     public readonly checkpoint: unknown,
+    public readonly seqCounter: number,
   ) {
     super(`Suspended until ${new Date(resumeAt).toISOString()}`);
     this.name = "SuspensionException";

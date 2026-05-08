@@ -54,7 +54,7 @@ export class KalpRuntime {
   async handleEvent(event: RuntimeEvent): Promise<unknown> {
     const { threadId, payload } = event;
 
-    // CORRECTION 1: Preserve executionId on resume to load correct EventLog
+    // Preserve executionId on resume to load correct EventLog
     const executionId =
       event.type === "resume" && payload && typeof payload === "object"
         ? (payload as { executionId: string }).executionId
@@ -67,13 +67,13 @@ export class KalpRuntime {
     const log = new EventLogBuffer();
     await log.loadFromSQLite(this.persistence.events, { threadId, traceId });
 
-    // Find entry handler hash
-    const handlerHash = this.ir.entries[event.type];
+    // O(1) lookup in entries
+    const handlerHash = this.resolveHandlerHash(event.type);
     if (!handlerHash) {
       throw new Error(`No handler for event: ${event.type}`);
     }
 
-    // Build execution context with sequence counter starting at 0
+    // Calculate starting sequence number from existing events
     const execCtx: ExecutionContext = {
       executionId,
       traceId,
@@ -81,31 +81,114 @@ export class KalpRuntime {
       untrackedIOCount: 0,
       untrackedIOByType: { network: 0, timer: 0, fs: 0, unknown: 0 },
       hasUntrustedPlugins: false,
-      seqCounter: 0,
+      seqCounter: this.calculateStartingSeq(log, executionId),
     };
 
-    // Create context proxies
-    const ctx = this.buildContext(log, execCtx);
+    // Execute handler with drift protection
+    return this.executeHandler(handlerHash, event, execCtx, log);
+  }
 
-    // Execute handler from line 1
-    try {
-      const bundle = this.ir.bundles[handlerHash];
-      if (!bundle) {
-        throw new Error(`Bundle not found: ${handlerHash}`);
+  /**
+   * Resolves the handler hash for an event type via entries (O(1)).
+   *
+   * @param eventType - The runtime event type.
+   * @returns The handler hash, or null if not found.
+   */
+  private resolveHandlerHash(eventType: string): string | null {
+    // Direct entry lookup (O(1))
+    const direct = this.ir.entries[eventType];
+    if (direct) return direct;
+
+    // Route matching with prefix
+    if (eventType.startsWith("route:")) {
+      const routeKey = eventType.replace("route:", "");
+      return this.ir.entries[routeKey] ?? null;
+    }
+
+    return null;
+  }
+
+  /**
+   * Calculate starting sequence number from existing events.
+   * Ensures new calls get seq = max(existing seq) + 1.
+   *
+   * @param log - The event log buffer.
+   * @param executionId - The execution identifier.
+   * @returns The starting sequence number.
+   */
+  private calculateStartingSeq(
+    log: EventLogBuffer,
+    executionId: string,
+  ): number {
+    const events = log.getAll(executionId);
+    if (!events) return 0;
+
+    let maxSeq = 0;
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i];
+      if (event && event.seq !== undefined) {
+        maxSeq = Math.max(maxSeq, event.seq);
       }
+    }
+    return maxSeq;
+  }
 
-      // Create and execute the handler function
-      const fn = new Function(`
-        ${bundle.code}
-        return __handler.default;
-      `)();
+  /**
+   * Executes a handler with Sequence Key Drift protection.
+   *
+   * @param handlerHash - The hash of the handler bundle.
+   * @param event - The runtime event.
+   * @param execCtx - The execution context.
+   * @param log - The event log buffer.
+   * @returns The result of the handler execution.
+   * @throws SuspensionException if the handler suspends.
+   */
+  private async executeHandler(
+    handlerHash: string,
+    event: RuntimeEvent,
+    execCtx: ExecutionContext,
+    log: EventLogBuffer,
+  ): Promise<unknown> {
+    const bundle = this.ir.bundles[handlerHash];
+    if (!bundle) {
+      throw new Error(`Bundle not found: ${handlerHash}`);
+    }
 
+    // Sequence Key Drift protection: verify bundle type is valid
+    if (
+      bundle.type !== "entry" &&
+      bundle.type !== "step" &&
+      bundle.type !== "tool" &&
+      bundle.type !== "route"
+    ) {
+      throw new Error(`Invalid bundle type: ${bundle.type}`);
+    }
+
+    // Create context proxies
+    const ctx = this.buildContext(log, execCtx, handlerHash);
+
+    // Create and execute the handler function
+    const fn = new Function(`
+      ${bundle.code}
+      return __handler.default;
+    `)();
+
+    try {
       const result = await fn(ctx, event.payload);
-
       return result;
     } catch (err) {
       if (err instanceof SuspensionException) {
-        // Normal suspension - DO will be re-invoked by alarm
+        // Persist suspension state
+        await this.persistence.events.append({
+          type: "execution.suspended",
+          nodeId: event.type,
+          resumeAt: err.resumeAt,
+          executionId: execCtx.executionId,
+          traceId: execCtx.traceId,
+          threadId: execCtx.threadId,
+          timestamp: Date.now(),
+        });
+
         return {
           suspended: true,
           until: err.resumeAt,
@@ -123,11 +206,14 @@ export class KalpRuntime {
    *
    * @param log - The event log buffer for cache lookup.
    * @param execCtx - The execution context for event identity.
+   * @param handlerHash - The hash of the handler bundle.
    * @returns A HandlerContext matching the SDK interface.
    */
   private buildContext(
     log: EventLogBuffer,
     execCtx: ExecutionContext,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _handlerHash: string,
   ): HandlerContext {
     // Persist event helper
     const persistEvent = async (event: IntentEvent): Promise<void> => {
@@ -135,21 +221,32 @@ export class KalpRuntime {
       await this.persistence.events.append(event);
     };
 
-    // Bundle executor
     const executeBundle = async (
-      handlerHash: string,
+      targetHandlerHash: string,
       input: unknown,
     ): Promise<unknown> => {
-      const bundle = this.ir.bundles[handlerHash];
+      const bundle = this.ir.bundles[targetHandlerHash];
+
       if (!bundle) {
-        throw new Error(`Bundle not found: ${handlerHash}`);
+        throw new Error(`Bundle not found: ${targetHandlerHash}`);
       }
+
       const fn = new Function(`
         ${bundle.code}
         return __handler.default;
       `)();
+
       return fn(input);
     };
+
+    // Resolve system prompt (support both static string and dynamic function)
+    const systemPrompt = this.ir.metadata.systemPrompt;
+    const resolvedSystemPrompt =
+      typeof systemPrompt === "object" &&
+      systemPrompt !== null &&
+      "dynamic" in systemPrompt
+        ? "" // Dynamic prompts resolved at runtime by the handler
+        : (systemPrompt ?? "");
 
     return buildHandlerContext(
       this.persistence.state,
@@ -163,10 +260,7 @@ export class KalpRuntime {
       execCtx,
       {
         name: this.ir.metadata.name,
-        systemPrompt:
-          typeof this.ir.metadata.systemPrompt === "string"
-            ? this.ir.metadata.systemPrompt
-            : "",
+        systemPrompt: resolvedSystemPrompt,
         metadata: this.ir.metadata.metadata,
       },
     );

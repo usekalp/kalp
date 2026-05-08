@@ -181,43 +181,47 @@ export interface PersistenceAdapter {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Alarm payload for resuming suspended execution.
+ */
+export interface AlarmPayload {
+  executionId: string;
+  traceId: string;
+  wakeReason: string;
+  scheduleId?: string;
+}
+
+/**
  * Scheduler adapter for deferred execution (alarms, timers).
  *
- * Used by `actions.wait`, `actions.loop`, and `actions.schedule` for future
- * wake-ups. The adapter is responsible for persisting the alarm and re-entering
- * the reactor when it fires.
- *
- * Adapters may have limitations (e.g. CF: 1 alarm per DO). Core handles
- * multi-schedule queuing in {@link StateStore}; adapter fires one at a time.
+ * Supports multiple concurrent schedules. The Core manages the logical
+ * schedule queue in StateStore; the adapter only sets the physical timer
+ * for the next due alarm.
  *
  * **Best-effort timing** — scheduled events are approximate, not guaranteed
  * to fire at the exact requested time.
  */
 export interface SchedulerAdapter {
   /**
-   * Schedules a wake-up at the given timestamp (ms since epoch).
-   * If an alarm already exists, it should be replaced.
+   * Schedules a wake-up at the given timestamp.
+   * Replaces any existing alarm (adapter tracks only one physical timer).
    *
-   * @param at - Unix timestamp in milliseconds for the wake-up.
+   * @param at - Unix timestamp in milliseconds.
+   * @param payload - Data to pass when resuming.
    */
-  schedule(at: number): Promise<void>;
+  scheduleAlarm(at: number, payload: AlarmPayload): Promise<void>;
 
   /**
    * Cancels any pending scheduled wake-up.
    */
-  cancel(): Promise<void>;
+  cancelAlarm(): Promise<void>;
 
   /**
-   * Schedules an alarm with payload for resuming suspended execution.
-   * Used by actions.waitUntil for durable execution.
+   * Called by the host when an alarm fires.
+   * Returns due alarms up to current time.
    *
-   * @param at - Unix timestamp in milliseconds for the wake-up.
-   * @param payload - Data to pass when resuming (executionId, traceId, etc.).
+   * @returns Array of due alarm payloads.
    */
-  scheduleAlarm(
-    at: number,
-    payload: { executionId: string; traceId: string; wakeReason: string },
-  ): Promise<void>;
+  popDueAlarms(): Promise<AlarmPayload[]>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -258,4 +262,19 @@ export interface CrossThreadAdapter {
    * @param payload - The event payload.
    */
   send(targetThreadId: string, event: string, payload: unknown): Promise<void>;
+
+  /**
+   * Calls an agent via its contract and awaits response.
+   * Used by ctx.actions.callAgent.
+   *
+   * @param targetThreadId - The target thread's opaque identifier.
+   * @param contract - The agent contract defining the RPC interface.
+   * @param input - The input payload for the contract.
+   * @returns The output from the target agent.
+   */
+  callAgent<TInput, TOutput>(
+    targetThreadId: string,
+    contract: { name: string; input?: unknown; output?: unknown },
+    input: TInput,
+  ): Promise<TOutput>;
 }

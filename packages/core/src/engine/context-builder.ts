@@ -18,6 +18,7 @@ import type {
   StateStore,
   EventStore,
   SchedulerAdapter,
+  CrossThreadAdapter,
 } from "@/adapters/interfaces";
 import type { AIProvider } from "@/engine/primitives/ai";
 import type { ExecutionContext } from "@/engine/types";
@@ -83,6 +84,7 @@ export function buildHandlerContext(
     systemPrompt: string;
     metadata?: Record<string, unknown>;
   },
+  crossThread?: CrossThreadAdapter,
 ): HandlerContext {
   const ids = {
     executionId: execCtx.executionId,
@@ -100,6 +102,7 @@ export function buildHandlerContext(
       executeBundle,
       persistEvent,
       ir,
+      crossThread,
     ),
     auth: providers.auth,
     memory: providers.memory,

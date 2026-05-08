@@ -20,7 +20,10 @@ import type {
 } from "@kalphq/sdk";
 import { z } from "@kalphq/sdk";
 import type { EventLogBuffer, IntentEvent } from "@/engine/event-log-buffer";
-import type { SchedulerAdapter } from "@/adapters/interfaces";
+import type {
+  SchedulerAdapter,
+  CrossThreadAdapter,
+} from "@/adapters/interfaces";
 import type { ExecutionContext } from "@/engine/types";
 import { SuspensionException } from "@/engine/suspension";
 import { serializeError } from "@/engine/event-log-buffer";
@@ -47,6 +50,7 @@ export type EventPersister = (event: IntentEvent) => Promise<void>;
  * @param executeBundle - Callback to execute a handler bundle.
  * @param persistEvent - Callback to persist events to the store.
  * @param ir - The IR manifest for resolving handler hashes.
+ * @param crossThread - Optional adapter for cross-thread agent calls.
  * @returns A KalpActions proxy with intercepted methods.
  */
 export function createActionProxy(
@@ -56,6 +60,7 @@ export function createActionProxy(
   executeBundle: BundleExecutor,
   persistEvent: EventPersister,
   ir: IRGraph,
+  crossThread?: CrossThreadAdapter,
 ): KalpActions {
   return {
     async run<T extends ExecutableNode>(
@@ -157,7 +162,12 @@ export function createActionProxy(
         wakeReason: "timer",
       });
 
-      throw new SuspensionException(resumeAt, "timer", { until: resumeAt });
+      throw new SuspensionException(
+        resumeAt,
+        "timer",
+        { until: resumeAt },
+        seq,
+      );
     },
 
     loop(body: () => Promise<void>): void {
@@ -232,6 +242,9 @@ export function createActionProxy(
       const method =
         init?.method ?? (input instanceof Request ? input.method : "GET");
 
+      // Capture body if present
+      const requestBody = init?.body ? String(init.body) : undefined;
+
       // Check cache
       const cached = log.get(execCtx.executionId, seq);
       if (cached?.result) {
@@ -263,7 +276,7 @@ export function createActionProxy(
         traceId: execCtx.traceId,
         threadId: execCtx.threadId,
         timestamp: Date.now(),
-        payload: { url, method },
+        payload: { url, method, body: requestBody },
         result: {
           body,
           status: response.status,
@@ -322,7 +335,7 @@ export function createActionProxy(
         wakeReason: "ask_timeout",
       });
 
-      throw new SuspensionException(resumeAt, "ask", { prompt, seq });
+      throw new SuspensionException(resumeAt, "ask", { prompt, seq }, seq);
     },
 
     async requestApproval(
@@ -361,11 +374,57 @@ export function createActionProxy(
         return cached.result as z.infer<TOutput>;
       }
 
-      // Execute cross-agent call (via CrossThreadAdapter)
-      // This will be injected by the runtime
-      throw new Error(
-        `callAgent not yet implemented - needs CrossThreadAdapter for ${contract.agentId} with input ${JSON.stringify(input)}`,
+      if (!crossThread) {
+        throw new Error("CrossThreadAdapter not configured - cannot callAgent");
+      }
+
+      // Validate input if contract has input schema
+      if (contract.inputSchema) {
+        const validation = contract.inputSchema.safeParse(input);
+        if (!validation.success) {
+          throw new Error(
+            `Contract input validation failed: ${validation.error.message}`,
+          );
+        }
+      }
+
+      // Execute cross-agent call via adapter
+      const result = await crossThread.callAgent<
+        z.infer<TInput>,
+        z.infer<TOutput>
+      >(
+        contract.agentId,
+        {
+          name: contract.agentId,
+          input: contract.inputSchema,
+          output: contract.outputSchema,
+        },
+        input,
       );
+
+      // Validate output if contract has output schema
+      if (contract.outputSchema) {
+        const validation = contract.outputSchema.safeParse(result);
+        if (!validation.success) {
+          throw new Error(
+            `Contract output validation failed: ${validation.error.message}`,
+          );
+        }
+      }
+
+      // Persist the intent and result
+      await persistEvent({
+        seq,
+        type: "intent.call_agent",
+        executionId: execCtx.executionId,
+        traceId: execCtx.traceId,
+        threadId: execCtx.threadId,
+        timestamp: Date.now(),
+        payload: { contract: contract.agentId, input },
+        result,
+      });
+
+      return result;
     },
 
     async waitForEvent(
@@ -403,7 +462,7 @@ export function createActionProxy(
         });
       }
 
-      throw new SuspensionException(resumeAt, "event", { eventName, seq });
+      throw new SuspensionException(resumeAt, "event", { eventName, seq }, seq);
     },
 
     async schedule<T extends ExecutableNode>(

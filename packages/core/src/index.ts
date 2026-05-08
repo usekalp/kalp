@@ -41,8 +41,10 @@ export type {
   ExecutionContext,
   UntrackedIOSource,
   RuntimeEvent,
+  RuntimeEventType,
   ExecutionTask,
   HandlerModule,
+  ContractValidation,
 } from "@/engine/types";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -58,6 +60,7 @@ export type {
   EventStore,
   IdempotencyStore,
   ThreadStore,
+  AlarmPayload,
 } from "@/adapters/interfaces";
 
 import type { RuntimeProviders } from "@/engine/context-builder";
@@ -74,3 +77,22 @@ export { createHttpPrimitive } from "@/engine/primitives/http";
 export { createDatePrimitive } from "@/engine/primitives/date";
 export { createMathPrimitive } from "@/engine/primitives/math";
 export { createMcpPrimitive } from "@/engine/primitives/mcp";
+export { createMemoryPrimitive } from "@/engine/primitives/memory";
+export { createVaultPrimitive } from "@/engine/primitives/vault";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Schedule Manager
+// ────────────────────────────────────────────────────────────────────────────
+
+export { ScheduleManager } from "@/engine/schedule-manager";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Replay Engine
+// ────────────────────────────────────────────────────────────────────────────
+
+export {
+  validateReplay,
+  detectSequenceKeyDrift,
+  replayAndValidate,
+  type ReplayResult,
+} from "@/engine/replay-engine";
