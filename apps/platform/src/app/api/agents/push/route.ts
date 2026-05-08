@@ -3,8 +3,10 @@ import {
   validateIR,
   validateIRBindings,
   analyzeHandler,
+  calculateAgentHash,
 } from "@kalphq/compiler";
 import { logPush, type NamedAnalysis } from "@/lib/logger";
+import { getAgentHash, storeAgentVersion } from "@/lib/agent-store";
 import fs from "node:fs";
 
 export async function POST(req: Request) {
@@ -49,6 +51,37 @@ export async function POST(req: Request) {
     );
   }
 
+  // Re-calculate hash from IR + handlers for security validation
+  const calculatedHash = calculateAgentHash(ir, bundle.handlers);
+
+  // Security check: verify client-provided hash matches calculated hash
+  if (hash !== calculatedHash) {
+    return NextResponse.json(
+      {
+        ok: false,
+        phase: "hash",
+        errors: [
+          `Hash mismatch: client provided ${hash}, but calculated ${calculatedHash}`,
+        ],
+      },
+      { status: 400 },
+    );
+  }
+
+  // Check idempotency: compare with stored hash
+  const storedHash = getAgentHash(agentName);
+  if (storedHash === hash) {
+    // Idempotent: no change, return success without creating new version
+    return NextResponse.json({
+      ok: true,
+      hash,
+      unchanged: true,
+      analysis: [],
+      warnings: [],
+    });
+  }
+
+  // Hash differs, analyze handlers and create new version
   const analysis: NamedAnalysis[] = Object.entries(bundle.handlers).map(
     ([name, handler]) => ({
       name,
@@ -72,6 +105,9 @@ export async function POST(req: Request) {
     timestamp: new Date().toISOString(),
   });
 
+  // Store the new version in agent-store
+  storeAgentVersion(agentName, hash);
+
   // Export the full agent pack (IR + Bundled Handlers) to a single JSON for debugging/archival
   try {
     const agentPack = {
@@ -86,6 +122,8 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     hash,
+    unchanged: false,
+    isNewVersion: true,
     analysis,
     warnings: allWarnings,
   });

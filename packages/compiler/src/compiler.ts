@@ -32,6 +32,55 @@ function getSdkVersion(): string {
   }
 }
 
+/**
+ * Calculates the IR hash for identity validation.
+ * This function includes sortKeys internally to ensure deterministic hashing
+ * across different environments (CLI and Cloud).
+ *
+ * @param ir - The IR object (without meta field)
+ * @returns SHA-256 hash of the sorted IR
+ */
+export function calculateIRHash(ir: any): string {
+  const sortedIR = sortKeys(ir);
+  return createHash("sha256").update(JSON.stringify(sortedIR)).digest("hex");
+}
+
+/**
+ * Calculates the complete agent hash including IR and handler bundles.
+ * This is the unified hash function used by both CLI and Cloud for
+ * deterministic identity validation.
+ *
+ * @param ir - The IR object (without meta/irHash fields)
+ * @param handlers - Record of handler entries with hash property
+ * @returns SHA-256 hash of the combined IR + handlers
+ */
+export function calculateAgentHash(
+  ir: any,
+  handlers: Record<string, { hash: string }>,
+): string {
+  // Remove meta and irHash from IR before hashing
+  const irWithoutMeta = { ...ir };
+  delete irWithoutMeta.meta;
+  delete irWithoutMeta.irHash;
+
+  // Sort and hash IR
+  const sortedIR = sortKeys(irWithoutMeta);
+  const irHash = createHash("sha256")
+    .update(JSON.stringify(sortedIR))
+    .digest("hex");
+
+  // Sort and combine handler hashes
+  const sortedHandlerHashes = Object.keys(handlers)
+    .sort()
+    .map((k) => handlers[k]!.hash)
+    .join("|");
+
+  // Combine IR hash + handler hashes
+  return createHash("sha256")
+    .update(irHash + "|" + sortedHandlerHashes)
+    .digest("hex");
+}
+
 export async function buildAgent(
   entryPath: string,
   outDir: string,
@@ -243,12 +292,10 @@ export async function buildAgent(
     }
 
     // Hash and write (hash excludes meta for stable identity)
-    const sortedIR = sortKeys(ir);
-    const irHash = createHash("sha256")
-      .update(JSON.stringify(sortedIR))
-      .digest("hex");
+    const irHash = calculateIRHash(ir);
 
     // Add metadata after hash calculation (meta is not part of identity)
+    const sortedIR = sortKeys(ir);
     sortedIR.meta = {
       kalpVersion: getSdkVersion(),
       buildTimestamp: Date.now(),

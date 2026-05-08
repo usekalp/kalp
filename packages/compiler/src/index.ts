@@ -2,5 +2,5 @@
 // Compiler v2 — Public API
 // ────────────────────────────────────────────────────────────────────────────
 
-export { buildAgent } from "./compiler";
+export { buildAgent, calculateIRHash, calculateAgentHash } from "./compiler";
 export * from "./analysis";

@@ -112,6 +112,28 @@ export default defineCommand({
     s.stop(
       `Compiled ${pc.cyan(agentName)} — ${Object.keys(manifest.handlers).length} handlers`,
     );
+
+    // Pre-flight check: query Cloud for current agent status
+    s.start(`Checking for changes`);
+    const statusResponse = await fetch(
+      `http://localhost:3000/api/agents/${agentName}/status`,
+    );
+    const statusData = (await statusResponse.json().catch(() => null)) as {
+      agentName: string;
+      hash?: string;
+      exists: boolean;
+    } | null;
+
+    if (statusData?.exists && statusData.hash === hash) {
+      s.stop(pc.green("No changes detected"));
+      p.note(
+        `Agent ${pc.cyan(agentName)} is already deployed with the same logic.`,
+        "Skipped",
+      );
+      p.outro(`${LOGO} ${pc.green("No deployment needed")}`);
+      return;
+    }
+
     s.start(`Pushing to cloud`);
 
     const response = await fetch(`http://localhost:3000/api/agents/push`, {
@@ -144,5 +166,7 @@ export default defineCommand({
 
     const dashboardUrl = `http://localhost:3000/a/${agentName}`;
     p.outro(`${LOGO} ${pc.green("Agent live at")} ${pc.cyan(dashboardUrl)}`);
+
+    process.exit(0);
   },
 });

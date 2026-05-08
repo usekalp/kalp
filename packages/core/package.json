@@ -1,7 +1,11 @@
 {
   "name": "@kalphq/core",
   "version": "0.1.0",
-  "private": true,
+  "license": "MIT",
+  "author": "Kalp HQ",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "exports": {
     ".": {

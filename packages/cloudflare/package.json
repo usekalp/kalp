@@ -1,6 +1,6 @@
 {
   "name": "@kalphq/cloudflare",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Cloudflare Workers & Durable Objects adapters for Kalp",
   "license": "MIT",
   "author": "Kalp HQ",
