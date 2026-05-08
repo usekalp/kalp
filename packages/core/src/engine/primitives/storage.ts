@@ -8,8 +8,7 @@
  */
 
 import type { StoragePrimitive } from "@kalphq/sdk";
-import type { StateStore } from "@/adapters/interfaces";
-import type { ExecutionLog } from "@/engine/execution-log";
+import type { StateStore, EventStore } from "@/adapters/interfaces";
 import type { ExecutionContext } from "@/engine/types";
 
 /**
@@ -22,7 +21,7 @@ import type { ExecutionContext } from "@/engine/types";
  */
 export function createStoragePrimitive(
   stateStore: StateStore,
-  log: ExecutionLog,
+  eventStore: EventStore,
   execCtx?: ExecutionContext,
 ): StoragePrimitive {
   const ids = {
@@ -34,11 +33,13 @@ export function createStoragePrimitive(
   return {
     async get<T = unknown>(key: string): Promise<T | null> {
       const value = (await stateStore.get(key)) as T | null;
-      await log.emit({
+      await eventStore.append({
         type: "state.read",
         key,
         value,
-        ...ids,
+        executionId: ids.executionId,
+        traceId: ids.traceId,
+        threadId: ids.threadId,
         timestamp: Date.now(),
       });
       return value;
@@ -46,33 +47,39 @@ export function createStoragePrimitive(
 
     async put(key: string, value: unknown): Promise<void> {
       await stateStore.set(key, value);
-      await log.emit({
+      await eventStore.append({
         type: "state.write",
         key,
         value,
-        ...ids,
+        executionId: ids.executionId,
+        traceId: ids.traceId,
+        threadId: ids.threadId,
         timestamp: Date.now(),
       });
     },
 
     async delete(key: string): Promise<void> {
       await stateStore.delete(key);
-      await log.emit({
+      await eventStore.append({
         type: "state.write",
         key,
         value: undefined,
-        ...ids,
+        executionId: ids.executionId,
+        traceId: ids.traceId,
+        threadId: ids.threadId,
         timestamp: Date.now(),
       });
     },
 
     async increment(key: string, amount: number = 1): Promise<number> {
       const newValue = await stateStore.increment(key, amount);
-      await log.emit({
+      await eventStore.append({
         type: "state.write",
         key,
         value: newValue,
-        ...ids,
+        executionId: ids.executionId,
+        traceId: ids.traceId,
+        threadId: ids.threadId,
         timestamp: Date.now(),
       });
       return newValue;

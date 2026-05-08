@@ -1,18 +1,8 @@
 /**
- * Handler context builder for the Kalp v2 Orchestration Reactor.
+ * Handler context builder for the Kalp Proxy-Listener Runtime.
  *
  * Assembles the {@link HandlerContext} that is passed to every handler function.
- * Each primitive in the context is intercepted — all operations emit structured
- * events to the execution log.
- *
- * The context shape matches the SDK's `HandlerContext` interface exactly,
- * preserving DX:
- *
- * ```ts
- * const { fetch, loop, run, wait } = actions;
- * const { delete: deleteKey, get, put } = storage;
- * const { classify, generate, stream } = ai;
- * ```
+ * The context shape matches the SDK's `HandlerContext` interface exactly.
  *
  * @module
  */
@@ -22,19 +12,23 @@ import type {
   KalpAuth,
   KalpMemory,
   KalpVault,
+  IRGraph,
 } from "@kalphq/sdk";
-import type { StateStore, SchedulerAdapter } from "@/adapters/interfaces";
-import type { ExecutionLog } from "@/engine/execution-log";
+import type {
+  StateStore,
+  EventStore,
+  SchedulerAdapter,
+} from "@/adapters/interfaces";
 import type { AIProvider } from "@/engine/primitives/ai";
-import type { DispatchAction } from "@/engine/primitives/actions";
+import type { ExecutionContext } from "@/engine/types";
+import type { EventLogBuffer } from "@/engine/event-log-buffer";
+import type { BundleExecutor, EventPersister } from "@/engine/proxy-factory";
 import { createAIPrimitive } from "@/engine/primitives/ai";
 import { createStoragePrimitive } from "@/engine/primitives/storage";
-import { createActionsPrimitive } from "@/engine/primitives/actions";
-import { createMcpPrimitive } from "@/engine/primitives/mcp";
 import { createDatePrimitive } from "@/engine/primitives/date";
 import { createMathPrimitive } from "@/engine/primitives/math";
-import { createAgentMetaPrimitive } from "@/engine/primitives/agent-meta";
-import type { ExecutionContext } from "@/engine/types";
+import { createMcpPrimitive } from "@/engine/primitives/mcp";
+import { createActionProxy } from "@/engine/proxy-factory";
 
 // ────────────────────────────────────────────────────────────────────────────
 // External providers injected by the host adapter
@@ -60,28 +54,30 @@ export interface RuntimeProviders {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Builds a {@link HandlerContext} with fully intercepted primitives.
+ * Builds a {@link HandlerContext} with intercepted primitives.
  *
- * Every operation on the returned context (ai.generate, storage.put,
- * actions.run, etc.) is intercepted to emit structured events to the
- * execution log. The handler never touches infrastructure directly.
- *
- * @param log - The execution log for event emission.
  * @param stateStore - The state sub-store for KV operations.
+ * @param eventStore - The event store for event emission.
  * @param scheduler - The scheduler adapter for deferred execution.
- * @param dispatch - Callback to enqueue handler tasks in the reactor.
+ * @param log - The event log buffer for cache lookup.
+ * @param executeBundle - Callback to execute a handler bundle.
+ * @param persistEvent - Callback to persist events to the store.
+ * @param ir - The IR manifest for resolving handler hashes.
  * @param providers - External providers (ai, auth, memory, vault).
  * @param execCtx - Optional execution context for event identity.
  * @param agentConfig - Optional agent configuration for metadata.
  * @returns A complete {@link HandlerContext} matching the SDK interface.
  */
 export function buildHandlerContext(
-  log: ExecutionLog,
   stateStore: StateStore,
+  eventStore: EventStore,
   scheduler: SchedulerAdapter,
-  dispatch: DispatchAction,
+  log: EventLogBuffer,
+  executeBundle: BundleExecutor,
+  persistEvent: EventPersister,
+  ir: IRGraph,
   providers: RuntimeProviders,
-  execCtx?: ExecutionContext,
+  execCtx: ExecutionContext,
   agentConfig?: {
     name: string;
     systemPrompt: string;
@@ -89,63 +85,84 @@ export function buildHandlerContext(
   },
 ): HandlerContext {
   const ids = {
-    executionId: execCtx?.executionId ?? "",
-    traceId: execCtx?.traceId ?? "",
-    threadId: execCtx?.threadId ?? "",
+    executionId: execCtx.executionId,
+    traceId: execCtx.traceId,
+    threadId: execCtx.threadId,
   };
 
   return {
-    ai: createAIPrimitive(providers.ai, log),
-    storage: createStoragePrimitive(stateStore, log, execCtx),
-    actions: createActionsPrimitive(log, scheduler, dispatch, execCtx),
+    ai: createAIPrimitive(providers.ai, eventStore, execCtx),
+    storage: createStoragePrimitive(stateStore, eventStore, execCtx),
+    actions: createActionProxy(
+      log,
+      scheduler,
+      execCtx,
+      executeBundle,
+      persistEvent,
+      ir,
+    ),
     auth: providers.auth,
     memory: providers.memory,
     vault: providers.vault,
-    mcp: createMcpPrimitive(log, execCtx),
-    agent: createAgentMetaPrimitive(log, execCtx, agentConfig),
-    date: createDatePrimitive(log, execCtx),
-    math: createMathPrimitive(log, execCtx),
+    mcp: createMcpPrimitive(eventStore, execCtx),
+    agent: {
+      agentId: execCtx.executionId,
+      runId: execCtx.traceId,
+      name: agentConfig?.name ?? "unknown",
+      systemPrompt: agentConfig?.systemPrompt ?? "",
+      metadata: agentConfig?.metadata,
+    },
+    date: createDatePrimitive(eventStore, execCtx),
+    math: createMathPrimitive(eventStore, execCtx),
     log: {
-      debug: (msg, data) =>
-        void log.emit({
+      debug: (msg: string, data?: Record<string, unknown>) =>
+        void eventStore.append({
           type: "log",
           level: "debug",
           msg,
           data,
-          ...ids,
+          executionId: ids.executionId,
+          traceId: ids.traceId,
+          threadId: ids.threadId,
           timestamp: Date.now(),
         }),
-      info: (msg, data) =>
-        void log.emit({
+      info: (msg: string, data?: Record<string, unknown>) =>
+        void eventStore.append({
           type: "log",
           level: "info",
           msg,
           data,
-          ...ids,
+          executionId: ids.executionId,
+          traceId: ids.traceId,
+          threadId: ids.threadId,
           timestamp: Date.now(),
         }),
-      warn: (msg, data) =>
-        void log.emit({
+      warn: (msg: string, data?: Record<string, unknown>) =>
+        void eventStore.append({
           type: "log",
           level: "warn",
           msg,
           data,
-          ...ids,
+          executionId: ids.executionId,
+          traceId: ids.traceId,
+          threadId: ids.threadId,
           timestamp: Date.now(),
         }),
-      error: (err, data) => {
+      error: (err: unknown, data?: Record<string, unknown>) => {
         const msg = err instanceof Error ? err.message : String(err);
         const errorData =
           err instanceof Error ? { ...data, stack: err.stack } : data;
-        void log.emit({
+        void eventStore.append({
           type: "log",
           level: "error",
           msg,
           data: errorData,
-          ...ids,
+          executionId: ids.executionId,
+          traceId: ids.traceId,
+          threadId: ids.threadId,
           timestamp: Date.now(),
         });
       },
     },
-  };
+  } as unknown as HandlerContext;
 }

@@ -3,7 +3,6 @@ import { getRegistry, clearRegistry } from "@kalphq/sdk";
 import { bundleHandler, ensureHandlersDir } from "./bundler";
 import { buildSchemaIR, sortKeys } from "./ir-generator";
 import { createHash } from "crypto";
-import { createRequire } from "module";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -110,8 +109,35 @@ export async function buildAgent(
     const registry = getRegistry();
     assertUniqueIds(registry);
 
-    const ir: any = {
-      agent: {
+    // v3 Manifest format: static registry only, no graph edges
+    const ir: {
+      version: 3;
+      metadata: {
+        name: string;
+        description?: string;
+        systemPrompt?: string | { type: "function"; dynamic: true };
+      };
+      entries: Record<string, string>; // event name -> handler hash
+      bundles: Record<
+        string,
+        {
+          code: string;
+          type: "entry" | "step" | "tool" | "route";
+          inputSchema?: Record<string, unknown>;
+          outputSchema?: Record<string, unknown>;
+        }
+      >;
+      schedules?: Record<
+        string,
+        {
+          cron: string;
+          handlerHash: string;
+          timezone?: string;
+        }
+      >;
+    } = {
+      version: 3,
+      metadata: {
         name: agentConfig.name,
         description: agentConfig.description,
         systemPrompt: agentConfig.systemPrompt
@@ -119,27 +145,10 @@ export async function buildAgent(
             ? { type: "function", dynamic: true }
             : agentConfig.systemPrompt
           : undefined,
-        hooks: {},
       },
-      steps: {},
-      tools: {},
-      routes: {},
-      schedules: {},
+      entries: {},
+      bundles: {},
     };
-
-    if (agentConfig.contract) {
-      const { schema: inputSchema } = buildSchemaIR(
-        agentConfig.contract.inputSchema,
-      );
-      const { schema: outputSchema } = buildSchemaIR(
-        agentConfig.contract.outputSchema,
-      );
-      ir.agent.contract = {
-        agentId: agentConfig.contract.agentId,
-        inputSchema,
-        outputSchema,
-      };
-    }
 
     // Resolve exports dynamically and bundle
     const fileExportsCache = new Map<string, any>();
@@ -149,6 +158,22 @@ export async function buildAgent(
         fileExportsCache.set(resolvedPath, await jiti.import(resolvedPath));
       }
       return fileExportsCache.get(resolvedPath);
+    }
+
+    // Helper to store bundle and return hash
+    function storeBundle(
+      hash: string,
+      code: string,
+      type: "entry" | "step" | "tool" | "route",
+      inputSchema?: Record<string, unknown>,
+      outputSchema?: Record<string, unknown>,
+    ): void {
+      ir.bundles[hash] = {
+        code,
+        type,
+        ...(inputSchema && { inputSchema }),
+        ...(outputSchema && { outputSchema }),
+      };
     }
 
     // Process registry steps & tools
@@ -171,7 +196,7 @@ export async function buildAgent(
         );
       }
 
-      // bundleHandler(filePath, outDir, exportName, isNode)
+      // Bundle the handler
       const bundleRes = await bundleHandler(
         filePath,
         outDir,
@@ -179,27 +204,18 @@ export async function buildAgent(
         true,
       );
 
-      const { schema: inSchema, meta: inMeta } = buildSchemaIR(
-        node.inputSchema,
-      );
+      const { schema: inSchema } = buildSchemaIR(node.inputSchema);
       const { schema: outSchema } = buildSchemaIR(node.outputSchema);
 
-      const irNode = {
-        id,
-        description: node.description,
-        kind,
-        inputSchema: inSchema,
-        inputSchemaMeta: inMeta,
-        outputSchema: outSchema,
-        handlerFile: bundleRes.handlerFile,
-        handlerVersion: bundleRes.hash,
-      };
+      // Store in bundles by hash
+      storeBundle(bundleRes.hash, bundleRes.code, kind, inSchema, outSchema);
 
-      if (kind === "step") ir.steps[id] = irNode;
-      if (kind === "tool") ir.tools[id] = irNode;
+      // Create moduleRef pattern: steps.id or tools.id
+      const moduleRef = `${kind}s.${id}`;
+      ir.entries[moduleRef] = bundleRes.hash;
     }
 
-    // Process hooks
+    // Process entry hooks (onMessage, onCall, onInit, onTick)
     const hooks = ["onMessage", "onCall", "onInit", "onTick"];
     for (const hook of hooks) {
       if (agentConfig[hook]) {
@@ -209,12 +225,9 @@ export async function buildAgent(
           hook,
           false,
         );
-        ir.agent.hooks[hook] = {
-          type: "agent_entry",
-          signature: "agent_context",
-          handlerFile: bundleRes.handlerFile,
-          handlerVersion: bundleRes.hash,
-        };
+
+        storeBundle(bundleRes.hash, bundleRes.code, "entry");
+        ir.entries[hook] = bundleRes.hash;
       }
     }
 
@@ -240,7 +253,6 @@ export async function buildAgent(
           );
         }
 
-        const id = route.id || `${route.method}:${route.path}`;
         const routeKey = `${route.method}:${route.path}`;
 
         const bundleRes = await bundleHandler(
@@ -250,23 +262,16 @@ export async function buildAgent(
           false,
         );
 
-        const { schema: inSchema, meta: inMeta } = buildSchemaIR(
-          route.inputSchema,
-        );
+        const { schema: inSchema } = buildSchemaIR(route.inputSchema);
 
-        ir.routes[routeKey] = {
-          method: route.method,
-          path: route.path,
-          inputSchema: inSchema,
-          inputSchemaMeta: inMeta,
-          handlerFile: bundleRes.handlerFile,
-          handlerVersion: bundleRes.hash,
-        };
+        storeBundle(bundleRes.hash, bundleRes.code, "route", inSchema);
+        ir.entries[routeKey] = bundleRes.hash;
       }
     }
 
     // Process cron schedules
     if (Array.isArray(agentConfig.cron)) {
+      ir.schedules = {};
       for (let i = 0; i < agentConfig.cron.length; i++) {
         const schedule = agentConfig.cron[i];
         const scheduleId = `schedule:${i}`;
@@ -279,14 +284,11 @@ export async function buildAgent(
           false,
         );
 
+        storeBundle(bundleRes.hash, bundleRes.code, "entry");
         ir.schedules[scheduleId] = {
-          kind: "schedule",
-          id: scheduleId,
           cron: schedule.expression,
-          handler: scheduleId,
+          handlerHash: bundleRes.hash,
           timezone: schedule.timezone,
-          handlerFile: bundleRes.handlerFile,
-          handlerVersion: bundleRes.hash,
         };
       }
     }
@@ -296,12 +298,12 @@ export async function buildAgent(
 
     // Add metadata after hash calculation (meta is not part of identity)
     const sortedIR = sortKeys(ir);
-    sortedIR.meta = {
+    (sortedIR as any).meta = {
       kalpVersion: getSdkVersion(),
       buildTimestamp: Date.now(),
       nodeVersion: process.version,
     };
-    sortedIR.irHash = irHash;
+    (sortedIR as any).irHash = irHash;
 
     fs.writeFileSync(
       path.join(outDir, "ir.json"),

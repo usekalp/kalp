@@ -8,7 +8,7 @@
  */
 
 import type { KalpAI } from "@kalphq/sdk";
-import type { ExecutionLog } from "@/engine/execution-log";
+import type { EventStore } from "@/adapters/interfaces";
 import type { ExecutionContext } from "@/engine/types";
 
 /**
@@ -33,7 +33,7 @@ export type AIProvider = KalpAI;
  */
 export function createAIPrimitive(
   provider: AIProvider,
-  log: ExecutionLog,
+  eventStore: EventStore,
   execCtx?: ExecutionContext,
 ): KalpAI {
   const ids = {
@@ -45,12 +45,14 @@ export function createAIPrimitive(
   return {
     async generate(params) {
       const result = await provider.generate(params);
-      await log.emit({
+      await eventStore.append({
         type: "primitive.invoked",
         name: "ai.generate",
         params: { model: params.model, prompt: params.prompt },
         result,
-        ...ids,
+        executionId: ids.executionId,
+        traceId: ids.traceId,
+        threadId: ids.threadId,
         timestamp: Date.now(),
       });
       return result;
@@ -59,12 +61,14 @@ export function createAIPrimitive(
     stream(params) {
       // Stream is special — we log the invocation but return the iterable.
       // Individual chunks are NOT logged (too noisy). The caller consumes them.
-      void log.emit({
+      void eventStore.append({
         type: "primitive.invoked",
         name: "ai.stream",
         params: { model: params.model, prompt: params.prompt },
         result: "[stream]",
-        ...ids,
+        executionId: ids.executionId,
+        traceId: ids.traceId,
+        threadId: ids.threadId,
         timestamp: Date.now(),
       });
       return provider.stream(params);
@@ -72,12 +76,14 @@ export function createAIPrimitive(
 
     async classify(params) {
       const result = await provider.classify(params);
-      await log.emit({
+      await eventStore.append({
         type: "primitive.invoked",
         name: "ai.classify",
         params: { input: params.input, labels: params.labels },
         result,
-        ...ids,
+        executionId: ids.executionId,
+        traceId: ids.traceId,
+        threadId: ids.threadId,
         timestamp: Date.now(),
       });
       return result;

@@ -246,6 +246,22 @@ export class InMemoryScheduler implements SchedulerAdapter {
     this.scheduledAt = null;
   }
 
+  /**
+   * Schedules an alarm with payload for resuming suspended execution.
+   *
+   * @param at - Unix timestamp in milliseconds for the wake-up.
+   * @param _payload - Data to pass when resuming (executionId, traceId, etc.).
+   */
+  async scheduleAlarm(
+    at: number,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _payload: { executionId: string; traceId: string; wakeReason: string },
+  ): Promise<void> {
+    this.scheduledAt = at;
+    // In-memory implementation doesn't persist payload, but stores the timestamp
+    // Test harness can fire the alarm manually
+  }
+
   // ── Test helpers ──
 
   /** Returns the next scheduled timestamp, or null. */

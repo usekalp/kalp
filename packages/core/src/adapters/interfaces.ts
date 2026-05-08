@@ -1,5 +1,5 @@
 /**
- * Adapter interfaces for the Kalp v2 Orchestration Reactor.
+ * Adapter interfaces for the Kalp Orchestration Reactor.
  *
  * These contracts decouple the runtime core from any specific infrastructure.
  * The reactor never touches storage, scheduling, or transport directly —
@@ -13,6 +13,7 @@
  */
 
 import type { ExecutionEvent } from "../engine/types";
+import type { IntentEvent } from "../engine/event-log-buffer";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Sub-stores (decomposed persistence)
@@ -79,7 +80,7 @@ export interface EventStore {
    *
    * @param event - The execution event to persist.
    */
-  append(event: ExecutionEvent): Promise<void>;
+  append(event: ExecutionEvent | IntentEvent): Promise<void>;
 
   /**
    * Loads all events from the execution log, ordered by insertion.
@@ -205,6 +206,18 @@ export interface SchedulerAdapter {
    * Cancels any pending scheduled wake-up.
    */
   cancel(): Promise<void>;
+
+  /**
+   * Schedules an alarm with payload for resuming suspended execution.
+   * Used by actions.waitUntil for durable execution.
+   *
+   * @param at - Unix timestamp in milliseconds for the wake-up.
+   * @param payload - Data to pass when resuming (executionId, traceId, etc.).
+   */
+  scheduleAlarm(
+    at: number,
+    payload: { executionId: string; traceId: string; wakeReason: string },
+  ): Promise<void>;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

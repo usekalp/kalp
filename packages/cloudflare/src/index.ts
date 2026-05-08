@@ -15,7 +15,7 @@
 export { AgentDurableObject } from "./runtime/durable-object";
 
 // Wiring
-export { wireReactor } from "./wiring";
+export { wireRuntime } from "./wiring";
 
 // DO Adapters
 export {

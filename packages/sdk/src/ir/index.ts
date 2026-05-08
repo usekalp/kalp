@@ -5,16 +5,8 @@
  */
 
 export type {
-  IRNodeId,
-  IRNodeKind,
-  IRNodeBase,
-  EntryIRNode,
-  HandlerType,
-  HandlerIRNode,
-  ScheduleIRNode,
-  IRNode,
-  IREdgeType,
-  IREdge,
   AgentMetadata,
+  HandlerBundle,
+  ScheduleEntry,
   IRGraph,
 } from "@/ir/types";

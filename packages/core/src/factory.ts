@@ -1,5 +1,5 @@
 /**
- * Engine factory — the ONLY way to create a reactor instance.
+ * Runtime factory — the ONLY way to create a KalpRuntime instance.
  *
  * This file is deliberately separate from the barrel (index.ts) to prevent
  * coupling between type consumers and runtime consumers.
@@ -14,22 +14,24 @@
  */
 
 import type { IRGraph } from "@kalphq/sdk";
-import { OrchestrationReactor } from "@/engine/reactor";
-import type { HandlerModule } from "@/engine/types";
-import type { PersistenceAdapter, SchedulerAdapter } from "@/adapters/interfaces";
+import { KalpRuntime } from "@/engine/runtime";
+import type {
+  PersistenceAdapter,
+  SchedulerAdapter,
+} from "@/adapters/interfaces";
 import type { RuntimeProviders } from "@/engine/context-builder";
 
+export { KalpRuntime };
+
 /**
- * Configuration for creating a new reactor instance.
+ * Configuration for creating a new KalpRuntime instance.
  *
  * All fields are required. Platform wiring files are responsible for
  * creating the adapter instances and passing them here.
  */
-export interface ReactorConfig {
-  /** The compiled IR graph for the agent. */
+export interface RuntimeConfig {
+  /** The compiled IR manifest for the agent. */
   ir: IRGraph;
-  /** Map from moduleRef to bundled handler module. */
-  bundles: Map<string, HandlerModule>;
   /** Composite persistence adapter (state, events, idempotency, threads). */
   persistence: PersistenceAdapter;
   /** Scheduler adapter for deferred wake-ups. */
@@ -39,29 +41,28 @@ export interface ReactorConfig {
 }
 
 /**
- * Creates a new {@link OrchestrationReactor} instance.
+ * Creates a new {@link KalpRuntime} instance.
  *
  * This is the standard entrypoint for all platform adapters.
  * The factory performs no validation — callers are responsible for
  * ensuring the config is complete and correct.
  *
- * @param config - The reactor configuration.
- * @returns A fully initialized reactor ready to handle events.
+ * @param config - The runtime configuration.
+ * @returns A fully initialized runtime ready to handle events.
  *
  * @example
  * ```ts
- * import { createReactor } from "@kalphq/core/factory";
+ * import { createRuntime } from "@kalphq/core/factory";
  *
- * const reactor = createReactor({
- *   ir, bundles, persistence, scheduler, providers,
+ * const runtime = createRuntime({
+ *   ir, persistence, scheduler, providers,
  * });
- * await reactor.handleEvent(event);
+ * await runtime.handleEvent(event);
  * ```
  */
-export function createReactor(config: ReactorConfig): OrchestrationReactor {
-  return new OrchestrationReactor(
+export function createRuntime(config: RuntimeConfig): KalpRuntime {
+  return new KalpRuntime(
     config.ir,
-    config.bundles,
     config.persistence,
     config.scheduler,
     config.providers,

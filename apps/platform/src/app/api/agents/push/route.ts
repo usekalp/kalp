@@ -13,15 +13,18 @@ export async function POST(req: Request) {
   const body = (await req.json()) as Record<string, unknown>;
 
   const agentName = body.agentName as string | undefined;
-  const ir = body.ir;
-  const hash = body.hash as string | undefined;
-  const bundle = body.bundle as
+  const ir = body.ir as
     | {
-        handlers?: Record<string, { code: string; hash: string; size: number }>;
+        bundles?: Record<string, { code: string; type?: string }>;
       }
     | undefined;
+  const hash = body.hash as string | undefined;
 
-  if (!agentName || !ir || !hash || !bundle?.handlers) {
+  // IR V3: handlers are in ir.bundles, not a separate bundle object
+  const bundles = ir?.bundles || {};
+  const bundleHashes = Object.keys(bundles);
+
+  if (!agentName || !ir || !hash || bundleHashes.length === 0) {
     return NextResponse.json(
       {
         ok: false,
@@ -42,8 +45,8 @@ export async function POST(req: Request) {
 
   const irGraph = ir as Parameters<typeof validateIRBindings>[0];
 
-  const handlerNames = Object.keys(bundle.handlers);
-  const bindingValidation = validateIRBindings(irGraph, handlerNames);
+  // Validate that all bundle hashes are properly registered in entries
+  const bindingValidation = validateIRBindings(irGraph, bundleHashes);
   if (!bindingValidation.valid) {
     return NextResponse.json(
       { ok: false, phase: "bindings", errors: bindingValidation.errors },
@@ -51,8 +54,17 @@ export async function POST(req: Request) {
     );
   }
 
+  // Build handlers map from ir.bundles for hash calculation
+  const handlers = bundleHashes.reduce(
+    (acc, hash) => ({
+      ...acc,
+      [hash]: { hash },
+    }),
+    {} as Record<string, { hash: string }>,
+  );
+
   // Re-calculate hash from IR + handlers for security validation
-  const calculatedHash = calculateAgentHash(ir, bundle.handlers);
+  const calculatedHash = calculateAgentHash(ir, handlers);
 
   // Security check: verify client-provided hash matches calculated hash
   if (hash !== calculatedHash) {
@@ -82,10 +94,10 @@ export async function POST(req: Request) {
   }
 
   // Hash differs, analyze handlers and create new version
-  const analysis: NamedAnalysis[] = Object.entries(bundle.handlers).map(
-    ([name, handler]) => ({
+  const analysis: NamedAnalysis[] = Object.entries(bundles).map(
+    ([name, bundle]) => ({
       name,
-      ...analyzeHandler(handler.code),
+      ...analyzeHandler(bundle.code),
     }),
   );
 
@@ -108,13 +120,9 @@ export async function POST(req: Request) {
   // Store the new version in agent-store
   storeAgentVersion(agentName, hash);
 
-  // Export the full agent pack (IR + Bundled Handlers) to a single JSON for debugging/archival
+  // Export the full agent pack (IR with bundles) to a single JSON for debugging/archival
   try {
-    const agentPack = {
-      ...ir,
-      bundle,
-    };
-    fs.writeFileSync("agent-pack.json", JSON.stringify(agentPack, null, 2));
+    fs.writeFileSync("agent-pack.json", JSON.stringify(ir, null, 2));
   } catch (e) {
     console.error("Failed to export agent-pack.json", e);
   }

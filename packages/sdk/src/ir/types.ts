@@ -1,53 +1,35 @@
 /**
  * IR (Intermediate Representation) types for the Kalp compiler.
  *
+ * The IR is a static manifest/registry. Flow control lives in the
+ * compiled JS code; the IR just maps event names to handler bundles.
+ *
  * @module
  */
 
-/** Branded string type for IR node identifiers. */
-export type IRNodeId = string & { readonly __brand: "IRNodeId" };
-
 /**
- * The only two node kinds in the IR.
- * - `entry` - event-driven entrypoint (lifecycle, route)
- * - `handler` - opaque reference to a bundled handler module
+ * Agent metadata for introspection (static compile-time info).
+ * Runtime IDs (agentId, runId) are injected by the runtime, not stored here.
  */
-export type IRNodeKind = "entry" | "handler" | "schedule";
-
-/** Base fields shared by all IR nodes. */
-export interface IRNodeBase {
-  kind: IRNodeKind;
-  id: IRNodeId;
+export interface AgentMetadata {
+  /** Display name for the agent. */
+  name: string;
+  /** Optional description. */
+  description?: string;
+  /** System prompt or dynamic prompt function. */
+  systemPrompt?: string | { type: "function"; dynamic: true };
+  /** Additional metadata. */
+  metadata?: Record<string, unknown>;
 }
 
 /**
- * Entry node - an event-driven entrypoint into the agent.
- * Maps an event name (e.g. "onMessage", "route:GET:/health") to a handler.
+ * A bundled handler module - the executable code for a handler.
  */
-export interface EntryIRNode extends IRNodeBase {
-  kind: "entry";
-  /** Event name that triggers this entry. */
-  handler: string;
-  /** HTTP method (only for route entries). */
-  method?: string;
-  /** URL path (only for route entries). */
-  path?: string;
-}
-
-/** The type of handler a HandlerIRNode represents. */
-export type HandlerType = "lifecycle" | "step" | "tool" | "route";
-
-/**
- * Handler node - an opaque reference to a bundled handler module.
- * The IR does not know what the handler does internally; all effects
- * (ai, storage, actions, etc.) are intercepted at runtime.
- */
-export interface HandlerIRNode extends IRNodeBase {
-  kind: "handler";
-  /** Reference to the bundled module (e.g. "onMessage", "steps.processQuery", "tools.search"). */
-  moduleRef: string;
-  /** Discriminator for the handler category. */
-  handlerType: HandlerType;
+export interface HandlerBundle {
+  /** The bundled JavaScript code. */
+  code: string;
+  /** Handler type discriminator. */
+  type: "entry" | "step" | "tool" | "route";
   /** Optional JSON Schema for the handler's input. */
   inputSchema?: Record<string, unknown>;
   /** Optional JSON Schema for the handler's output. */
@@ -55,68 +37,42 @@ export interface HandlerIRNode extends IRNodeBase {
 }
 
 /**
- * Schedule node - a cron-based scheduled entrypoint.
+ * A scheduled cron job entry.
  */
-export interface ScheduleIRNode extends IRNodeBase {
-  kind: "schedule";
+export interface ScheduleEntry {
+  /** Cron expression (e.g., "0 9 * * 1-5"). */
   cron: string;
-  handler: IRNodeId;
+  /** Handler hash to execute. */
+  handlerHash: string;
+  /** Optional timezone (e.g., "America/New_York"). */
   timezone?: string;
 }
 
-/** Union of all IR node types. */
-export type IRNode = EntryIRNode | HandlerIRNode | ScheduleIRNode;
-
 /**
- * The only two edge types in the IR.
- * - `sequential` - A completes, then B starts.
- * - `event` - An internal event triggers node B.
- */
-export type IREdgeType = "sequential" | "event";
-
-/**
- * A directed edge in the IR graph.
- */
-export interface IREdge {
-  from: IRNodeId;
-  to: IRNodeId;
-  type: IREdgeType;
-  /** Optional descriptive tag. NEVER used as control-flow logic. */
-  label?: string;
-}
-
-/**
- * Agent metadata for introspection (static compile-time info).
- * Runtime IDs (agentId, runId) are injected by the runtime, not stored here.
- */
-export interface AgentMetadata {
-  name: string;
-  systemPrompt: string | { type: "function"; dynamic: true };
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * The complete IR graph - a minimal structural index of the agent.
+ * The complete v3 IR manifest - a static registry of agent artifacts.
  *
- * The IR is the sole compile-time artifact. It records which entrypoints
- * and handlers exist, and how they are structurally connected. All runtime
- * behavior (branches, loops, effects) is resolved by the Orchestration Reactor.
+ * The IR contains no graph edges or flow control - the user's JavaScript
+ * code is the orchestrator. The runtime simply loads the appropriate
+ * handler bundle when an event arrives.
  */
 export interface IRGraph {
-  /** IR schema version. */
-  version: 2;
-  /** Agent identifier (generated server-side as ag_<ulid>). */
-  agentId: string;
+  /** IR schema version - always 3 for this format. */
+  version: 3;
   /** Agent metadata for introspection. */
-  agentMetadata: AgentMetadata;
-  /** Map from event name to entry node ID. */
-  entries: Record<string, IRNodeId>;
-  /** All nodes keyed by ID. */
-  nodes: Record<IRNodeId, IRNode>;
-  /** Directed edges between nodes. */
-  edges: IREdge[];
-  /** O(1) lookup: moduleRef → handler node ID. Built by the compiler. */
-  handlerIndex: Record<string, IRNodeId>;
-  /** Scheduled cron jobs. */
-  schedules?: Record<string, ScheduleIRNode>;
+  metadata: AgentMetadata;
+  /**
+   * Map from event name to handler hash.
+   * Examples:
+   * - "onMessage" -> "abc123..."
+   * - "onCall" -> "def456..."
+   * - "GET:/health" -> "ghi789..."
+   */
+  entries: Record<string, string>;
+  /**
+   * Map from handler hash to bundled code.
+   * The hash is SHA-256 of the bundled code for identity/validation.
+   */
+  bundles: Record<string, HandlerBundle>;
+  /** Scheduled cron jobs keyed by schedule ID. */
+  schedules?: Record<string, ScheduleEntry>;
 }

@@ -42,10 +42,9 @@ function printPushError(
   const div = pc.dim("─".repeat(48));
   console.log("\n" + div);
 
-  // Use DX-first rendering for all errors
   for (const e of errors) {
     console.log(renderLegacyError(e, verbose));
-    console.log(""); // Empty line between errors
+    console.log("");
   }
 
   if (phase === "analysis" && blockers) {
@@ -107,17 +106,23 @@ export default defineCommand({
     s.start(`Compiling ${pc.cyan(agentName)}`);
 
     const manifest = await readAgentManifest({ cwd, agentName });
-    const hash = computePushHash(manifest.ir, manifest.handlers);
 
-    s.stop(
-      `Compiled ${pc.cyan(agentName)} — ${Object.keys(manifest.handlers).length} handlers`,
-    );
+    const bundles = (manifest.ir.bundles || {}) as Record<
+      string,
+      { code: string }
+    >;
+    const handlerCount = Object.keys(bundles).length;
 
-    // Pre-flight check: query Cloud for current agent status
+    const hash = computePushHash(manifest.ir);
+
+    s.stop(`Compiled ${pc.cyan(agentName)} — ${handlerCount} handlers`);
+
     s.start(`Checking for changes`);
+
     const statusResponse = await fetch(
       `http://localhost:3000/api/agents/${agentName}/status`,
     );
+
     const statusData = (await statusResponse.json().catch(() => null)) as {
       agentName: string;
       hash?: string;
@@ -143,7 +148,6 @@ export default defineCommand({
         agentName,
         ir: manifest.ir,
         hash,
-        bundle: { handlers: manifest.handlers },
       }),
     });
 
@@ -161,8 +165,18 @@ export default defineCommand({
       process.exit(1);
     }
 
+    const displayHandlers = Object.entries(bundles).reduce(
+      (acc, [hash, bundle]) => ({
+        ...acc,
+        [hash]: {
+          size: Buffer.byteLength(bundle.code),
+        },
+      }),
+      {} as Record<string, { size: number }>,
+    );
+
     s.stop(pc.green("Pushed successfully"));
-    printPushResult(agentName, hash, manifest.handlers);
+    printPushResult(agentName, hash, displayHandlers);
 
     const dashboardUrl = `http://localhost:3000/a/${agentName}`;
     p.outro(`${LOGO} ${pc.green("Agent live at")} ${pc.cyan(dashboardUrl)}`);

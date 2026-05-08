@@ -1,11 +1,17 @@
 import { z } from "zod";
-import { defineStep, defineTool, defineRoute, defineAgent, defineContract } from "@kalphq/sdk";
+import {
+  defineStep,
+  defineTool,
+  defineRoute,
+  defineAgent,
+  defineContract,
+} from "@kalphq/sdk";
 
 import { mockUtil } from "./utils";
 
 export const testContract = defineContract("sales-agent", {
   input: z.object({ query: z.string() }),
-  output: z.object({ result: z.string() })
+  output: z.object({ result: z.string() }),
 });
 
 export const step1 = defineStep({
@@ -14,16 +20,19 @@ export const step1 = defineStep({
   outputSchema: z.object({ text: z.string() }),
   async handler(input, ctx) {
     return { text: mockUtil(input.text) };
-  }
+  },
 });
 
 export const format_response = defineStep({
   id: "format_response",
-  inputSchema: z.object({ text: z.string(), sources: z.array(z.string()).optional() }),
+  inputSchema: z.object({
+    text: z.string(),
+    sources: z.array(z.string()).optional(),
+  }),
   outputSchema: z.object({ formatted: z.string() }),
   async handler(input, ctx) {
     return { formatted: input.text };
-  }
+  },
 });
 
 export const step_no_input = defineStep({
@@ -32,7 +41,7 @@ export const step_no_input = defineStep({
   outputSchema: z.object({ ok: z.boolean() }),
   async handler(input, ctx) {
     return { ok: true };
-  }
+  },
 });
 
 export const step_with_utils = defineStep({
@@ -41,7 +50,7 @@ export const step_with_utils = defineStep({
   outputSchema: z.object({ formatted: z.string() }),
   async handler(input, ctx) {
     return { formatted: mockUtil(input.text) };
-  }
+  },
 });
 
 export const search_tool = defineTool({
@@ -49,7 +58,7 @@ export const search_tool = defineTool({
   inputSchema: z.object({ q: z.string() }),
   async handler(input, ctx) {
     return ["result"];
-  }
+  },
 });
 
 export const healthRoute = defineRoute({
@@ -58,11 +67,10 @@ export const healthRoute = defineRoute({
   path: "/health",
   async handler(req, res, ctx) {
     return { status: "ok" };
-  }
+  },
 });
 
 export default defineAgent({
-  id: "test-agent",
   name: "test-agent",
   description: "A test agent",
   contract: testContract,
@@ -73,5 +81,5 @@ export default defineAgent({
   },
   async onCall(input, ctx) {
     return { result: "call resolved" };
-  }
+  },
 });

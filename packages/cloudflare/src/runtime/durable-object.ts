@@ -1,37 +1,36 @@
 import { DurableObject } from "cloudflare:workers";
 import { type IRGraph, type KalpAI, asUserId } from "@kalphq/sdk";
-import type { HandlerModule, RuntimeEvent } from "@kalphq/core";
+import type { HandlerModule, RuntimeEvent, KalpRuntime } from "@kalphq/core";
 import type { RuntimeProviders } from "@kalphq/core";
-import type { OrchestrationReactor } from "@kalphq/core";
-import { wireReactor } from "../wiring";
+import { wireRuntime } from "../wiring";
 import { DurableObjectTransport } from "../adapters/durable-object";
 
 /**
  * Durable Object class for a deployed Kalp agent.
  *
  * Each agent instance lives in its own DO. The DO is responsible for:
- * 1. Bootstrapping adapter instances on first request via {@link wireReactor}.
- * 2. Routing incoming HTTP/WebSocket events to the reactor.
+ * 1. Bootstrapping adapter instances on first request via {@link wireRuntime}.
+ * 2. Routing incoming HTTP/WebSocket events to the runtime.
  * 3. Handling alarms (scheduled wake-ups from `actions.wait`).
  *
  * The DO does NOT contain any orchestration logic — that lives in
- * the {@link OrchestrationReactor}.
+ * the {@link KalpRuntime}.
  */
 export class AgentDurableObject extends DurableObject<Env> {
-  /** The reactor instance, lazily created on first event. */
-  private reactor: OrchestrationReactor | null = null;
+  /** The runtime instance, lazily created on first event. */
+  private runtime: KalpRuntime | undefined = undefined;
 
   /**
-   * Lazily initializes the reactor with the agent's IR and bundles.
+   * Lazily initializes the runtime with the agent's IR and bundles.
    *
    * In production, the IR and handler bundles are loaded from storage
    * (written during `kalp push`). This method delegates adapter creation
-   * to {@link wireReactor}.
+   * to {@link wireRuntime}.
    *
-   * @returns The initialized reactor.
+   * @returns The initialized runtime.
    */
-  private async getReactor(): Promise<OrchestrationReactor> {
-    if (this.reactor) return this.reactor;
+  private async getRuntime(): Promise<KalpRuntime> {
+    if (this.runtime) return this.runtime;
 
     // Load IR and bundles from DO storage (written by push endpoint)
     const irRaw = await this.ctx.storage.get<string>("__ir__");
@@ -87,8 +86,8 @@ export class AgentDurableObject extends DurableObject<Env> {
       vault: { get: async () => "" },
     };
 
-    this.reactor = wireReactor(this.ctx.storage, ir, bundles, providers);
-    return this.reactor;
+    this.runtime = wireRuntime(this.ctx.storage, ir, providers);
+    return this.runtime!;
   }
 
   /**
@@ -110,7 +109,7 @@ export class AgentDurableObject extends DurableObject<Env> {
 
     // HTTP event dispatch
     try {
-      const reactor = await this.getReactor();
+      const runtime = await this.getRuntime();
       const url = new URL(request.url);
       const method = request.method.toUpperCase();
 
@@ -130,7 +129,7 @@ export class AgentDurableObject extends DurableObject<Env> {
         payload,
         threadId: this.ctx.id.toString(),
       };
-      const result = await reactor.handleEvent(event);
+      const result = await runtime.handleEvent(event);
 
       return Response.json({ ok: true, result });
     } catch (err) {
@@ -144,9 +143,9 @@ export class AgentDurableObject extends DurableObject<Env> {
    */
   async webSocketMessage(ws: WebSocket, message: string): Promise<void> {
     try {
-      const reactor = await this.getReactor();
+      const runtime = await this.getRuntime();
       const payload = JSON.parse(message);
-      const result = await reactor.handleEvent({
+      const result = await runtime.handleEvent({
         type: "onMessage",
         payload,
         threadId: this.ctx.id.toString(),
@@ -168,8 +167,8 @@ export class AgentDurableObject extends DurableObject<Env> {
    * Handles alarm wake-ups from scheduled `actions.wait` calls.
    */
   async alarm(): Promise<void> {
-    const reactor = await this.getReactor();
-    await reactor.handleEvent({
+    const runtime = await this.getRuntime();
+    await runtime.handleEvent({
       type: "onTick",
       payload: { reason: "alarm" },
       threadId: this.ctx.id.toString(),

@@ -1,25 +1,36 @@
 /**
- * @kalphq/core — Pure orchestration engine (infrastructure-agnostic).
+ * @kalphq/core — Proxy-Listener Runtime.
  *
- * This barrel exports the engine, adapter interfaces, and primitives.
- * No implementations, no Cloudflare types, no runtime-specific code.
+ * This barrel exports the runtime, adapter interfaces, and event sourcing
+ * components. The architecture uses proxy-listener execution for
+ * deterministic replay and native JS control flow.
  *
- * For reactor instantiation, use `@kalphq/core/factory`:
+ * For runtime instantiation, use `@kalphq/core/factory`:
  * ```ts
- * import { createReactor } from "@kalphq/core/factory";
+ * import { createRuntime } from "@kalphq/core/factory";
  * ```
  *
  * @module
  */
 
 // ────────────────────────────────────────────────────────────────────────────
-// Engine
+// Runtime
 // ────────────────────────────────────────────────────────────────────────────
 
-export { OrchestrationReactor } from "@/engine/reactor";
-export { ExecutionLog } from "@/engine/execution-log";
-export { buildHandlerContext } from "@/engine/context-builder";
-export type { RuntimeProviders } from "@/engine/context-builder";
+export { KalpRuntime } from "@/engine/runtime";
+export {
+  EventLogBuffer,
+  serializeError,
+  deserializeError,
+  type IntentEvent,
+  type SerializedError,
+} from "@/engine/event-log-buffer";
+export {
+  createActionProxy,
+  type BundleExecutor,
+  type EventPersister,
+} from "@/engine/proxy-factory";
+export { SuspensionException, type SuspensionState } from "@/engine/suspension";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -49,13 +60,17 @@ export type {
   ThreadStore,
 } from "@/adapters/interfaces";
 
+import type { RuntimeProviders } from "@/engine/context-builder";
+export type { RuntimeProviders };
+
 // ────────────────────────────────────────────────────────────────────────────
-// Primitives
+// Primitives (for building custom proxies)
 // ────────────────────────────────────────────────────────────────────────────
 
 export { createAIPrimitive } from "@/engine/primitives/ai";
 export type { AIProvider } from "@/engine/primitives/ai";
 export { createStoragePrimitive } from "@/engine/primitives/storage";
-export { createActionsPrimitive } from "@/engine/primitives/actions";
-export type { DispatchAction } from "@/engine/primitives/actions";
 export { createHttpPrimitive } from "@/engine/primitives/http";
+export { createDatePrimitive } from "@/engine/primitives/date";
+export { createMathPrimitive } from "@/engine/primitives/math";
+export { createMcpPrimitive } from "@/engine/primitives/mcp";

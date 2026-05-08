@@ -302,6 +302,22 @@ export class DurableObjectScheduler implements SchedulerAdapter {
   async cancel(): Promise<void> {
     await this.storage.deleteAlarm();
   }
+
+  /**
+   * Schedules an alarm with payload for resuming suspended execution.
+   *
+   * @param at - Unix timestamp in milliseconds for the wake-up.
+   * @param payload - Data to pass when resuming (executionId, traceId, etc.).
+   */
+  async scheduleAlarm(
+    at: number,
+    payload: { executionId: string; traceId: string; wakeReason: string },
+  ): Promise<void> {
+    // DO storage.setAlarm doesn't support payload, so we store payload separately
+    await this.storage.setAlarm(at);
+    // Store the payload in a separate key for retrieval on alarm fire
+    await this.storage.put("__alarm_payload__", payload);
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────

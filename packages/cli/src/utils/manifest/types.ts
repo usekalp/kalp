@@ -1,21 +1,12 @@
 import type { IRGraph } from "@kalphq/sdk";
-import type { HandlerMap } from "@/utils/manifest/handlers";
 
-export interface AgentManifestV2 {
+export interface AgentManifestV3 {
   format: "kalp-agent-manifest";
-  schemaVersion: 2;
-  codeHash: string;
-  ir: IRGraph;
-  handlers: HandlerMap;
+  schemaVersion: 3;
+  ir: IRGraph & { bundles?: Record<string, { code: string }> };
   metadata?: {
     generatedAt?: string;
   };
-}
-
-export interface LoadedAgentModule {
-  agent: unknown;
-  tempDir: string;
-  codeHash: string;
 }
 
 export function asRecord(value: unknown): Record<string, unknown> {

@@ -1,5 +1,5 @@
 // ────────────────────────────────────────────────────────────────────────────
-// Compiler v2 — Public API
+// Compiler — Public API
 // ────────────────────────────────────────────────────────────────────────────
 
 export { buildAgent, calculateIRHash, calculateAgentHash } from "./compiler";

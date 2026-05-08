@@ -1,5 +1,5 @@
 /**
- * Core runtime types for the Kalp v2 Orchestration Reactor.
+ * Core runtime types for the Kalp Orchestration Reactor.
  *
  * These types define the execution event model, task primitives, and runtime
  * event contracts. They are intentionally infrastructure-agnostic — no
@@ -7,8 +7,6 @@
  *
  * @module
  */
-
-import type { IRNodeId } from "@kalphq/sdk";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Execution Model — identity, hierarchy, and observability
@@ -50,6 +48,12 @@ export interface ExecutionContext {
   untrackedIOByType: Record<UntrackedIOSource, number>;
   /** Whether any plugin has been loaded (observability may be incomplete). */
   hasUntrustedPlugins: boolean;
+  /**
+   * Synchronous sequence counter for deterministic replay.
+   * Assigned at call time (before any await), ensuring parallel
+   * execution with Promise.all remains deterministic.
+   */
+  seqCounter: number;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -68,7 +72,7 @@ export interface ExecutionContext {
 export type ExecutionEvent =
   | {
       type: "node.started";
-      nodeId: IRNodeId;
+      nodeId: string;
       executionId: string;
       traceId: string;
       threadId: string;
@@ -76,7 +80,7 @@ export type ExecutionEvent =
     }
   | {
       type: "node.completed";
-      nodeId: IRNodeId;
+      nodeId: string;
       result: unknown;
       executionId: string;
       traceId: string;
@@ -116,6 +120,15 @@ export type ExecutionEvent =
   | {
       type: "action.wait";
       duration: string | number;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "action.suspend";
+      resumeAt: number;
+      wakeReason: string;
       executionId: string;
       traceId: string;
       threadId: string;
@@ -222,7 +235,7 @@ export type ExecutionEvent =
       type: "execution.untracked";
       source: UntrackedIOSource;
       location?: string;
-      nodeId?: IRNodeId;
+      nodeId?: string;
       action?: string;
       executionId: string;
       traceId: string;
@@ -240,8 +253,25 @@ export type ExecutionEvent =
       timestamp: number;
     }
   | {
+      type: "execution.suspended";
+      nodeId: string;
+      resumeAt: number;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "execution.resumed";
+      nodeId: string;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
       type: "error";
-      nodeId?: IRNodeId;
+      nodeId?: string;
       error: string;
       executionId: string;
       traceId: string;
@@ -276,7 +306,7 @@ export interface RuntimeEvent {
  */
 export interface ExecutionTask {
   /** The IR node to process. */
-  nodeId: IRNodeId;
+  nodeId: string;
   /** Context data passed to the handler. */
   context: unknown;
   /**

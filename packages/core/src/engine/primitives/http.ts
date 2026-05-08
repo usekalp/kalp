@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { ExecutionLog } from "@/engine/execution-log";
+import type { EventStore } from "@/adapters/interfaces";
 import type { ExecutionContext } from "@/engine/types";
 
 /**
@@ -18,7 +18,7 @@ import type { ExecutionContext } from "@/engine/types";
  * @returns A fetch function matching the standard `fetch` signature.
  */
 export function createHttpPrimitive(
-  log: ExecutionLog,
+  eventStore: EventStore,
   execCtx?: ExecutionContext,
 ): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
   const ids = {
@@ -42,12 +42,14 @@ export function createHttpPrimitive(
 
     const response = await globalThis.fetch(input, init);
 
-    await log.emit({
+    await eventStore.append({
       type: "primitive.invoked",
       name: "http.fetch",
       params: { url, method },
       result: { status: response.status, statusText: response.statusText },
-      ...ids,
+      executionId: ids.executionId,
+      traceId: ids.traceId,
+      threadId: ids.threadId,
       timestamp: Date.now(),
     });
 
