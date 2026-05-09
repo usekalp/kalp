@@ -1,7 +1,13 @@
 import { writeFile, rename } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ensureDir, writeFileIfNotExists, replacePlaceholders, copyDir } from "./utils";
+import {
+  ensureDir,
+  writeFileIfNotExists,
+  replacePlaceholders,
+  copyDir,
+} from "./utils";
 import pkg from "../../package.json";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,7 +26,9 @@ export interface ScaffoldProjectOptions {
 /**
  * Scaffolds a new Kalp project with configuration files.
  */
-export async function scaffoldProject(opts: ScaffoldProjectOptions): Promise<void> {
+export async function scaffoldProject(
+  opts: ScaffoldProjectOptions,
+): Promise<void> {
   const { projectName, targetDir } = opts;
 
   const projectTemplateDir = join(TEMPLATES_ROOT, "project");
@@ -85,4 +93,13 @@ export default defineConfig({
 });
 `;
   await writeFileIfNotExists(join(targetDir, "kalp.config.ts"), kalpConfig);
+
+  // Generate KALP_SECRET_KEY for Studio authentication
+  const secretKey = randomBytes(32).toString("hex");
+  const envContent = `# Kalp Studio Authentication Secret
+# Used to sign JWTs for the Studio
+KALP_SECRET_KEY=${secretKey}
+`;
+
+  await writeFileIfNotExists(join(targetDir, ".env"), envContent);
 }

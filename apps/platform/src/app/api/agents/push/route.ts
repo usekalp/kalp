@@ -19,6 +19,7 @@ export async function POST(req: Request) {
       }
     | undefined;
   const hash = body.hash as string | undefined;
+  const secretKey = body.secretKey as string | undefined;
 
   // IR V3: handlers are in ir.bundles, not a separate bundle object
   const bundles = ir?.bundles || {};
@@ -119,6 +120,18 @@ export async function POST(req: Request) {
 
   // Store the new version in agent-store
   storeAgentVersion(agentName, hash);
+
+  // Configure KALP_SECRET_KEY for Cloudflare Worker
+  // NOTE: The actual deployment to Cloudflare depends on the deployment method:
+  // - If using Wrangler CLI: Add to wrangler.toml or .dev.vars
+  // - If using Cloudflare API: Use the bindings/secrets endpoint
+  // This route receives the secretKey, but the actual configuration
+  // should be done during the deployment process.
+  if (secretKey) {
+    console.log(`KALP_SECRET_KEY received for agent ${agentName}`);
+    // TODO: Configure secret in Cloudflare Worker environment
+    // This should be integrated with the actual deployment pipeline
+  }
 
   // Export the full agent pack (IR with bundles) to a single JSON for debugging/archival
   try {

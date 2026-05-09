@@ -12,6 +12,7 @@ const COMMANDS = [
   ["secrets", "Manage secrets"],
   ["login", "Authenticate with Kalp"],
   ["logout", "Sign out from Kalp"],
+  ["studio", "Open Kalp Studio"],
 ] as const;
 
 function printHelp(): void {
@@ -48,6 +49,7 @@ const main = defineCommand({
     secrets: () => import("./commands/secrets").then((r) => r.default),
     login: () => import("./commands/login").then((r) => r.default),
     logout: () => import("./commands/logout").then((r) => r.default),
+    studio: () => import("./commands/studio").then((r) => r.default),
   },
   run({ args }) {
     const firstArg = process.argv[2];

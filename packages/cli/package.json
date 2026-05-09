@@ -29,7 +29,9 @@
     "@kalphq/sdk": "workspace:*",
     "citty": "0.1.6",
     "esbuild": "0.25.0",
+    "jose": "^5.10.0",
     "json-stable-stringify": "1.3.0",
+    "open": "^11.0.0",
     "picocolors": "1.1.1",
     "zod": "3.25.76"
   },

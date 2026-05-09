@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { access, mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
@@ -141,6 +141,26 @@ export default defineCommand({
 
     s.start(`Pushing to cloud`);
 
+    // Read KALP_SECRET_KEY from .env local
+    let secretKey: string | undefined;
+    try {
+      const envPath = join(cwd, ".env");
+      const envContent = await readFile(envPath, "utf-8");
+      const match = envContent.match(/^KALP_SECRET_KEY=(.+)$/m);
+      if (match && match[1]) {
+        secretKey = match[1].trim();
+      }
+    } catch {
+      // .env doesn't exist
+    }
+
+    if (!secretKey) {
+      p.log.warning(
+        "KALP_SECRET_KEY not found in .env. Studio authentication will not work.",
+      );
+      p.note("Run 'kalp studio' to generate a new secret.", "Action");
+    }
+
     const response = await fetch(`http://localhost:3000/api/agents/push`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -148,6 +168,7 @@ export default defineCommand({
         agentName,
         ir: manifest.ir,
         hash,
+        secretKey, // Send secret for injection into Cloudflare
       }),
     });
 
@@ -177,6 +198,23 @@ export default defineCommand({
 
     s.stop(pc.green("Pushed successfully"));
     printPushResult(agentName, hash, displayHandlers);
+
+    // Save worker URL to .kalp/state.json
+    const kalpDir = join(cwd, ".kalp");
+    await mkdir(kalpDir, { recursive: true });
+
+    const stateData = {
+      agentName,
+      workerUrl: `http://localhost:3000/a/${agentName}`,
+      lastPush: new Date().toISOString(),
+      hash,
+    };
+
+    await writeFile(
+      join(kalpDir, "state.json"),
+      JSON.stringify(stateData, null, 2),
+      "utf-8",
+    );
 
     const dashboardUrl = `http://localhost:3000/a/${agentName}`;
     p.outro(`${LOGO} ${pc.green("Agent live at")} ${pc.cyan(dashboardUrl)}`);

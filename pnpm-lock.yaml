@@ -196,9 +196,15 @@ importers:
       esbuild:
         specifier: 0.25.0
         version: 0.25.0
+      jose:
+        specifier: ^5.10.0
+        version: 5.10.0
       json-stable-stringify:
         specifier: 1.3.0
         version: 1.3.0
+      open:
+        specifier: ^11.0.0
+        version: 11.0.0
       picocolors:
         specifier: 1.1.1
         version: 1.1.1
@@ -227,6 +233,12 @@ importers:
       '@kalphq/sdk':
         specifier: workspace:*
         version: link:../sdk
+      hono:
+        specifier: ^4.12.18
+        version: 4.12.18
+      jose:
+        specifier: ^5.9.6
+        version: 5.10.0
     devDependencies:
       '@types/node':
         specifier: ^25.6.0
@@ -5044,6 +5056,9 @@ packages:
   jiti@2.7.0:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
+
+  jose@5.10.0:
+    resolution: {integrity: sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==}
 
   jose@6.2.3:
     resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
@@ -11576,6 +11591,8 @@ snapshots:
   jiti@2.6.1: {}
 
   jiti@2.7.0: {}
+
+  jose@5.10.0: {}
 
   jose@6.2.3: {}
 
