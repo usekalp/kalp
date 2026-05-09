@@ -16,7 +16,10 @@
     "dev-release": "node scripts/dev-release.mjs",
     "sync-versions": "node scripts/sync-versions.mjs",
     "clean-dev-changelogs": "node scripts/clean-dev-changelogs.mjs",
-    "check-boundaries": "bash scripts/check-boundaries.sh"
+    "check-boundaries": "bash scripts/check-boundaries.sh",
+    "build:studio": "cd apps/studio && pnpm build",
+    "build:cloudflare": "pnpm build:studio && pnpm --filter @kalphq/cloudflare build",
+    "dev:studio": "cd apps/studio && pnpm dev"
   },
   "devDependencies": {
     "@changesets/cli": "^2.30.0",
