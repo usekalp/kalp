@@ -293,16 +293,6 @@ export class DurableObjectScheduler implements SchedulerAdapter {
    */
   constructor(private storage: DurableObjectStorage) {}
 
-  /** @inheritdoc */
-  async schedule(at: number): Promise<void> {
-    await this.storage.setAlarm(at);
-  }
-
-  /** @inheritdoc */
-  async cancel(): Promise<void> {
-    await this.storage.deleteAlarm();
-  }
-
   /**
    * Schedules an alarm with payload for resuming suspended execution.
    *
@@ -317,6 +307,39 @@ export class DurableObjectScheduler implements SchedulerAdapter {
     await this.storage.setAlarm(at);
     // Store the payload in a separate key for retrieval on alarm fire
     await this.storage.put("__alarm_payload__", payload);
+  }
+
+  /** @inheritdoc */
+  async cancelAlarm(): Promise<void> {
+    await this.storage.deleteAlarm();
+    // Clear any stored payload
+    await this.storage.delete("__alarm_payload__");
+  }
+
+  /** @inheritdoc */
+  async popDueAlarms(): Promise<
+    {
+      executionId: string;
+      traceId: string;
+      wakeReason: string;
+      scheduleId?: string;
+    }[]
+  > {
+    // In DO, alarms fire immediately when due, so we check if there's a stored payload
+    const payload = (await this.storage.get("__alarm_payload__")) as {
+      executionId: string;
+      traceId: string;
+      wakeReason: string;
+      scheduleId?: string;
+    } | null;
+
+    if (payload) {
+      // Clear the payload after retrieving it
+      await this.storage.delete("__alarm_payload__");
+      return [payload];
+    }
+
+    return [];
   }
 }
 

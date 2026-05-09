@@ -1,6 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
 import { type IRGraph, type KalpAI, asUserId } from "@kalphq/sdk";
-import type { HandlerModule, RuntimeEvent, KalpRuntime } from "@kalphq/core";
+import type {
+  HandlerModule,
+  RuntimeEvent,
+  RuntimeEventType,
+  KalpRuntime,
+} from "@kalphq/core";
 import type { RuntimeProviders } from "@kalphq/core";
 import { wireRuntime } from "../wiring";
 import { DurableObjectTransport } from "../adapters/durable-object";
@@ -113,14 +118,14 @@ export class AgentDurableObject extends DurableObject<Env> {
       const url = new URL(request.url);
       const method = request.method.toUpperCase();
 
-      // Determine event type from URL path and method
-      const eventType =
+      // Determine event type from URL path
+      const eventType: RuntimeEventType =
         url.pathname === "/" || url.pathname === ""
           ? "onMessage"
-          : `route:${method}:${url.pathname}`;
+          : `route:${url.pathname}`;
 
       const payload =
-        request.method === "GET"
+        method === "GET"
           ? Object.fromEntries(url.searchParams)
           : await request.json().catch(() => null);
 

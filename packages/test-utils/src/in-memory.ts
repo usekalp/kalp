@@ -226,6 +226,13 @@ export class InMemoryPersistence implements PersistenceAdapter {
 export class InMemoryScheduler implements SchedulerAdapter {
   /** The next scheduled wake-up timestamp, or null. */
   private scheduledAt: number | null = null;
+  /** Stored payload for the next alarm. */
+  private storedPayload?: {
+    executionId: string;
+    traceId: string;
+    wakeReason: string;
+    scheduleId?: string;
+  };
   /** Optional callback when a schedule fires (for test harness). */
   private onFire?: () => Promise<void>;
 
@@ -250,16 +257,44 @@ export class InMemoryScheduler implements SchedulerAdapter {
    * Schedules an alarm with payload for resuming suspended execution.
    *
    * @param at - Unix timestamp in milliseconds for the wake-up.
-   * @param _payload - Data to pass when resuming (executionId, traceId, etc.).
+   * @param payload - Data to pass when resuming (executionId, traceId, etc.).
    */
   async scheduleAlarm(
     at: number,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _payload: { executionId: string; traceId: string; wakeReason: string },
+    payload: { executionId: string; traceId: string; wakeReason: string },
   ): Promise<void> {
     this.scheduledAt = at;
-    // In-memory implementation doesn't persist payload, but stores the timestamp
+    this.storedPayload = payload;
+    // In-memory implementation stores both timestamp and payload
     // Test harness can fire the alarm manually
+  }
+
+  /** @inheritdoc */
+  async cancelAlarm(): Promise<void> {
+    this.scheduledAt = null;
+    this.storedPayload = undefined;
+  }
+
+  /** @inheritdoc */
+  async popDueAlarms(): Promise<
+    {
+      executionId: string;
+      traceId: string;
+      wakeReason: string;
+      scheduleId?: string;
+    }[]
+  > {
+    if (
+      this.scheduledAt &&
+      this.scheduledAt <= Date.now() &&
+      this.storedPayload
+    ) {
+      const payload = this.storedPayload;
+      this.scheduledAt = null;
+      this.storedPayload = undefined;
+      return [payload];
+    }
+    return [];
   }
 
   // ── Test helpers ──
@@ -272,6 +307,7 @@ export class InMemoryScheduler implements SchedulerAdapter {
   /** Simulates the alarm firing. Clears the schedule and calls onFire. */
   async fire(): Promise<void> {
     this.scheduledAt = null;
+    this.storedPayload = undefined;
     if (this.onFire) {
       await this.onFire();
     }
@@ -327,6 +363,13 @@ export class InMemoryCrossThread implements CrossThreadAdapter {
     payload: unknown;
   }> = [];
 
+  /** All agent calls. */
+  private agentCalls: Array<{
+    targetThreadId: string;
+    contract: { name: string; input?: unknown; output?: unknown };
+    input: unknown;
+  }> = [];
+
   /** @inheritdoc */
   async send(
     targetThreadId: string,
@@ -334,6 +377,19 @@ export class InMemoryCrossThread implements CrossThreadAdapter {
     payload: unknown,
   ): Promise<void> {
     this.messages.push({ targetThreadId, event, payload });
+  }
+
+  /** @inheritdoc */
+  async callAgent<TInput, TOutput>(
+    targetThreadId: string,
+    contract: { name: string; input?: unknown; output?: unknown },
+    input: TInput,
+  ): Promise<TOutput> {
+    // In-memory implementation doesn't actually call other agents
+    // Tests can inspect the call via getAgentCalls()
+    this.agentCalls.push({ targetThreadId, contract, input });
+    // Return a placeholder - tests should mock this behavior as needed
+    return undefined as TOutput;
   }
 
   // ── Test helpers ──
@@ -347,8 +403,18 @@ export class InMemoryCrossThread implements CrossThreadAdapter {
     return this.messages;
   }
 
-  /** Resets all sent messages. */
+  /** Returns all agent calls (for test assertions). */
+  getAgentCalls(): ReadonlyArray<{
+    targetThreadId: string;
+    contract: { name: string; input?: unknown; output?: unknown };
+    input: unknown;
+  }> {
+    return this.agentCalls;
+  }
+
+  /** Resets all sent messages and agent calls. */
   reset(): void {
     this.messages = [];
+    this.agentCalls = [];
   }
 }

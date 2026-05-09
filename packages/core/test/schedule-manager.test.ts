@@ -174,7 +174,7 @@ describe("schedule-manager", () => {
       // Register a far future schedule
       await manager.registerSchedule(
         "far-schedule",
-        "0 0 1 1 2099", // Far in the future
+        "0 0 1 1 *", // Jan 1st at 00:00 (far enough for this test window)
         "future-handler",
         {},
       );
@@ -205,6 +205,17 @@ describe("schedule-manager", () => {
         handlerHash: "test-handler-hash",
         input: { foo: "bar" },
       });
+    });
+
+    it("should throw on invalid cron expressions", async () => {
+      await expect(
+        manager.registerSchedule(
+          "invalid-schedule",
+          "0 0 1 1 2099",
+          "invalid-handler",
+          {},
+        ),
+      ).rejects.toThrow(/Invalid cron/);
     });
 
     it("should handle multiple concurrent due schedules", async () => {

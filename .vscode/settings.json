@@ -1,4 +1,5 @@
 {
   "CodeGPT.apiKey": "Groq",
-  "deepwiki.disabled": false
+  "deepwiki.disabled": false,
+  "chatgpt.openOnStartup": true
 }
