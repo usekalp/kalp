@@ -11,9 +11,9 @@ import { runInitialDeploy } from "@/utils/deploy";
 import { readProjectState } from "@/utils/project-state";
 import { validateCompiledIR } from "@/utils/validate";
 import { getAgentStoreEntry, writeAgentStoreEntry } from "@/utils/agent-store";
+import { materializeRuntime } from "@/utils/runtime";
 
 const LOGO = "🦋";
-const WRANGLER_CONFIG = "packages/cloudflare/wrangler.jsonc";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -67,6 +67,7 @@ export default defineCommand({
         accountId: deploy.accountId,
       };
     }
+    const runtime = await materializeRuntime(cwd);
 
     const s = p.spinner();
     s.start(`Compiling ${pc.cyan(agentName)}`);
@@ -117,7 +118,7 @@ export default defineCommand({
           manifestPath,
           "--remote",
           "--config",
-          WRANGLER_CONFIG,
+          runtime.wranglerConfigPath,
         ],
         { cwd },
       );
@@ -135,7 +136,7 @@ export default defineCommand({
           hash,
           "--remote",
           "--config",
-          WRANGLER_CONFIG,
+          runtime.wranglerConfigPath,
         ],
         { cwd },
       );

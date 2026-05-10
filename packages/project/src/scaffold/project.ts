@@ -102,4 +102,5 @@ KALP_SECRET_KEY=${secretKey}
 `;
 
   await writeFileIfNotExists(join(targetDir, ".env"), envContent);
+  await writeFileIfNotExists(join(targetDir, ".dev.vars"), envContent);
 }

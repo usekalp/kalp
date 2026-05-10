@@ -16,7 +16,9 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && pnpm run build:studio && pnpm run build:runtime-template",
+    "build:studio": "pnpm --filter=@kalphq/studio build",
+    "build:runtime-template": "node ./scripts/prepare-runtime-template.mjs",
     "dev": "tsup --watch",
     "lint": "tsc --noEmit",
     "prepublishOnly": "pnpm build"

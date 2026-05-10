@@ -1,22 +1,23 @@
-import { cp, mkdir, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { execa } from "execa";
 import { requireAuth } from "@/utils/auth";
 import { ensureSecretKey } from "@/utils/secret";
 import { writeProjectState } from "@/utils/project-state";
-
-const WRANGLER_CONFIG = "packages/cloudflare/wrangler.jsonc";
+import { materializeRuntime } from "@/utils/runtime";
 
 function findWorkersUrl(output: string): string | null {
   const match = output.match(/https:\/\/[^\s]+\.workers\.dev/);
   return match?.[0] ?? null;
 }
 
-async function resolveWorkerUrl(cwd: string, deployOutput: string): Promise<string> {
+async function resolveWorkerUrl(
+  configPath: string,
+  deployOutput: string,
+): Promise<string> {
   const fromOutput = findWorkersUrl(deployOutput);
   if (fromOutput) return fromOutput;
 
-  const configText = await readFile(join(cwd, WRANGLER_CONFIG), "utf-8").catch(
+  const configText = await readFile(configPath, "utf-8").catch(
     () => null as string | null,
   );
   const workerName = configText?.match(/"name"\s*:\s*"([^"]+)"/)?.[1];
@@ -33,42 +34,32 @@ export async function runInitialDeploy(cwd: string): Promise<{
   accountId: string;
 }> {
   const auth = await requireAuth();
-  const { key: secretKey } = await ensureSecretKey(cwd);
-
-  await execa("pnpm", ["--filter=@kalphq/studio", "build"], {
-    cwd,
-    stdio: "inherit",
-  });
-
-  const studioDist = join(cwd, "apps/studio/dist");
-  const workerStudioDist = join(cwd, "packages/cloudflare/dist/studio");
-  await rm(workerStudioDist, { recursive: true, force: true });
-  await mkdir(workerStudioDist, { recursive: true });
-  await cp(studioDist, workerStudioDist, { recursive: true });
-
-  let deployStdout = "";
-  const secretResult = await execa(
-    "npx",
-    ["wrangler", "secret", "put", "KALP_SECRET_KEY", "--config", WRANGLER_CONFIG],
-    {
-      cwd,
-      input: `${secretKey}\n`,
-    },
-  );
+  await ensureSecretKey(cwd);
+  const runtime = await materializeRuntime(cwd);
 
   const deploy = await execa(
     "npx",
-    ["wrangler", "deploy", "--config", WRANGLER_CONFIG],
+    [
+      "wrangler",
+      "deploy",
+      "--config",
+      runtime.wranglerConfigPath,
+      "--secrets-file",
+      ".env",
+    ],
     {
       cwd,
     },
   );
 
-  deployStdout = [secretResult.stdout, deploy.stdout, deploy.stderr]
+  const deployStdout = [deploy.stdout, deploy.stderr]
     .filter(Boolean)
     .join("\n");
 
-  const workerUrl = await resolveWorkerUrl(cwd, deployStdout);
+  const workerUrl = await resolveWorkerUrl(
+    runtime.wranglerConfigPath,
+    deployStdout,
+  );
 
   await writeProjectState(cwd, {
     workerUrl,

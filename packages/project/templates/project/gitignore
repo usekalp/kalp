@@ -3,4 +3,7 @@ dist/
 .turbo/
 .temp/
 .env
+.dev.vars*
+.kalp/
+.wrangler/
 *.log
