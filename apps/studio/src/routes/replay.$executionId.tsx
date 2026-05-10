@@ -18,14 +18,14 @@ export const Route = createFileRoute('/replay/$executionId')({
 })
 
 function ReplayPage() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, sessionQuery } = useAuth()
   const { executionId } = Route.useParams()
   const { threadId } = Route.useSearch()
 
   const { data: events, isLoading } = useEventLog(executionId, threadId)
   const replay = useReplay({ totalEvents: events?.length ?? 0 })
 
-  if (!isAuthenticated) {
+  if (!sessionQuery.isLoading && !isAuthenticated) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Card>
@@ -41,6 +41,10 @@ function ReplayPage() {
         </Card>
       </div>
     )
+  }
+
+  if (sessionQuery.isLoading) {
+    return <div className="flex h-screen items-center justify-center">Loading...</div>
   }
 
   return (

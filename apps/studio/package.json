@@ -1,11 +1,9 @@
 {
   "name": "@kalphq/studio",
   "type": "module",
+  "private": true,
   "imports": {
     "#/*": "./src/*"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "scripts": {
     "dev": "vite dev --port 5173",

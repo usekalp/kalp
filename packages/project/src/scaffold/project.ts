@@ -94,11 +94,14 @@ export default defineConfig({
 `;
   await writeFileIfNotExists(join(targetDir, "kalp.config.ts"), kalpConfig);
 
-  // Generate KALP_SECRET_KEY for Studio authentication
+  // Generate Studio authentication secrets
   const secretKey = randomBytes(32).toString("hex");
+  const studioPassword = randomBytes(24).toString("base64url");
   const envContent = `# Kalp Studio Authentication Secret
-# Used to sign JWTs for the Studio
+# Used to sign and validate Studio sessions
 KALP_SECRET_KEY=${secretKey}
+KALP_STUDIO_PASSWORD=${studioPassword}
+KALP_STUDIO_ADMIN_USER=admin
 `;
 
   await writeFileIfNotExists(join(targetDir, ".env"), envContent);

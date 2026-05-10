@@ -35,5 +35,12 @@
   "observability": {
     "enabled": true,
   },
+  "secrets": {
+    "required": [
+      "KALP_SECRET_KEY",
+      "KALP_STUDIO_PASSWORD",
+      "KALP_STUDIO_ADMIN_USER",
+    ],
+  },
   "upload_source_maps": true,
 }

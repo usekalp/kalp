@@ -20,6 +20,7 @@ function rootRouteTree() {
 export function getRouter() {
   const router = createTanStackRouter({
     routeTree: rootRouteTree(),
+    basepath: '/studio',
     scrollRestoration: true,
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,

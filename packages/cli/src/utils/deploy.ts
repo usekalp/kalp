@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { execa } from "execa";
 import { requireAuth } from "@/utils/auth";
-import { ensureSecretKey } from "@/utils/secret";
+import { ensureStudioSecrets } from "@/utils/secret";
 import { writeProjectState } from "@/utils/project-state";
 import { materializeRuntime } from "@/utils/runtime";
 
@@ -34,19 +34,40 @@ export async function runInitialDeploy(cwd: string): Promise<{
   accountId: string;
 }> {
   const auth = await requireAuth();
-  await ensureSecretKey(cwd);
+  const secrets = await ensureStudioSecrets(cwd);
   const runtime = await materializeRuntime(cwd);
+  let secretSyncFailed = false;
+  const secretEntries = [
+    ["KALP_SECRET_KEY", secrets.key],
+    ["KALP_STUDIO_PASSWORD", secrets.studioPassword],
+    ["KALP_STUDIO_ADMIN_USER", secrets.studioAdminUser],
+  ] as const;
+
+  for (const [name, value] of secretEntries) {
+    try {
+      await execa(
+        "npx",
+        ["wrangler", "secret", "put", name, "--config", runtime.wranglerConfigPath],
+        { cwd, input: `${value}\n` },
+      );
+    } catch {
+      secretSyncFailed = true;
+      break;
+    }
+  }
 
   const deploy = await execa(
     "npx",
-    [
-      "wrangler",
-      "deploy",
-      "--config",
-      runtime.wranglerConfigPath,
-      "--secrets-file",
-      ".env",
-    ],
+    secretSyncFailed
+      ? [
+          "wrangler",
+          "deploy",
+          "--config",
+          runtime.wranglerConfigPath,
+          "--secrets-file",
+          ".env",
+        ]
+      : ["wrangler", "deploy", "--config", runtime.wranglerConfigPath],
     {
       cwd,
     },

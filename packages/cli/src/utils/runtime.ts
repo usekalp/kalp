@@ -3,14 +3,16 @@ import {
   access,
   cp,
   mkdir,
-  readFile,
   readdir,
+  readFile,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
-import { createRequire } from "node:module";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readAgentStore } from "@/utils/agent-store";
+import { readProjectState } from "@/utils/project-state";
 
 const RUNTIME_ROOT = ".kalp";
 const RUNTIME_DIR = "runtime";
@@ -25,6 +27,23 @@ export interface RuntimePaths {
   workerEntrypointPath: string;
   wranglerConfigPath: string;
   workerName: string;
+}
+
+interface RuntimeAgentRecord {
+  name: string;
+  environment: "local" | "remote" | "both";
+  status: "online" | "offline";
+  hash: string | null;
+  workerUrl: string | null;
+  localPath: string | null;
+  updatedAt: string | null;
+}
+
+interface RuntimeAgentsSnapshot {
+  generatedAt: string;
+  projectPath: string;
+  workerUrl: string | null;
+  agents: RuntimeAgentRecord[];
 }
 
 interface WranglerConfig {
@@ -124,20 +143,13 @@ function createRuntimeConfig(workerName: string): WranglerConfig {
     observability: { enabled: true },
     upload_source_maps: true,
     secrets: {
-      required: ["KALP_SECRET_KEY"],
+      required: [
+        "KALP_SECRET_KEY",
+        "KALP_STUDIO_PASSWORD",
+        "KALP_STUDIO_ADMIN_USER",
+      ],
     },
   };
-}
-
-function assertCloudflareRuntimeDependency(cwd: string): void {
-  try {
-    const requireFromProject = createRequire(join(cwd, "package.json"));
-    requireFromProject.resolve("@kalphq/cloudflare");
-  } catch {
-    throw new Error(
-      "Missing dependency @kalphq/cloudflare in this project. Install it and retry `kalp dev`/`kalp deploy`.",
-    );
-  }
 }
 
 function runtimeTemplateCandidates(): Array<{
@@ -145,7 +157,8 @@ function runtimeTemplateCandidates(): Array<{
   workerEntryPath: string;
 }> {
   const here = dirname(fileURLToPath(import.meta.url));
-  const distTemplateRoot = resolve(here, "..", "runtime-template");
+  const distTemplateRoot = resolve(here, "runtime-template");
+  const packageRootTemplate = resolve(here, "..", "runtime-template");
   const sourceTemplateRoot = resolve(here, "..", "..", "runtime-template");
   const monorepoStudioDist = resolve(
     here,
@@ -163,6 +176,10 @@ function runtimeTemplateCandidates(): Array<{
     {
       studioTemplateDir: join(distTemplateRoot, STUDIO_DIR),
       workerEntryPath: join(distTemplateRoot, WORKER_ENTRY_FILE),
+    },
+    {
+      studioTemplateDir: join(packageRootTemplate, STUDIO_DIR),
+      workerEntryPath: join(packageRootTemplate, WORKER_ENTRY_FILE),
     },
     {
       studioTemplateDir: join(sourceTemplateRoot, STUDIO_DIR),
@@ -238,9 +255,93 @@ async function ensureStudioIndex(studioDir: string): Promise<void> {
   await writeFile(indexPath, html, "utf-8");
 }
 
-export async function materializeRuntime(cwd: string): Promise<RuntimePaths> {
-  assertCloudflareRuntimeDependency(cwd);
+async function readLocalAgentNames(cwd: string): Promise<string[]> {
+  const agentsDir = join(cwd, "agents");
+  try {
+    const entries = await readdir(agentsDir, { withFileTypes: true });
+    const names: string[] = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const indexPath = join(agentsDir, entry.name, "index.ts");
+      const exists = await stat(indexPath)
+        .then(() => true)
+        .catch(() => false);
+      if (exists) names.push(entry.name);
+    }
+    return names.sort((a, b) => a.localeCompare(b));
+  } catch {
+    return [];
+  }
+}
 
+function isPathInsideProject(projectPath: string, candidatePath: string): boolean {
+  const project = normalize(projectPath).toLowerCase();
+  const candidate = normalize(candidatePath).toLowerCase();
+  return candidate.startsWith(project);
+}
+
+async function createAgentsSnapshot(cwd: string): Promise<RuntimeAgentsSnapshot> {
+  const localAgentNames = await readLocalAgentNames(cwd);
+  const state = await readProjectState(cwd);
+  const globalStore = await readAgentStore();
+
+  const byName = new Map<string, RuntimeAgentRecord>();
+
+  for (const name of localAgentNames) {
+    const localPath = join(cwd, "agents", name, "index.ts");
+    byName.set(name, {
+      name,
+      environment: "local",
+      status: "offline",
+      hash: null,
+      workerUrl: null,
+      localPath,
+      updatedAt: null,
+    });
+  }
+
+  for (const [name, entry] of Object.entries(globalStore)) {
+    if (!entry.localPath || !isPathInsideProject(cwd, entry.localPath)) continue;
+
+    const existing = byName.get(name);
+    const workerUrl =
+      state?.workerUrl && !entry.workerUrl
+        ? `${state.workerUrl.replace(/\/$/, "")}/a/${name}`
+        : entry.workerUrl ?? null;
+
+    byName.set(name, {
+      name,
+      environment: existing ? "both" : "remote",
+      status: workerUrl ? "online" : "offline",
+      hash: entry.hash ?? null,
+      workerUrl,
+      localPath: existing?.localPath ?? entry.localPath,
+      updatedAt: entry.timestamp ?? state?.deployedAt ?? null,
+    });
+  }
+
+  if (state?.workerUrl) {
+    for (const [name, record] of byName.entries()) {
+      if (!record.workerUrl) {
+        record.workerUrl = `${state.workerUrl.replace(/\/$/, "")}/a/${name}`;
+        record.environment =
+          record.environment === "local" ? "both" : record.environment;
+        record.status = "online";
+        record.updatedAt = record.updatedAt ?? state.deployedAt;
+        byName.set(name, record);
+      }
+    }
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    projectPath: cwd,
+    workerUrl: state?.workerUrl ?? null,
+    agents: Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name)),
+  };
+}
+
+export async function materializeRuntime(cwd: string): Promise<RuntimePaths> {
   const runtimeDir = join(cwd, RUNTIME_ROOT, RUNTIME_DIR);
   const studioDir = join(runtimeDir, STUDIO_DIR);
   const workerEntrypointPath = join(runtimeDir, WORKER_ENTRY_FILE);
@@ -253,6 +354,12 @@ export async function materializeRuntime(cwd: string): Promise<RuntimePaths> {
   await cp(template.studioTemplateDir, studioDir, { recursive: true });
   await cp(template.workerEntryPath, workerEntrypointPath);
   await ensureStudioIndex(studioDir);
+  const agentsSnapshot = await createAgentsSnapshot(cwd);
+  await writeFile(
+    join(runtimeDir, "agents.snapshot.json"),
+    `${JSON.stringify(agentsSnapshot, null, 2)}\n`,
+    "utf-8",
+  );
 
   const projectSlug = await resolveProjectSlug(cwd);
   const workerName = buildWorkerName(projectSlug, cwd);

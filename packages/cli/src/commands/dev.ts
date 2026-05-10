@@ -7,7 +7,6 @@ import pc from "picocolors";
 import { execa } from "execa";
 import open from "open";
 import { ensureSecretKey } from "@/utils/secret";
-import { createStudioToken } from "@/utils/studio-token";
 import { materializeRuntime } from "@/utils/runtime";
 
 const LOGO = "🦋";
@@ -19,9 +18,8 @@ export default defineCommand({
 
     p.intro(`${LOGO} ${pc.bold("kalp dev")}`);
 
-    const { key } = await ensureSecretKey(cwd);
+    await ensureSecretKey(cwd);
     await copyFile(join(cwd, ".env"), join(cwd, ".dev.vars"));
-    const token = await createStudioToken(key);
     const runtime = await materializeRuntime(cwd);
 
     p.note("Starting local runtime (wrangler dev :8787)");
@@ -47,7 +45,7 @@ export default defineCommand({
     process.on("SIGTERM", shutdown);
 
     await delay(2500);
-    const studioUrl = `http://localhost:8787/studio/?token=${token}`;
+    const studioUrl = "http://localhost:8787/studio/login";
     await open(studioUrl);
     p.log.success(`Studio opened at ${pc.cyan(studioUrl)}`);
 

@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@kalphq/sdk": "^__CLI_VERSION__",
+    "hono": "^4.12.18",
     "zod": "^3.23.0"
   },
   "devDependencies": {
