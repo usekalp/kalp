@@ -1,12 +1,12 @@
 {
-  "name": "studio",
+  "name": "@kalphq/studio",
   "private": true,
   "type": "module",
   "imports": {
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "vite dev --port 3000",
+    "dev": "vite dev --port 5173",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",

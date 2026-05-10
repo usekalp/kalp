@@ -1,79 +1,33 @@
-import { access, mkdir, writeFile, readFile } from "node:fs/promises";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
+import { execa } from "execa";
 import { ensureConfig } from "@/utils/fs";
 import { readAgentManifest, computePushHash } from "@/utils/manifest";
-import { renderLegacyError } from "@/utils/issues";
+import { requireAuth } from "@/utils/auth";
+import { runInitialDeploy } from "@/utils/deploy";
+import { readProjectState } from "@/utils/project-state";
+import { validateCompiledIR } from "@/utils/validate";
+import { getAgentStoreEntry, writeAgentStoreEntry } from "@/utils/agent-store";
 
 const LOGO = "🦋";
+const WRANGLER_CONFIG = "packages/cloudflare/wrangler.jsonc";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
-function printPushResult(
-  agentName: string,
-  hash: string,
-  handlers: Record<string, { size: number }>,
-) {
-  const div = pc.dim("─".repeat(48));
-  const handlerCount = Object.keys(handlers).length;
-  const totalSize = Object.values(handlers).reduce((sum, h) => sum + h.size, 0);
-
-  console.log("\n" + div);
-  console.log(pc.green("✔ Deployed"));
-  console.log("");
-  console.log(`  ${pc.bold(agentName)}  ${pc.dim(hash.slice(0, 7))}...`);
-  console.log(
-    `  ${pc.dim(String(handlerCount))} handlers · ${formatBytes(totalSize)}`,
-  );
-  console.log(div + "\n");
-}
-
-function printPushError(
-  phase: string,
-  errors: string[],
-  blockers?: string[],
-  verbose?: boolean,
-) {
-  const div = pc.dim("─".repeat(48));
-  console.log("\n" + div);
-
-  for (const e of errors) {
-    console.log(renderLegacyError(e, verbose));
-    console.log("");
-  }
-
-  if (phase === "analysis" && blockers) {
-    for (const b of blockers) {
-      console.log(pc.red(`✘ Blocker: ${b}`));
-    }
-  }
-
-  if (!verbose) {
-    console.log(pc.dim(`\nRun with --verbose for more details.\n`));
-  }
-
-  console.log(div + "\n");
-}
-
 export default defineCommand({
-  meta: { name: "push", description: "Push agent to Kalp cloud" },
+  meta: { name: "push", description: "Push agent manifest to Cloudflare KV" },
   args: {
     agent: {
       type: "string",
       alias: "a",
       description: "Agent name to push",
       required: false,
-    },
-    verbose: {
-      type: "boolean",
-      alias: "v",
-      description: "Show debug information",
-      default: false,
     },
   },
   async run({ args }) {
@@ -87,138 +41,127 @@ export default defineCommand({
       process.exit(1);
     }
 
-    try {
-      await ensureConfig(cwd);
-    } catch {
+    await requireAuth().catch(() => {
+      p.log.error("Not authenticated. Run `kalp login` first.");
+      process.exit(1);
+    });
+
+    await ensureConfig(cwd).catch(() => {
       p.log.error(`${pc.cyan("kalp.config.ts")} not found`);
       process.exit(1);
-    }
+    });
 
     const agentPath = join(cwd, "agents", agentName, "index.ts");
-    try {
-      await access(agentPath);
-    } catch {
+    await access(agentPath).catch(() => {
       p.log.error(`Agent ${pc.cyan(agentName)} not found`);
       process.exit(1);
+    });
+
+    let state = await readProjectState(cwd);
+    if (!state) {
+      p.log.warn("No .kalp/state.json found. Running initial deploy first...");
+      const deploy = await runInitialDeploy(cwd);
+      state = {
+        workerUrl: deploy.workerUrl,
+        deployedAt: new Date().toISOString(),
+        accountId: deploy.accountId,
+      };
     }
 
     const s = p.spinner();
     s.start(`Compiling ${pc.cyan(agentName)}`);
-
     const manifest = await readAgentManifest({ cwd, agentName });
-
-    const bundles = (manifest.ir.bundles || {}) as Record<
-      string,
-      { code: string }
-    >;
-    const handlerCount = Object.keys(bundles).length;
-
     const hash = computePushHash(manifest.ir);
+    s.stop(`Compiled ${pc.cyan(agentName)} (${hash.slice(0, 8)})`);
 
-    s.stop(`Compiled ${pc.cyan(agentName)} — ${handlerCount} handlers`);
-
-    s.start(`Checking for changes`);
-
-    const statusResponse = await fetch(
-      `http://localhost:3000/api/agents/${agentName}/status`,
-    );
-
-    const statusData = (await statusResponse.json().catch(() => null)) as {
-      agentName: string;
-      hash?: string;
-      exists: boolean;
-    } | null;
-
-    if (statusData?.exists && statusData.hash === hash) {
-      s.stop(pc.green("No changes detected"));
-      p.note(
-        `Agent ${pc.cyan(agentName)} is already deployed with the same logic.`,
-        "Skipped",
-      );
-      p.outro(`${LOGO} ${pc.green("No deployment needed")}`);
-      return;
-    }
-
-    s.start(`Pushing to cloud`);
-
-    // Read KALP_SECRET_KEY from .env local
-    let secretKey: string | undefined;
-    try {
-      const envPath = join(cwd, ".env");
-      const envContent = await readFile(envPath, "utf-8");
-      const match = envContent.match(/^KALP_SECRET_KEY=(.+)$/m);
-      if (match && match[1]) {
-        secretKey = match[1].trim();
+    const validation = validateCompiledIR({ agentName, ir: manifest.ir, hash });
+    if (!validation.ok) {
+      p.log.error(`Validation failed at phase: ${validation.phase}`);
+      for (const err of validation.errors ?? []) {
+        p.log.error(err);
       }
-    } catch {
-      // .env doesn't exist
-    }
-
-    if (!secretKey) {
-      p.log.warning(
-        "KALP_SECRET_KEY not found in .env. Studio authentication will not work.",
-      );
-      p.note("Run 'kalp studio' to generate a new secret.", "Action");
-    }
-
-    const response = await fetch(`http://localhost:3000/api/agents/push`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        agentName,
-        ir: manifest.ir,
-        hash,
-        secretKey, // Send secret for injection into Cloudflare
-      }),
-    });
-
-    const body = (await response.json().catch(() => null)) as Record<
-      string,
-      unknown
-    > | null;
-
-    if (!response.ok) {
-      s.stop(pc.red("Push failed"));
-      const phase = (body?.phase as string) ?? "unknown";
-      const errors = (body?.errors as string[]) ?? [`HTTP ${response.status}`];
-      const blockers = body?.blockers as string[] | undefined;
-      printPushError(phase, errors, blockers);
       process.exit(1);
     }
 
-    const displayHandlers = Object.entries(bundles).reduce(
-      (acc, [hash, bundle]) => ({
-        ...acc,
-        [hash]: {
-          size: Buffer.byteLength(bundle.code),
-        },
-      }),
-      {} as Record<string, { size: number }>,
+    const previous = await getAgentStoreEntry(agentName);
+    const agentWorkerUrl = `${state.workerUrl.replace(/\/$/, "")}/a/${agentName}`;
+    if (previous?.hash === hash && previous.workerUrl === agentWorkerUrl) {
+      p.note(
+        `No changes detected for ${pc.cyan(agentName)} (${hash.slice(0, 8)}).`,
+        "Skipped",
+      );
+      p.outro(`${LOGO} ${pc.green("Nothing to push")}`);
+      return;
+    }
+
+    const manifestKey = `${agentName}:${hash}`;
+    const latestKey = `${agentName}:latest`;
+    const manifestPath = join(cwd, ".kalp", `${agentName}-${hash}.json`);
+
+    await mkdir(join(cwd, ".kalp"), { recursive: true });
+    await writeFile(manifestPath, JSON.stringify(manifest.ir), "utf-8");
+
+    try {
+      s.start("Uploading manifest to Cloudflare KV");
+      await execa(
+        "npx",
+        [
+          "wrangler",
+          "kv",
+          "key",
+          "put",
+          "--binding",
+          "KALP_MANIFESTS",
+          manifestKey,
+          "--path",
+          manifestPath,
+          "--remote",
+          "--config",
+          WRANGLER_CONFIG,
+        ],
+        { cwd },
+      );
+
+      await execa(
+        "npx",
+        [
+          "wrangler",
+          "kv",
+          "key",
+          "put",
+          "--binding",
+          "KALP_MANIFESTS",
+          latestKey,
+          hash,
+          "--remote",
+          "--config",
+          WRANGLER_CONFIG,
+        ],
+        { cwd },
+      );
+      s.stop("Manifest uploaded");
+    } finally {
+      await rm(manifestPath, { force: true });
+    }
+
+    const bundles = manifest.ir.bundles || {};
+    const totalSize = Object.values(bundles).reduce(
+      (sum, bundle) => sum + Buffer.byteLength(bundle.code),
+      0,
     );
+    const handlerCount = Object.keys(bundles).length;
 
-    s.stop(pc.green("Pushed successfully"));
-    printPushResult(agentName, hash, displayHandlers);
-
-    // Save worker URL to .kalp/state.json
-    const kalpDir = join(cwd, ".kalp");
-    await mkdir(kalpDir, { recursive: true });
-
-    const stateData = {
-      agentName,
-      workerUrl: `http://localhost:3000/a/${agentName}`,
-      lastPush: new Date().toISOString(),
+    await writeAgentStoreEntry(agentName, {
       hash,
-    };
+      timestamp: new Date().toISOString(),
+      workerUrl: agentWorkerUrl,
+      localPath: agentPath,
+    });
 
-    await writeFile(
-      join(kalpDir, "state.json"),
-      JSON.stringify(stateData, null, 2),
-      "utf-8",
+    p.log.success(
+      `${pc.bold(agentName)} pushed · ${handlerCount} handlers · ${formatBytes(totalSize)}`,
     );
-
-    const dashboardUrl = `http://localhost:3000/a/${agentName}`;
-    p.outro(`${LOGO} ${pc.green("Agent live at")} ${pc.cyan(dashboardUrl)}`);
-
-    process.exit(0);
+    p.note(`KV keys updated: ${manifestKey}, ${latestKey}`, "Cloudflare KV");
+    p.outro(`${LOGO} ${pc.green("Live at")} ${pc.cyan(agentWorkerUrl)}`);
   },
 });

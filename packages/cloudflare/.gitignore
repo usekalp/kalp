@@ -1,0 +1,10 @@
+# Wrangler build artifacts
+.wrangler/
+dist/
+
+# Environment files
+.env
+.env.local
+
+# Logs
+*.log

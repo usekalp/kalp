@@ -13,8 +13,13 @@ const config = defineConfig({
     },
   },
   plugins: [devtools(), tailwindcss(), tanstackStart(), viteReact()],
+  server: {
+    proxy: {
+      '/api': 'http://localhost:8787',
+    },
+  },
   build: {
-    outDir: '../../packages/cloudflare/dist/studio',
+    outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
       output: {

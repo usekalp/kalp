@@ -44,7 +44,7 @@ function Dashboard() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">
-              Please run <code>kalp studio</code> from your terminal to
+              Please run <code>kalp dev</code> from your terminal to
               authenticate.
             </p>
           </CardContent>

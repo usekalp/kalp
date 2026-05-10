@@ -1,182 +1,111 @@
 import { DurableObject } from "cloudflare:workers";
-import { type IRGraph, type KalpAI, asUserId } from "@kalphq/sdk";
-import type {
-  HandlerModule,
-  RuntimeEvent,
-  RuntimeEventType,
-  KalpRuntime,
-} from "@kalphq/core";
-import type { RuntimeProviders } from "@kalphq/core";
-import { wireRuntime } from "../wiring";
-import { DurableObjectTransport } from "../adapters/durable-object";
+import type { IRGraph } from "@kalphq/sdk";
+
+type RuntimeManifest = IRGraph & {
+  bundles?: Record<string, { code: string; type?: string }>;
+};
 
 /**
- * Durable Object class for a deployed Kalp agent.
- *
- * Each agent instance lives in its own DO. The DO is responsible for:
- * 1. Bootstrapping adapter instances on first request via {@link wireRuntime}.
- * 2. Routing incoming HTTP/WebSocket events to the runtime.
- * 3. Handling alarms (scheduled wake-ups from `actions.wait`).
- *
- * The DO does NOT contain any orchestration logic — that lives in
- * the {@link KalpRuntime}.
+ * Durable Object shell for Kalp agent execution.
+ * Runtime wiring is still intentionally thin, but manifest loading is now
+ * dynamic from KV so `kalp push` can hot-reload without `wrangler deploy`.
  */
-export class AgentDurableObject extends DurableObject<Env> {
-  /** The runtime instance, lazily created on first event. */
-  private runtime: KalpRuntime | undefined = undefined;
+export class AgentDurableObject extends DurableObject {
+  private currentAgentName: string | null = null;
+  private currentManifestHash: string | null = null;
+  private currentManifest: RuntimeManifest | null = null;
 
-  /**
-   * Lazily initializes the runtime with the agent's IR and bundles.
-   *
-   * In production, the IR and handler bundles are loaded from storage
-   * (written during `kalp push`). This method delegates adapter creation
-   * to {@link wireRuntime}.
-   *
-   * @returns The initialized runtime.
-   */
-  private async getRuntime(): Promise<KalpRuntime> {
-    if (this.runtime) return this.runtime;
-
-    // Load IR and bundles from DO storage (written by push endpoint)
-    const irRaw = await this.ctx.storage.get<string>("__ir__");
-    const bundleMapRaw =
-      await this.ctx.storage.get<Record<string, string>>("__bundles__");
-
-    if (!irRaw) {
-      throw new Error("Agent not deployed: IR not found in storage.");
+  private async getRuntimeManifest(agentName: string): Promise<{
+    hash: string;
+    manifest: RuntimeManifest;
+  }> {
+    const latestHash = await this.env.KALP_MANIFESTS.get(`${agentName}:latest`);
+    if (!latestHash) {
+      throw new Error(`No manifest pointer found for agent "${agentName}".`);
     }
 
-    const ir = JSON.parse(irRaw) as IRGraph;
-    const bundles = new Map<string, HandlerModule>();
-
-    // Load handler modules from stored code strings
-    if (bundleMapRaw) {
-      for (const [moduleRef, code] of Object.entries(bundleMapRaw)) {
-        // Create a module from the stored code string
-        // In production, these are pre-bundled ESM modules
-        const blob = new Blob([code], { type: "application/javascript" });
-        const url = URL.createObjectURL(blob);
-        try {
-          const mod = (await import(url)) as HandlerModule;
-          bundles.set(moduleRef, mod);
-        } finally {
-          URL.revokeObjectURL(url);
-        }
-      }
+    if (
+      this.currentAgentName === agentName &&
+      this.currentManifestHash === latestHash &&
+      this.currentManifest
+    ) {
+      return { hash: latestHash, manifest: this.currentManifest };
     }
 
-    // Stub providers — real implementations will be injected per-request
-    const stubAI: KalpAI = {
-      generate: async () => "" as never,
-      stream: () =>
-        (async function* () {
-          /* noop */
-        })() as never,
-      classify: async () => "" as never,
-    };
+    const manifestRaw = await this.env.KALP_MANIFESTS.get(
+      `${agentName}:${latestHash}`,
+    );
 
-    const providers: RuntimeProviders = {
-      ai: stubAI,
-      auth: {
-        userId: asUserId(""),
-        providerId: "anonymous",
-        claims: {},
-        hasPermission: () => false,
-      },
-      memory: {
-        list: async () => ({ items: [] }),
-        append: async () => {},
-        summarize: async () => "",
-      },
-      vault: { get: async () => "" },
-    };
+    if (!manifestRaw) {
+      throw new Error(
+        `Manifest "${agentName}:${latestHash}" not found in KALP_MANIFESTS.`,
+      );
+    }
 
-    this.runtime = wireRuntime(this.ctx.storage, ir, providers);
-    return this.runtime!;
+    const manifest = JSON.parse(manifestRaw) as RuntimeManifest;
+
+    this.currentAgentName = agentName;
+    this.currentManifestHash = latestHash;
+    this.currentManifest = manifest;
+
+    return { hash: latestHash, manifest };
   }
 
-  /**
-   * Handles incoming HTTP requests and WebSocket upgrades.
-   */
   async fetch(request: Request): Promise<Response> {
     const upgradeHeader = request.headers.get("Upgrade");
-
-    // WebSocket upgrade
     if (upgradeHeader === "websocket") {
       const pair = new WebSocketPair();
-      const [client, server] = Object.values(pair);
-      this.ctx.acceptWebSocket(server as WebSocket);
+      const client = pair[0];
+      const server = pair[1];
+      this.ctx.acceptWebSocket(server);
       return new Response(null, {
         status: 101,
-        webSocket: client as WebSocket,
+        webSocket: client,
       });
     }
 
-    // HTTP event dispatch
     try {
-      const runtime = await this.getRuntime();
       const url = new URL(request.url);
-      const method = request.method.toUpperCase();
+      const agentName = request.headers.get("x-kalp-agent-name") || "default";
+      const { hash, manifest } = await this.getRuntimeManifest(agentName);
 
-      // Determine event type from URL path
-      const eventType: RuntimeEventType =
+      const eventType =
         url.pathname === "/" || url.pathname === ""
           ? "onMessage"
           : `route:${url.pathname}`;
-
       const payload =
-        method === "GET"
+        request.method.toUpperCase() === "GET"
           ? Object.fromEntries(url.searchParams)
           : await request.json().catch(() => null);
 
-      const event: RuntimeEvent = {
-        type: eventType,
-        payload,
-        threadId: this.ctx.id.toString(),
-      };
-      const result = await runtime.handleEvent(event);
-
-      return Response.json({ ok: true, result });
+      return Response.json({
+        ok: true,
+        result: {
+          agentName,
+          manifestHash: hash,
+          eventType,
+          payload,
+          entries: Object.keys(manifest.entries || {}),
+        },
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return Response.json({ ok: false, error: message }, { status: 500 });
     }
   }
 
-  /**
-   * Handles WebSocket messages by dispatching "onMessage" events.
-   */
   async webSocketMessage(ws: WebSocket, message: string): Promise<void> {
     try {
-      const runtime = await this.getRuntime();
       const payload = JSON.parse(message);
-      const result = await runtime.handleEvent({
-        type: "onMessage",
-        payload,
-        threadId: this.ctx.id.toString(),
-      });
-
-      // Broadcast result to all connected clients
-      const transport = new DurableObjectTransport(this.ctx, ws);
-      await transport.send(result);
+      ws.send(JSON.stringify({ ok: true, payload }));
     } catch (err) {
       ws.send(
         JSON.stringify({
+          ok: false,
           error: err instanceof Error ? err.message : String(err),
         }),
       );
     }
   }
-
-  /**
-   * Handles alarm wake-ups from scheduled `actions.wait` calls.
-   */
-  async alarm(): Promise<void> {
-    const runtime = await this.getRuntime();
-    await runtime.handleEvent({
-      type: "onTick",
-      payload: { reason: "alarm" },
-      threadId: this.ctx.id.toString(),
-    });
-  }
 }
+

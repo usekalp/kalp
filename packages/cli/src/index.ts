@@ -7,12 +7,13 @@ const LOGO = "🦋";
 
 const COMMANDS = [
   ["create", "Add a new agent"],
-  ["push", "Push agent to Kalp"],
+  ["deploy", "Deploy runtime to Cloudflare"],
+  ["push", "Push agent manifest to Cloudflare"],
   ["link", "Link project to Kalp cloud"],
   ["secrets", "Manage secrets"],
-  ["login", "Authenticate with Kalp"],
+  ["login", "Authenticate with Cloudflare"],
   ["logout", "Sign out from Kalp"],
-  ["studio", "Open Kalp Studio"],
+  ["dev", "Run Worker + Studio locally"],
 ] as const;
 
 function printHelp(): void {
@@ -44,12 +45,13 @@ const main = defineCommand({
   },
   subCommands: {
     create: () => import("./commands/create").then((r) => r.default),
+    deploy: () => import("./commands/deploy").then((r) => r.default),
     push: () => import("./commands/push").then((r) => r.default),
     link: () => import("./commands/link").then((r) => r.default),
     secrets: () => import("./commands/secrets").then((r) => r.default),
     login: () => import("./commands/login").then((r) => r.default),
     logout: () => import("./commands/logout").then((r) => r.default),
-    studio: () => import("./commands/studio").then((r) => r.default),
+    dev: () => import("./commands/dev").then((r) => r.default),
   },
   run({ args }) {
     const firstArg = process.argv[2];
