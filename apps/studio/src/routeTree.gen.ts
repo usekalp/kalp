@@ -9,19 +9,14 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AgentAgentNameRouteImport } from './routes/agent.$agentName'
-import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as StudioRouteImport } from './routes/_studio'
+import { Route as StudioIndexRouteImport } from './routes/_studio.index'
 import { Route as ReplayExecutionIdRouteImport } from './routes/replay.$executionId'
+import { Route as StudioAgentAgentNameRouteImport } from './routes/_studio.agent.$agentName'
 
-const AgentAgentNameRoute = AgentAgentNameRouteImport.update({
-  id: '/agent/$agentName',
-  path: '/agent/$agentName',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const StudioRoute = StudioRouteImport.update({
+  id: '/_studio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -29,68 +24,75 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StudioIndexRoute = StudioIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => StudioRoute,
+} as any)
 const ReplayExecutionIdRoute = ReplayExecutionIdRouteImport.update({
   id: '/replay/$executionId',
   path: '/replay/$executionId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StudioAgentAgentNameRoute = StudioAgentAgentNameRouteImport.update({
+  id: '/agent/$agentName',
+  path: '/agent/$agentName',
+  getParentRoute: () => StudioRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
-  '/agent/$agentName': typeof AgentAgentNameRoute
-  '/': typeof IndexRoute
+  '/': typeof StudioIndexRoute
   '/login': typeof LoginRoute
+  '/agent/$agentName': typeof StudioAgentAgentNameRoute
   '/replay/$executionId': typeof ReplayExecutionIdRoute
 }
 export interface FileRoutesByTo {
-  '/agent/$agentName': typeof AgentAgentNameRoute
-  '/': typeof IndexRoute
+  '/': typeof StudioIndexRoute
   '/login': typeof LoginRoute
+  '/agent/$agentName': typeof StudioAgentAgentNameRoute
   '/replay/$executionId': typeof ReplayExecutionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/agent/$agentName': typeof AgentAgentNameRoute
-  '/': typeof IndexRoute
+  '/_studio': typeof StudioRoute
+  '/': typeof StudioIndexRoute
   '/login': typeof LoginRoute
+  '/agent/$agentName': typeof StudioAgentAgentNameRoute
   '/replay/$executionId': typeof ReplayExecutionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/agent/$agentName' | '/' | '/login' | '/replay/$executionId'
+  fullPaths: '/' | '/login' | '/agent/$agentName' | '/replay/$executionId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/agent/$agentName' | '/' | '/login' | '/replay/$executionId'
-  id: '__root__' | '/agent/$agentName' | '/' | '/login' | '/replay/$executionId'
+  to: '/' | '/login' | '/agent/$agentName' | '/replay/$executionId'
+  id: '__root__' | '/' | '/login' | '/agent/$agentName' | '/replay/$executionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  AgentAgentNameRoute: typeof AgentAgentNameRoute
-  IndexRoute: typeof IndexRoute
+  StudioRoute: typeof StudioRoute
   LoginRoute: typeof LoginRoute
   ReplayExecutionIdRoute: typeof ReplayExecutionIdRoute
+}
+export interface StudioRouteChildren {
+  StudioIndexRoute: typeof StudioIndexRoute
+  StudioAgentAgentNameRoute: typeof StudioAgentAgentNameRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/agent/$agentName': {
-      id: '/agent/$agentName'
-      path: '/agent/$agentName'
-      fullPath: '/agent/$agentName'
-      preLoaderRoute: typeof AgentAgentNameRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof StudioIndexRouteImport
+      parentRoute: typeof StudioRouteImport
     }
     '/replay/$executionId': {
       id: '/replay/$executionId'
@@ -99,24 +101,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReplayExecutionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agent/$agentName': {
+      id: '/agent/$agentName'
+      path: '/agent/$agentName'
+      fullPath: '/agent/$agentName'
+      preLoaderRoute: typeof StudioAgentAgentNameRouteImport
+      parentRoute: typeof StudioRouteImport
+    }
   }
 }
 
+const StudioRouteChildren: StudioRouteChildren = {
+  StudioIndexRoute: StudioIndexRoute,
+  StudioAgentAgentNameRoute: StudioAgentAgentNameRoute,
+}
+const StudioRouteWithChildren = StudioRoute._addFileChildren(StudioRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
-  AgentAgentNameRoute: AgentAgentNameRoute,
-  IndexRoute: IndexRoute,
+  StudioRoute: StudioRouteWithChildren,
   LoginRoute: LoginRoute,
   ReplayExecutionIdRoute: ReplayExecutionIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

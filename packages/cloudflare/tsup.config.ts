@@ -8,5 +8,9 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   minify: false,
-  external: ["cloudflare:workers", "@kalphq/core", "@kalphq/sdk"],
+  external: [
+    "cloudflare:workers",
+    "@kalphq/core",
+    "@kalphq/sdk",
+  ],
 });

@@ -14,12 +14,13 @@ const __dirname = dirname(__filename);
 
 const CLI_DIR = resolve(__dirname, "..");
 const REPO_ROOT = resolve(CLI_DIR, "..", "..");
-const STUDIO_CLIENT_DIST = resolve(REPO_ROOT, "apps", "studio", "dist", "client");
+const STUDIO_DIST_ROOT = resolve(REPO_ROOT, "apps", "studio", "dist");
+const STUDIO_DIST_CLIENT = resolve(STUDIO_DIST_ROOT, "client");
 const TEMPLATE_SOURCE_DIR = resolve(CLI_DIR, "runtime-template");
 const DIST_RUNTIME_TEMPLATE_DIR = resolve(CLI_DIR, "dist", "runtime-template");
 const DIST_STUDIO_DIR = join(DIST_RUNTIME_TEMPLATE_DIR, "studio");
 
-function createStudioShell(entryScript, cssFiles) {
+function createStudioShell(entryScript, cssFiles, rootId = "root") {
   const cssLinks = cssFiles
     .map((file) => `    <link rel="stylesheet" href="/studio/assets/${file}" />`)
     .join("\n");
@@ -33,14 +34,14 @@ function createStudioShell(entryScript, cssFiles) {
 ${cssLinks}
   </head>
   <body>
-    <div id="root"></div>
+    <div id="${rootId}"></div>
     <script type="module" src="/studio/assets/${entryScript}"></script>
   </body>
 </html>
 `;
 }
 
-async function ensureStudioIndex(studioDir) {
+async function ensureStudioIndex(studioDir, rootId = "root") {
   const indexPath = join(studioDir, "index.html");
 
   try {
@@ -63,24 +64,46 @@ async function ensureStudioIndex(studioDir) {
   }
 
   const cssFiles = assetFiles.filter((file) => file.endsWith(".css")).sort();
-  await writeFile(indexPath, createStudioShell(entryScript, cssFiles), "utf-8");
+  await writeFile(indexPath, createStudioShell(entryScript, cssFiles, rootId), "utf-8");
 }
 
 async function prepareRuntimeTemplate() {
-  await access(STUDIO_CLIENT_DIST).catch(() => {
+  let studioDistDir = STUDIO_DIST_ROOT;
+  const hasDistRoot = await access(STUDIO_DIST_ROOT).then(
+    () => true,
+    () => false,
+  );
+  const hasDistClient = await access(STUDIO_DIST_CLIENT).then(
+    () => true,
+    () => false,
+  );
+
+  if (!hasDistRoot && !hasDistClient) {
     throw new Error(
-      "Missing apps/studio/dist/client. Run `pnpm --filter=@kalphq/studio build` first.",
+      "Missing apps/studio/dist. Run `pnpm --filter=@kalphq/studio build` first.",
     );
-  });
+  }
+
+  let rootElementId = "app";
+  if (hasDistClient) {
+    const hasRootIndex = await access(join(STUDIO_DIST_ROOT, "index.html")).then(
+      () => true,
+      () => false,
+    );
+    if (!hasRootIndex) {
+      studioDistDir = STUDIO_DIST_CLIENT;
+      rootElementId = "root";
+    }
+  }
 
   await rm(DIST_RUNTIME_TEMPLATE_DIR, { recursive: true, force: true });
   await mkdir(DIST_RUNTIME_TEMPLATE_DIR, { recursive: true });
-  await cp(STUDIO_CLIENT_DIST, DIST_STUDIO_DIR, { recursive: true });
+  await cp(studioDistDir, DIST_STUDIO_DIR, { recursive: true });
   await cp(
     join(TEMPLATE_SOURCE_DIR, "worker-entry.js"),
     join(DIST_RUNTIME_TEMPLATE_DIR, "worker-entry.js"),
   );
-  await ensureStudioIndex(DIST_STUDIO_DIR);
+  await ensureStudioIndex(DIST_STUDIO_DIR, rootElementId);
 }
 
 prepareRuntimeTemplate().catch((error) => {

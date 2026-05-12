@@ -20,7 +20,7 @@ export default defineCommand({
 
     await ensureSecretKey(cwd);
     await copyFile(join(cwd, ".env"), join(cwd, ".dev.vars"));
-    const runtime = await materializeRuntime(cwd);
+    const runtime = await materializeRuntime(cwd, { mode: "local" });
 
     p.note("Starting local runtime (wrangler dev :8787)");
 

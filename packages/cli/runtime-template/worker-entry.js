@@ -1,8 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { Hono } from "hono";
 import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
-import { serveStatic } from "hono/cloudflare-workers";
-import manifest from "__STATIC_CONTENT_MANIFEST";
 import agentsSnapshot from "./agents.snapshot.json";
 
 const SESSION_COOKIE_NAME = "kalp_studio_session";
@@ -12,9 +10,6 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
-
-const staticManifest =
-  typeof manifest === "string" ? JSON.parse(manifest) : manifest;
 
 function withCors(response) {
   if (response.status === 101) return response;
@@ -30,20 +25,25 @@ function withCors(response) {
 }
 
 function resolveStudioAssetPath(pathname) {
-  if (pathname === "/studio" || pathname === "/studio/") return "index.html";
+  if (pathname === "/studio" || pathname === "/studio/") return "";
   const stripped = pathname.replace(/^\/studio\//, "");
-  return stripped || "index.html";
+  return stripped || "";
 }
 
-function hasManifestPath(assetPath) {
-  return Object.prototype.hasOwnProperty.call(staticManifest, assetPath);
+async function serveAsset(env, assetPath, request) {
+  const assetUrl = new URL(request.url);
+  assetUrl.hostname = "assets.local";
+  assetUrl.pathname = assetPath ? `/${assetPath.replace(/^\/+/, "")}` : "/";
+  return env.ASSETS.fetch(new Request(assetUrl.toString(), request));
 }
 
-function serveManifestAsset(assetPath) {
-  return serveStatic({
-    path: `./${assetPath}`,
-    manifest: staticManifest,
-  });
+function shouldTreatAsStaticAsset(assetPath) {
+  if (!assetPath) return false;
+  if (assetPath.startsWith("assets/")) return true;
+  if (assetPath === "favicon.ico") return true;
+  if (assetPath === "manifest.json") return true;
+  if (assetPath === "robots.txt") return true;
+  return assetPath.includes(".");
 }
 
 async function readSession(c) {
@@ -271,14 +271,13 @@ app.get("/studio", (c) => c.redirect("/studio/", 308));
 app.get("/studio/*", async (c) => {
   const pathname = new URL(c.req.url).pathname;
   const assetPath = resolveStudioAssetPath(pathname);
-
-  if (hasManifestPath(assetPath)) {
-    await serveManifestAsset(assetPath)(c, async () => {});
-    return c.res;
+  if (!shouldTreatAsStaticAsset(assetPath)) {
+    return serveAsset(c.env, "", c.req.raw);
   }
 
-  await serveManifestAsset("index.html")(c, async () => {});
-  return c.res;
+  const assetResponse = await serveAsset(c.env, assetPath, c.req.raw);
+  if (assetResponse.status !== 404) return assetResponse;
+  return serveAsset(c.env, "", c.req.raw);
 });
 
 app.get("/", (c) => c.redirect("/studio/", 308));
@@ -287,9 +286,7 @@ app.notFound(async (c) => {
   if (c.req.path.startsWith("/api/internal")) {
     return c.json({ error: "Not found" }, 404);
   }
-
-  await serveManifestAsset("index.html")(c, async () => {});
-  return c.res;
+  return serveAsset(c.env, "", c.req.raw);
 });
 
 app.onError((error, c) => {

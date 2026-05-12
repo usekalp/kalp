@@ -1,28 +1,17 @@
 import { useMemo } from 'react'
-import { createFileRoute, Link, redirect } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowUpRight, Globe, House, LogOut } from 'lucide-react'
+import { ArrowUpRight, Globe, House } from 'lucide-react'
 import { getAgents } from '#/lib/api'
-import { signOut, useAuth } from '#/hooks/useAuth'
 import { Badge } from '#/components/ui/badge'
-import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import { Skeleton } from '#/components/ui/skeleton'
 
-export const Route = createFileRoute('/')({
-  beforeLoad: async () => {
-    const response = await fetch('/api/internal/session', {
-      credentials: 'include',
-    })
-    if (!response.ok) {
-      throw redirect({ to: '/login' })
-    }
-  },
+export const Route = createFileRoute('/_studio/')({
   component: DashboardPage,
 })
 
 function DashboardPage() {
-  const { username } = useAuth()
   const agentsQuery = useQuery({
     queryKey: ['runtime-agents'],
     queryFn: getAgents,
@@ -30,40 +19,19 @@ function DashboardPage() {
   })
 
   const cards = useMemo(() => agentsQuery.data?.agents ?? [], [agentsQuery.data])
-
-  const onLogout = async () => {
-    await signOut()
-    window.location.href = '/studio/login'
-  }
+  const mode = agentsQuery.data?.mode ?? 'local'
 
   return (
-    <main className="min-h-screen bg-background px-6 py-8">
-      <header className="mx-auto mb-8 flex w-full max-w-7xl items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-5 py-4 backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <img
-            src="/studio/kalp-logo.png"
-            alt="Kalp"
-            className="h-10 w-10 rounded-lg border border-white/10 bg-black/50 p-1.5"
-          />
-          <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              Kalp Studio
-            </p>
-            <h1 className="text-xl font-semibold">Agents Dashboard</h1>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <Badge variant="outline" className="border-white/20 bg-white/5">
-            {username ?? 'guest'}
-          </Badge>
-          <Button variant="ghost" onClick={onLogout} className="text-muted-foreground">
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
-          </Button>
-        </div>
-      </header>
+    <main>
+      <section className="mb-6 rounded-2xl border border-white/10 bg-gradient-to-br from-white/8 to-white/[0.02] p-5 backdrop-blur-xl">
+        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Dashboard</p>
+        <h1 className="mt-2 text-2xl font-semibold">Agents Command Center</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Runtime mode: <span className="font-medium text-foreground">{mode}</span>
+        </p>
+      </section>
 
-      <section className="mx-auto grid w-full max-w-7xl gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {agentsQuery.isLoading &&
           Array.from({ length: 6 }).map((_, index) => (
             <Card key={index} className="border-white/10 bg-white/5">
@@ -81,7 +49,7 @@ function DashboardPage() {
           cards.map((agent) => (
             <Card
               key={agent.name}
-              className="group border-white/10 bg-white/5 transition-all hover:border-white/20 hover:bg-white/10"
+              className="group border-white/10 bg-white/[0.03] shadow-[0_10px_40px_-24px_rgba(79,70,229,0.8)] backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-300/20 hover:bg-white/[0.08]"
             >
               <CardHeader className="flex flex-row items-start justify-between">
                 <CardTitle className="text-lg font-medium">{agent.name}</CardTitle>
@@ -94,14 +62,15 @@ function DashboardPage() {
                 </Link>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{formatEnvironment(agent.environment)}</Badge>
+                  <Badge variant="outline" className="border-cyan-300/30 text-cyan-200">
+                    {agent.version ?? 'v0'}
+                  </Badge>
                   <Badge
                     variant={agent.status === 'online' ? 'default' : 'outline'}
                     className={
-                      agent.status === 'online'
-                        ? 'bg-emerald-500/20 text-emerald-200'
-                        : ''
+                      agent.status === 'online' ? 'bg-emerald-500/20 text-emerald-200' : ''
                     }
                   >
                     {agent.status}
@@ -109,7 +78,7 @@ function DashboardPage() {
                 </div>
 
                 <div className="space-y-2 text-sm text-muted-foreground">
-                  <p className="truncate">Hash: {agent.hash ?? 'n/a'}</p>
+                  <p className="truncate">Updated: {agent.updatedAt ?? 'n/a'}</p>
                   <p className="truncate">
                     Endpoint:{' '}
                     {agent.workerUrl ? (
@@ -133,12 +102,11 @@ function DashboardPage() {
       </section>
 
       {!agentsQuery.isLoading && cards.length === 0 && (
-        <section className="mx-auto mt-8 flex w-full max-w-2xl flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 p-12 text-center">
+        <section className="mt-8 flex w-full max-w-2xl flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 p-12 text-center">
           <House className="mb-4 h-8 w-8 text-muted-foreground" />
           <h2 className="text-lg font-medium">No agents found</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Create an agent with <code>kalp create</code> and push it to populate
-            this dashboard.
+            Create an agent with <code>kalp create</code> and push it to populate this dashboard.
           </p>
         </section>
       )}

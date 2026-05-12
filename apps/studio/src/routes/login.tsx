@@ -1,4 +1,5 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Loader2, Lock } from 'lucide-react'
 import { login } from '#/lib/api'

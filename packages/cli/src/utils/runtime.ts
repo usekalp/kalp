@@ -9,9 +9,8 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, join, normalize, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readAgentStore } from "@/utils/agent-store";
 import { readProjectState } from "@/utils/project-state";
 
 const RUNTIME_ROOT = ".kalp";
@@ -34,6 +33,10 @@ interface RuntimeAgentRecord {
   environment: "local" | "remote" | "both";
   status: "online" | "offline";
   hash: string | null;
+  version: string | null;
+  versionNumber: number | null;
+  lastRemoteHash: string | null;
+  lastLocalHash: string | null;
   workerUrl: string | null;
   localPath: string | null;
   updatedAt: string | null;
@@ -43,7 +46,12 @@ interface RuntimeAgentsSnapshot {
   generatedAt: string;
   projectPath: string;
   workerUrl: string | null;
+  mode: "local" | "remote";
   agents: RuntimeAgentRecord[];
+}
+
+export interface MaterializeRuntimeOptions {
+  mode?: "local" | "remote";
 }
 
 interface WranglerConfig {
@@ -255,7 +263,7 @@ async function ensureStudioIndex(studioDir: string): Promise<void> {
   await writeFile(indexPath, html, "utf-8");
 }
 
-async function readLocalAgentNames(cwd: string): Promise<string[]> {
+export async function readLocalAgentNames(cwd: string): Promise<string[]> {
   const agentsDir = join(cwd, "agents");
   try {
     const entries = await readdir(agentsDir, { withFileTypes: true });
@@ -274,62 +282,78 @@ async function readLocalAgentNames(cwd: string): Promise<string[]> {
   }
 }
 
-function isPathInsideProject(projectPath: string, candidatePath: string): boolean {
-  const project = normalize(projectPath).toLowerCase();
-  const candidate = normalize(candidatePath).toLowerCase();
-  return candidate.startsWith(project);
-}
-
-async function createAgentsSnapshot(cwd: string): Promise<RuntimeAgentsSnapshot> {
+async function createAgentsSnapshot(
+  cwd: string,
+  mode: "local" | "remote",
+): Promise<RuntimeAgentsSnapshot> {
   const localAgentNames = await readLocalAgentNames(cwd);
   const state = await readProjectState(cwd);
-  const globalStore = await readAgentStore();
 
   const byName = new Map<string, RuntimeAgentRecord>();
+  const stateAgents = state?.agents ?? {};
 
   for (const name of localAgentNames) {
     const localPath = join(cwd, "agents", name, "index.ts");
+    const saved = stateAgents[name];
+    const hasRemoteVersion = !!saved?.lastRemoteHash && (saved?.currentVersion ?? 0) > 0;
+
+    if (mode === "remote" && !hasRemoteVersion) {
+      continue;
+    }
+
+    const resolvedWorkerUrl =
+      saved?.workerUrl ??
+      (state?.workerUrl ? `${state.workerUrl.replace(/\/$/, "")}/a/${name}` : null);
+    const versionNumber =
+      typeof saved?.currentVersion === "number" && saved.currentVersion > 0
+        ? saved.currentVersion
+        : null;
+
     byName.set(name, {
       name,
-      environment: "local",
-      status: "offline",
-      hash: null,
-      workerUrl: null,
+      environment:
+        mode === "remote"
+          ? "remote"
+          : hasRemoteVersion
+            ? "both"
+            : "local",
+      status: resolvedWorkerUrl ? "online" : "offline",
+      hash: saved?.currentHash ?? null,
+      version: versionNumber ? `v${versionNumber}` : null,
+      versionNumber,
+      lastRemoteHash: saved?.lastRemoteHash ?? null,
+      lastLocalHash: saved?.lastLocalHash ?? null,
+      workerUrl: resolvedWorkerUrl,
       localPath,
-      updatedAt: null,
+      updatedAt: saved?.lastPushedAt ?? state?.deployedAt ?? null,
     });
   }
 
-  for (const [name, entry] of Object.entries(globalStore)) {
-    if (!entry.localPath || !isPathInsideProject(cwd, entry.localPath)) continue;
+  if (mode === "remote") {
+    for (const [name, saved] of Object.entries(stateAgents)) {
+      const hasRemoteVersion =
+        !!saved.lastRemoteHash && (saved.currentVersion ?? 0) > 0;
+      if (!hasRemoteVersion || byName.has(name)) continue;
 
-    const existing = byName.get(name);
-    const workerUrl =
-      state?.workerUrl && !entry.workerUrl
-        ? `${state.workerUrl.replace(/\/$/, "")}/a/${name}`
-        : entry.workerUrl ?? null;
+      const localPath = saved.localPath ?? join(cwd, "agents", name, "index.ts");
+      const workerUrl =
+        saved.workerUrl ??
+        (state?.workerUrl ? `${state.workerUrl.replace(/\/$/, "")}/a/${name}` : null);
+      const versionNumber = saved.currentVersion > 0 ? saved.currentVersion : null;
 
-    byName.set(name, {
-      name,
-      environment: existing ? "both" : "remote",
-      status: workerUrl ? "online" : "offline",
-      hash: entry.hash ?? null,
-      workerUrl,
-      localPath: existing?.localPath ?? entry.localPath,
-      updatedAt: entry.timestamp ?? state?.deployedAt ?? null,
-    });
-  }
-
-  if (state?.workerUrl) {
-    for (const [name, record] of byName.entries()) {
-      if (!record.workerUrl) {
-        record.workerUrl = `${state.workerUrl.replace(/\/$/, "")}/a/${name}`;
-        record.environment =
-          record.environment === "local" ? "both" : record.environment;
-        record.status = "online";
-        record.updatedAt = record.updatedAt ?? state.deployedAt;
-        byName.set(name, record);
-      }
+      byName.set(name, {
+        name,
+        environment: "remote",
+        status: workerUrl ? "online" : "offline",
+        hash: saved.currentHash ?? null,
+        version: versionNumber ? `v${versionNumber}` : null,
+        versionNumber,
+        lastRemoteHash: saved.lastRemoteHash ?? null,
+        lastLocalHash: saved.lastLocalHash ?? null,
+        workerUrl,
+        localPath,
+        updatedAt: saved.lastPushedAt ?? state?.deployedAt ?? null,
+      });
     }
   }
 
@@ -337,11 +361,16 @@ async function createAgentsSnapshot(cwd: string): Promise<RuntimeAgentsSnapshot>
     generatedAt: new Date().toISOString(),
     projectPath: cwd,
     workerUrl: state?.workerUrl ?? null,
+    mode,
     agents: Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
 
-export async function materializeRuntime(cwd: string): Promise<RuntimePaths> {
+export async function materializeRuntime(
+  cwd: string,
+  options: MaterializeRuntimeOptions = {},
+): Promise<RuntimePaths> {
+  const mode = options.mode ?? "remote";
   const runtimeDir = join(cwd, RUNTIME_ROOT, RUNTIME_DIR);
   const studioDir = join(runtimeDir, STUDIO_DIR);
   const workerEntrypointPath = join(runtimeDir, WORKER_ENTRY_FILE);
@@ -354,7 +383,7 @@ export async function materializeRuntime(cwd: string): Promise<RuntimePaths> {
   await cp(template.studioTemplateDir, studioDir, { recursive: true });
   await cp(template.workerEntryPath, workerEntrypointPath);
   await ensureStudioIndex(studioDir);
-  const agentsSnapshot = await createAgentsSnapshot(cwd);
+  const agentsSnapshot = await createAgentsSnapshot(cwd, mode);
   await writeFile(
     join(runtimeDir, "agents.snapshot.json"),
     `${JSON.stringify(agentsSnapshot, null, 2)}\n`,
