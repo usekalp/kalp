@@ -14,6 +14,7 @@ import { writeTemplateFile } from "./utils";
 async function generateBlank(opts: {
   agentName: string;
   cwd: string;
+  label?: string;
 }): Promise<void> {
   const { agentName, cwd } = opts;
   const agentDir = join(cwd, "agents", agentName);
@@ -31,6 +32,7 @@ async function generateBlank(opts: {
     " */",
     "export default defineAgent({",
     '  name: "' + agentName + '",',
+    '  label: "' + (opts.label ?? agentName) + '",',
     '  description: "A helpful AI assistant",',
     "",
     "  contract: exampleContract,",

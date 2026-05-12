@@ -9,7 +9,7 @@ import { useAuth } from '#/hooks/useAuth'
 import { useReplay } from '#/hooks/useReplay'
 
 const searchSchema = z.object({
-  threadId: z.string(),
+  threadId: z.string().optional(),
 })
 
 export const Route = createFileRoute('/replay/$executionId')({
@@ -44,7 +44,11 @@ function ReplayPage() {
   }
 
   if (sessionQuery.isLoading) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>
+    return (
+      <div className="flex h-screen items-center justify-center">
+        Loading...
+      </div>
+    )
   }
 
   return (
@@ -61,7 +65,9 @@ function ReplayPage() {
           <div className="text-right text-sm text-muted-foreground">
             <p>
               Thread:{' '}
-              <span className="font-mono">{threadId.slice(0, 16)}...</span>
+              <span className="font-mono">
+                {threadId ? threadId.slice(0, 16) : 'N/A'}...
+              </span>
             </p>
             <p>{events?.length ?? 0} events</p>
           </div>

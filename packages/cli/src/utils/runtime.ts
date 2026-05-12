@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { deriveLabelFromName } from "@kalphq/project";
 import { readProjectState } from "@/utils/project-state";
 
 const RUNTIME_ROOT = ".kalp";
@@ -30,6 +31,8 @@ export interface RuntimePaths {
 
 interface RuntimeAgentRecord {
   name: string;
+  label?: string;
+  tags?: string[];
   environment: "local" | "remote" | "both";
   status: "online" | "offline";
   hash: string | null;
@@ -311,6 +314,8 @@ async function createAgentsSnapshot(
 
     byName.set(name, {
       name,
+      label: deriveLabelFromName(name),
+      tags: [],
       environment:
         mode === "remote"
           ? "remote"
@@ -343,6 +348,8 @@ async function createAgentsSnapshot(
 
       byName.set(name, {
         name,
+        label: deriveLabelFromName(name),
+        tags: [],
         environment: "remote",
         status: workerUrl ? "online" : "offline",
         hash: saved.currentHash ?? null,

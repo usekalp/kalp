@@ -26,7 +26,10 @@ interface AgentConfigBase<
    * @example "Sales Bot" → id: "sales-bot"
    */
   name: string;
+  label?: string;
   description?: string;
+  tags?: readonly string[];
+  emits?: Record<string, z.ZodTypeAny | string>;
   systemPrompt?:
     | string
     | ((context: HandlerContext) => string | Promise<string>);

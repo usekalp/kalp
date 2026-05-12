@@ -3,6 +3,7 @@ export { scaffoldProject, type ScaffoldProjectOptions } from "./scaffold";
 // Scaffold agent now comes from templates
 export { scaffoldAgent, type ScaffoldAgentOptions } from "./templates/scaffold";
 export { installDeps, ensureDirectory } from "./fs";
+export { deriveLabelFromName } from "./labels";
 
 // Template system
 export {

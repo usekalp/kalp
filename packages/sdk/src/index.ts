@@ -45,9 +45,10 @@ export { defineContract } from "@/contracts";
 
 export type {
   // AI
-  ModelMap,
+  AIProvider,
+  ProviderModelMap,
+  ConfiguredModel,
   ProviderName,
-  LocalModelId,
   KalpModelId,
   AIParams,
   KalpHistoryMessage,

@@ -11,6 +11,8 @@ type StudioSession = {
 
 type StudioAgent = {
   name: string;
+  label?: string;
+  tags?: string[];
   environment: "local" | "remote" | "both";
   status: "online" | "offline";
   hash: string | null;
@@ -212,6 +214,7 @@ function createRuntimeApp() {
       generatedAt: snapshot.generatedAt,
       projectPath: snapshot.projectPath,
       workerUrl: snapshot.workerUrl,
+      mode: snapshot.mode,
       agents: snapshot.agents,
     });
   });

@@ -14,8 +14,17 @@
 export interface AgentMetadata {
   /** Display name for the agent. */
   name: string;
+  /** Human-friendly agent label for UIs. */
+  label?: string;
   /** Optional description. */
   description?: string;
+  /** Optional tags for filtering and grouping. */
+  tags?: string[];
+  /** Optional emitted events metadata. */
+  emits?: Record<
+    string,
+    { type: "schema"; schema: unknown } | { type: "description"; description: string }
+  >;
   /** System prompt or dynamic prompt function. */
   systemPrompt?: string | { type: "function"; dynamic: true };
   /** Additional metadata. */

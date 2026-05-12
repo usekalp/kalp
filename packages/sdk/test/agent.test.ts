@@ -123,4 +123,24 @@ describe("defineAgent", () => {
     expect(agent.contract).toBeDefined();
     expect(agent.name).toBe("Sales Bot");
   });
+
+  it("supports label, tags and emits metadata", () => {
+    const agent = defineAgent({
+      name: "customer_support",
+      label: "Customer Support",
+      tags: ["support", "tier-1"],
+      emits: {
+        ticket_created: z.object({ id: z.string() }),
+        note: "Human escalation event",
+      },
+      async onMessage(ctx: any) {
+        return { text: ctx.message.text };
+      },
+    });
+
+    expect(agent.label).toBe("Customer Support");
+    expect(agent.tags).toEqual(["support", "tier-1"]);
+    expect(agent.emits).toBeDefined();
+    expect(Object.keys(agent.emits ?? {})).toEqual(["ticket_created", "note"]);
+  });
 });

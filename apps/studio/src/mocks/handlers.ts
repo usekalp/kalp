@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw'
 const mockedAgents = [
   {
     name: 'support',
+    label: 'Support',
     environment: 'both',
     status: 'online',
     hash: 'a1b2c3d4',
@@ -16,6 +17,7 @@ const mockedAgents = [
   },
   {
     name: 'researcher',
+    label: 'Researcher',
     environment: 'local',
     status: 'offline',
     hash: 'z9y8x7w6',

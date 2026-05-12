@@ -1,4 +1,5 @@
 import type { IdentityConfig } from "@/identity";
+import type { AIProvider, ProviderModelMap } from "@/primitives/ai";
 
 /**
  * MCP (Model Context Protocol) server configuration.
@@ -32,6 +33,7 @@ export interface McpServerConfig {
 export interface KalpProjectConfig<
   TSecrets extends string[] = string[],
   TIdentity extends IdentityConfig = IdentityConfig,
+  TProvider extends AIProvider = AIProvider,
 > {
   /**
    * Environment variable names that should be treated as secrets.
@@ -107,4 +109,13 @@ export interface KalpProjectConfig<
    * ```
    */
   mcp?: Record<string, McpServerConfig>;
+
+  /**
+   * AI provider configuration used by primitives for model typing and defaults.
+   */
+  ai?: {
+    provider: TProvider;
+    defaultModel?: ProviderModelMap[TProvider];
+    customModels?: readonly string[];
+  };
 }

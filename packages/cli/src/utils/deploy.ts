@@ -4,6 +4,11 @@ import { requireAuth } from "@/utils/auth";
 import { ensureStudioSecrets } from "@/utils/secret";
 import { readProjectState, writeProjectState } from "@/utils/project-state";
 import { materializeRuntime } from "@/utils/runtime";
+import {
+  getRequiredSecretForProvider,
+  readDotEnv,
+  resolveProviderFromConfig,
+} from "@/utils/ai";
 
 function findWorkersUrl(output: string): string | null {
   const match = output.match(/https:\/\/[^\s]+\.workers\.dev/);
@@ -137,6 +142,16 @@ export async function runInitialDeploy(cwd: string): Promise<{
   accountId: string;
 }> {
   const auth = await requireAuth();
+  const provider = await resolveProviderFromConfig(cwd);
+  const requiredProviderSecret = getRequiredSecretForProvider(provider);
+  const envMap = await readDotEnv(cwd);
+  const providerSecretValue = envMap[requiredProviderSecret]?.trim();
+  if (!providerSecretValue) {
+    throw new Error(
+      `Missing required secret ${requiredProviderSecret} for provider "${provider}". Add it to .env before deploy.`,
+    );
+  }
+
   const secrets = await ensureStudioSecrets(cwd);
   const runtime = await materializeRuntime(cwd);
   let secretSyncFailed = false;
@@ -144,6 +159,7 @@ export async function runInitialDeploy(cwd: string): Promise<{
     ["KALP_SECRET_KEY", secrets.key],
     ["KALP_STUDIO_PASSWORD", secrets.studioPassword],
     ["KALP_STUDIO_ADMIN_USER", secrets.studioAdminUser],
+    [requiredProviderSecret, providerSecretValue],
   ] as const;
 
   for (const [name, value] of secretEntries) {

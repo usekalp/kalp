@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
 import { buildAgent } from "../src/compiler";
 import path from "path";
 import fs from "fs";
@@ -207,5 +207,28 @@ describe("Compiler E2E", () => {
     expect(ir.bundles?.[ir.entries["onMessage"]]).toBeDefined();
     expect(ir.entries?.["onCall"]).toBeDefined();
     expect(ir.bundles?.[ir.entries["onCall"]]).toBeDefined();
+  });
+
+  it("should serialize label/tags/emits metadata with fallback warnings", async () => {
+    const entry = path.join(FIXTURES_DIR, "emits-agent.ts");
+    const outDir = path.join(OUT_DIR, "emits");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await buildAgent(entry, outDir);
+
+    const ir = JSON.parse(fs.readFileSync(path.join(outDir, "ir.json"), "utf-8"));
+    expect(ir.metadata.name).toBe("customer_support");
+    expect(ir.metadata.label).toBe("Customer Support");
+    expect(ir.metadata.tags).toEqual(["support", "inbox"]);
+    expect(ir.metadata.emits.ticket_created.type).toBe("schema");
+    expect(ir.metadata.emits.webhook_sent).toEqual({
+      type: "description",
+      description: "Webhook notification payload",
+    });
+    expect(ir.metadata.emits.refined_payload).toEqual({
+      type: "description",
+      description: "Non-serializable schema",
+    });
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });

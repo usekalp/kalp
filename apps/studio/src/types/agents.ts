@@ -1,5 +1,7 @@
 export interface RuntimeAgent {
   name: string
+  label?: string
+  tags?: string[]
   environment: 'local' | 'remote' | 'both'
   status: 'online' | 'offline'
   hash: string | null

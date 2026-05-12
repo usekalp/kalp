@@ -21,6 +21,7 @@ const CLI_VERSION = pkg.version;
 export interface ScaffoldProjectOptions {
   projectName: string;
   targetDir: string;
+  aiProvider?: "openai" | "anthropic" | "openrouter" | "custom";
 }
 
 /**
@@ -30,6 +31,14 @@ export async function scaffoldProject(
   opts: ScaffoldProjectOptions,
 ): Promise<void> {
   const { projectName, targetDir } = opts;
+  const aiProvider = opts.aiProvider ?? "openai";
+  const providerSecretMap = {
+    openai: "OPENAI_API_KEY",
+    anthropic: "ANTHROPIC_API_KEY",
+    openrouter: "OPENROUTER_API_KEY",
+    custom: "CUSTOM_AI_API_KEY",
+  } as const;
+  const providerSecret = providerSecretMap[aiProvider];
 
   const projectTemplateDir = join(TEMPLATES_ROOT, "project");
 
@@ -58,7 +67,10 @@ export async function scaffoldProject(
   const kalpConfig = `import { defineConfig, UserId } from "@kalphq/sdk";
 
 export default defineConfig({
-  secrets: ["OPENAI_API_KEY"],
+  secrets: ["${providerSecret}"],
+  ai: {
+    provider: "${aiProvider}",
+  },
 
   // Clerk authentication example (optional)
   // Remove or replace with your own identity provider
@@ -97,11 +109,14 @@ export default defineConfig({
   // Generate Studio authentication secrets
   const secretKey = randomBytes(32).toString("hex");
   const studioPassword = randomBytes(24).toString("base64url");
+  const customExtra = aiProvider === "custom" ? "CUSTOM_AI_BASE_URL=\n" : "";
   const envContent = `# Kalp Studio Authentication Secret
 # Used to sign and validate Studio sessions
 KALP_SECRET_KEY=${secretKey}
 KALP_STUDIO_PASSWORD=${studioPassword}
 KALP_STUDIO_ADMIN_USER=admin
+${providerSecret}=
+${customExtra}
 `;
 
   await writeFileIfNotExists(join(targetDir, ".env"), envContent);

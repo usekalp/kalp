@@ -8,11 +8,13 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { TemplateId } from "./types";
 import { getTemplate } from "./index";
+import { deriveLabelFromName } from "../labels";
 
 export interface ScaffoldAgentOptions {
   agentName: string;
   cwd: string;
   template?: TemplateId;
+  label?: string;
 }
 
 /**
@@ -23,6 +25,7 @@ export interface ScaffoldAgentOptions {
  */
 export async function scaffoldAgent(opts: ScaffoldAgentOptions): Promise<void> {
   const { agentName, cwd, template } = opts;
+  const agentLabel = opts.label?.trim() || deriveLabelFromName(agentName);
 
   // If template specified, use template generator
   if (template) {
@@ -30,7 +33,7 @@ export async function scaffoldAgent(opts: ScaffoldAgentOptions): Promise<void> {
     if (!templateDef) {
       throw new Error(`Unknown template: ${template}`);
     }
-    await templateDef.generate({ agentName, cwd });
+    await templateDef.generate({ agentName, cwd, label: agentLabel });
     return;
   }
 
@@ -156,6 +159,7 @@ import { healthRoute } from "./routes/health";
 
 export default defineAgent({
   name: "${agentName}",
+  label: "${agentLabel}",
   description: "A helpful AI assistant",
 
   contract: ${contractName}Contract,

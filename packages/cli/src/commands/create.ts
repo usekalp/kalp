@@ -50,6 +50,7 @@ export default defineCommand({
     s.start(`Scaffolding agent ${pc.cyan(agentAnswers.name)}`);
     await scaffoldAgent({
       agentName: agentAnswers.name,
+      label: agentAnswers.label,
       cwd,
       template: agentAnswers.template,
     });

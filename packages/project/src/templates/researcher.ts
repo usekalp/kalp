@@ -14,6 +14,7 @@ import { writeTemplateFile } from "./utils";
 async function generateResearcher(opts: {
   agentName: string;
   cwd: string;
+  label?: string;
 }): Promise<void> {
   const { agentName, cwd } = opts;
   const agentDir = join(cwd, "agents", agentName);
@@ -33,6 +34,7 @@ async function generateResearcher(opts: {
     " */",
     "export default defineAgent({",
     '  name: "' + agentName + '",',
+    '  label: "' + (opts.label ?? agentName) + '",',
     '  description: "AI research assistant with scheduled publishing",',
     "",
     "  contract: researchContract,",

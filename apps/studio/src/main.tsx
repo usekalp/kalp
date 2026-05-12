@@ -14,13 +14,15 @@ if (!rootElement) {
 async function bootstrap() {
   if (import.meta.env.VITE_USE_MOCKS === 'true') {
     const { worker } = await import('./mocks/browser')
+    const baseUrl = import.meta.env.BASE_URL || '/'
+    const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
     await worker.start({
-      serviceWorker: { url: '/mockServiceWorker.js' },
+      serviceWorker: { url: `${normalizedBase}mockServiceWorker.js` },
       onUnhandledRequest: 'bypass',
     })
   }
 
-  ReactDOM.createRoot(rootElement).render(
+  ReactDOM.createRoot(rootElement!).render(
     <React.StrictMode>
       <RouterProvider router={router} />
     </React.StrictMode>,

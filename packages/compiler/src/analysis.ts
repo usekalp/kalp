@@ -90,6 +90,37 @@ export function validateIR(ir: any): { valid: boolean; errors: string[] } {
   } else {
     if (!ir.metadata.name)
       errors.push("IR metadata must have a 'name' property.");
+    if (
+      ir.metadata.label !== undefined &&
+      typeof ir.metadata.label !== "string"
+    ) {
+      errors.push("IR metadata 'label' must be a string when provided.");
+    }
+    if (ir.metadata.tags !== undefined) {
+      if (!Array.isArray(ir.metadata.tags)) {
+        errors.push("IR metadata 'tags' must be an array when provided.");
+      } else if (ir.metadata.tags.some((tag: unknown) => typeof tag !== "string")) {
+        errors.push("IR metadata 'tags' must contain only strings.");
+      }
+    }
+    if (ir.metadata.emits !== undefined) {
+      if (!ir.metadata.emits || typeof ir.metadata.emits !== "object") {
+        errors.push("IR metadata 'emits' must be an object when provided.");
+      } else {
+        for (const [eventName, eventMeta] of Object.entries(ir.metadata.emits)) {
+          if (!eventMeta || typeof eventMeta !== "object") {
+            errors.push(`IR metadata emits.${eventName} must be an object.`);
+            continue;
+          }
+          const type = (eventMeta as { type?: unknown }).type;
+          if (type !== "schema" && type !== "description") {
+            errors.push(
+              `IR metadata emits.${eventName} type must be 'schema' or 'description'.`,
+            );
+          }
+        }
+      }
+    }
   }
 
   // Check entries

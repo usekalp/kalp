@@ -14,6 +14,7 @@ import { writeTemplateFile } from "./utils";
 async function generateSupport(opts: {
   agentName: string;
   cwd: string;
+  label?: string;
 }): Promise<void> {
   const { agentName, cwd } = opts;
   const agentDir = join(cwd, "agents", agentName);
@@ -40,6 +41,7 @@ async function generateSupport(opts: {
     " */",
     "export default defineAgent({",
     '  name: "' + agentName + '",',
+    '  label: "' + (opts.label ?? agentName) + '",',
     '  description: "Customer support with true Human-in-the-loop escalation",',
     "",
     "  contract: supportContract,",

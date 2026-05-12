@@ -7,9 +7,10 @@
  */
 
 export type {
-  ModelMap,
+  AIProvider,
+  ProviderModelMap,
+  ConfiguredModel,
   ProviderName,
-  LocalModelId,
   KalpModelId,
   AIParams,
   KalpAI,

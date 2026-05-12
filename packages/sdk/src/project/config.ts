@@ -1,5 +1,6 @@
 import type { IdentityConfig } from "@/identity";
 import type { KalpProjectConfig } from "@/project/types";
+import type { AIProvider } from "@/primitives/ai";
 
 /**
  * Project configuration factory function.
@@ -50,8 +51,9 @@ import type { KalpProjectConfig } from "@/project/types";
 export function defineConfig<
   TSecrets extends string[],
   const TIdentity extends IdentityConfig,
+  const TProvider extends AIProvider = AIProvider,
 >(
-  config: KalpProjectConfig<TSecrets, TIdentity>,
-): KalpProjectConfig<TSecrets, TIdentity> {
+  config: KalpProjectConfig<TSecrets, TIdentity, TProvider>,
+): KalpProjectConfig<TSecrets, TIdentity, TProvider> {
   return config;
 }

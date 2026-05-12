@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import type { TemplateId } from "@kalphq/project";
+import { deriveLabelFromName, type TemplateId } from "@kalphq/project";
 
 /**
  * Prompt user to select an agent template.
@@ -70,6 +70,7 @@ export async function promptAgentDetails(opts?: {
   includeTemplate?: boolean;
 }): Promise<{
   name: string;
+  label: string;
   template?: TemplateId;
 }> {
   const answers = await p.group(
@@ -88,6 +89,15 @@ export async function promptAgentDetails(opts?: {
       ...(opts?.includeTemplate && {
         template: () => promptTemplateSelection(),
       }),
+      label: ({ results }) =>
+        p.text({
+          message: "Agent label? (display name)",
+          placeholder: deriveLabelFromName(results.name as string),
+          initialValue: deriveLabelFromName(results.name as string),
+          validate: (v) => {
+            if (!v.trim()) return "Agent label is required.";
+          },
+        }),
     },
     {
       onCancel: () => {
@@ -99,6 +109,7 @@ export async function promptAgentDetails(opts?: {
 
   return {
     name: answers.name,
+    label: answers.label,
     template: answers.template as TemplateId | undefined,
   };
 }

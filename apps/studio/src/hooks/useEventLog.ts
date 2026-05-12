@@ -23,10 +23,10 @@ export function useExecutions() {
 /**
  * Fetch event log for a specific execution.
  */
-export function useEventLog(executionId: string, threadId: string) {
+export function useEventLog(executionId: string, threadId: string | undefined) {
   return useQuery<IntentEvent[]>({
     queryKey: ['events', executionId],
-    queryFn: () => fetchEventLog(executionId, threadId),
+    queryFn: () => fetchEventLog(executionId, threadId!),
     refetchInterval: 1000, // Live reload if execution is active
     enabled: !!executionId && !!threadId,
   })

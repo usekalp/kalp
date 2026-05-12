@@ -6,6 +6,7 @@ import {
   scaffoldAgent,
   installDeps,
   ensureDirectory,
+  deriveLabelFromName,
   type TemplateId,
 } from "@kalphq/project";
 import {
@@ -45,6 +46,27 @@ async function promptTemplateSelection(): Promise<TemplateId> {
   }
 
   return answer as TemplateId;
+}
+
+async function promptAIProvider(): Promise<
+  "openai" | "anthropic" | "openrouter" | "custom"
+> {
+  const answer = await p.select({
+    message: "Choose your AI provider:",
+    options: [
+      { value: "openai", label: "OpenAI" },
+      { value: "anthropic", label: "Anthropic" },
+      { value: "openrouter", label: "OpenRouter" },
+      { value: "custom", label: "Custom" },
+    ],
+  });
+
+  if (p.isCancel(answer)) {
+    p.cancel("Cancelled.");
+    process.exit(0);
+  }
+
+  return answer as "openai" | "anthropic" | "openrouter" | "custom";
 }
 
 const LOGO = "🦋";
@@ -133,6 +155,7 @@ async function main(): Promise<void> {
         agentName: agentName.trim(),
         cwd: targetDir,
         template,
+        label: deriveLabelFromName(agentName.trim()),
       });
       s.stop(`Agent created (${template} template)`);
 
@@ -172,6 +195,7 @@ async function main(): Promise<void> {
     p.cancel("Cancelled.");
     process.exit(0);
   }
+  const aiProvider = await promptAIProvider();
 
   // ── Template selection ───────────────────────────────────────────────────
   const template = await promptTemplateSelection();
@@ -185,7 +209,7 @@ async function main(): Promise<void> {
 
   // ── Scaffold project ──────────────────────────────────────────────────
   s.start("Creating project structure");
-  await scaffoldProject({ projectName, targetDir });
+  await scaffoldProject({ projectName, targetDir, aiProvider });
   s.stop("Project structure created");
 
   // ── Scaffold agent ────────────────────────────────────────────────────
@@ -194,6 +218,7 @@ async function main(): Promise<void> {
     agentName: agentName.trim(),
     cwd: targetDir,
     template,
+    label: deriveLabelFromName(agentName.trim()),
   });
   s.stop(`Agent created (${template} template)`);
 

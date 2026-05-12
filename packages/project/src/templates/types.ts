@@ -22,5 +22,5 @@ export interface TemplateDefinition {
   /** Emoji/icon for visual identification */
   icon: string;
   /** Generate the template files */
-  generate: (opts: { agentName: string; cwd: string }) => Promise<void>;
+  generate: (opts: { agentName: string; cwd: string; label?: string }) => Promise<void>;
 }

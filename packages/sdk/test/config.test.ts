@@ -41,4 +41,17 @@ describe("defineConfig", () => {
     });
     expect(config.enforceGlobalAuth).toBe(true);
   });
+
+  it("supports AI provider configuration", () => {
+    const config = defineConfig({
+      secrets: ["OPENAI_API_KEY"],
+      ai: {
+        provider: "openai",
+        defaultModel: "gpt-4o-mini",
+      },
+    });
+
+    expect(config.ai?.provider).toBe("openai");
+    expect(config.ai?.defaultModel).toBe("gpt-4o-mini");
+  });
 });

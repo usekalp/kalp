@@ -5,6 +5,58 @@ import { buildSchemaIR, sortKeys } from "./ir-generator";
 import { createHash } from "crypto";
 import fs from "node:fs";
 import path from "node:path";
+import type { z } from "zod";
+
+function deriveLabelFromName(name: string): string {
+  return name
+    .split(/[_-]+/g)
+    .map((token) => token.trim())
+    .filter(Boolean)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+}
+
+function serializeEmits(
+  agentName: string,
+  emits: Record<string, z.ZodTypeAny | string> | undefined,
+) {
+  if (!emits) return undefined;
+  const serialized: Record<
+    string,
+    { type: "schema"; schema: unknown } | { type: "description"; description: string }
+  > = {};
+
+  for (const [eventName, schemaOrDescription] of Object.entries(emits)) {
+    if (typeof schemaOrDescription === "string") {
+      serialized[eventName] = {
+        type: "description",
+        description: schemaOrDescription,
+      };
+      continue;
+    }
+
+    try {
+      const { schema, meta } = buildSchemaIR(schemaOrDescription);
+      if (meta.hasRefinements) {
+        throw new Error("Schema contains non-portable refinements");
+      }
+      serialized[eventName] = {
+        type: "schema",
+        schema,
+      };
+    } catch (error) {
+      console.warn(
+        `[kalp compiler] Could not serialize emits.${eventName} for agent "${agentName}". Falling back to description.`,
+      );
+      serialized[eventName] = {
+        type: "description",
+        description: "Non-serializable schema",
+      };
+    }
+  }
+
+  return serialized;
+}
 
 // Assert unique IDs
 function assertUniqueIds(registry: ReturnType<typeof getRegistry>) {
@@ -114,7 +166,14 @@ export async function buildAgent(
       version: 3;
       metadata: {
         name: string;
+        label?: string;
         description?: string;
+        tags?: string[];
+        emits?: Record<
+          string,
+          | { type: "schema"; schema: unknown }
+          | { type: "description"; description: string }
+        >;
         systemPrompt?: string | { type: "function"; dynamic: true };
       };
       entries: Record<string, string>; // event name -> handler hash
@@ -139,7 +198,12 @@ export async function buildAgent(
       version: 3,
       metadata: {
         name: agentConfig.name,
+        label: agentConfig.label ?? deriveLabelFromName(agentConfig.name),
         description: agentConfig.description,
+        tags: Array.isArray(agentConfig.tags)
+          ? [...agentConfig.tags]
+          : undefined,
+        emits: serializeEmits(agentConfig.name, agentConfig.emits),
         systemPrompt: agentConfig.systemPrompt
           ? typeof agentConfig.systemPrompt === "function"
             ? { type: "function", dynamic: true }
