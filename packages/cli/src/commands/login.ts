@@ -1,59 +1,43 @@
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { execa } from "execa";
 import {
-  getCloudflareIdentity,
   saveAuthConfig,
   type AuthConfig,
 } from "@/utils/auth";
+import { resolveProvider } from "@/utils/providers";
 
 const LOGO = "🦋";
 
 export default defineCommand({
-  meta: { name: "login", description: "Authenticate with Cloudflare" },
+  meta: { name: "login", description: "Sign in to remote runtime" },
   async run() {
     p.intro(`${LOGO} ${pc.bold("kalp login")}`);
 
-    const provider = await p.select({
-      message: "Choose login provider",
-      options: [
-        { label: "Cloudflare (Recommended)", value: "cloudflare" },
-        { label: "Kalp Cloud", value: "kalp-cloud" },
-      ],
+    const provider = resolveProvider();
+    const proceed = await p.confirm({
+      message: "Sign in to remote runtime now?",
+      initialValue: true,
     });
-
-    if (p.isCancel(provider)) {
+    if (p.isCancel(proceed) || !proceed) {
       p.outro("Cancelled");
       return;
     }
 
-    if (provider === "kalp-cloud") {
-      p.note(
-        "Coming soon. Enterprise cloud execution is currently waitlisted.",
-        "Kalp Cloud",
-      );
-      p.outro(pc.dim("No login executed."));
-      return;
-    }
-
     const s = p.spinner();
-    s.start("Opening Cloudflare OAuth login");
+    s.start("Opening sign-in flow");
 
     try {
-      await execa("npx", ["wrangler", "login"], {
-        stdio: "inherit",
-      });
+      await provider.login();
     } catch {
-      s.stop(pc.red("Cloudflare login failed"));
+      s.stop(pc.red("Sign-in failed"));
       process.exit(1);
     }
 
-    s.stop("Cloudflare login complete");
-    s.start("Reading Cloudflare identity");
-    const identity = await getCloudflareIdentity();
-    const account = identity?.accounts?.[0];
-    const accountId = account?.id ?? account?.account_tag;
+    s.stop("Sign-in complete");
+    s.start("Reading runtime identity");
+    const identity = await provider.whoami();
+    const accountId = identity?.accountId;
     const email = identity?.email;
 
     if (!accountId || !email) {
@@ -70,9 +54,9 @@ export default defineCommand({
 
     await saveAuthConfig(authConfig);
 
-    s.stop("Cloudflare authentication saved");
+    s.stop("Authentication saved");
     p.log.success(`Logged in as ${pc.cyan(authConfig.email)}`);
-    p.note(`Account ID: ${pc.cyan(authConfig.accountId)}`, "Cloudflare");
-    p.outro(pc.green("Ready to deploy with Cloudflare Workers"));
+    p.note(`Workspace ID: ${pc.cyan(authConfig.accountId)}`, "Runtime");
+    p.outro(pc.green("Ready to deploy your agents"));
   },
 });

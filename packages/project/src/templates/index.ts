@@ -14,6 +14,7 @@ export type { TemplateId, TemplateDefinition } from "./types";
 import { researcherTemplate } from "./researcher";
 import { supportTemplate } from "./support";
 import { blankTemplate } from "./blank";
+import { opsRevenueTemplate } from "./ops-revenue";
 import type { TemplateId, TemplateDefinition } from "./types";
 
 /**
@@ -23,6 +24,7 @@ export const TEMPLATES: Record<TemplateId, TemplateDefinition> = {
   researcher: researcherTemplate,
   support: supportTemplate,
   blank: blankTemplate,
+  "ops-revenue": opsRevenueTemplate,
 };
 
 /**

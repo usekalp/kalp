@@ -1,9 +1,10 @@
 import type { z } from "zod";
 import type { AgentContract } from "@/contracts";
 import type { Route } from "@/nodes";
+import type { Listener } from "@/listeners";
 import type {
   HandlerContext,
-  AgentContext,
+  TypedAgentContext,
   AgentMessage,
   AgentResponse,
 } from "@/context";
@@ -30,10 +31,12 @@ interface AgentConfigBase<
   description?: string;
   tags?: readonly string[];
   emits?: Record<string, z.ZodTypeAny | string>;
+  public?: boolean;
   systemPrompt?:
     | string
     | ((context: HandlerContext) => string | Promise<string>);
   routes?: readonly Route[];
+  listeners?: readonly Listener[];
   /** Contract declaration — injects types for onCall handler. */
   contract?: TContract;
   /** MCP server bindings for this agent. References servers from kalp.config.ts. */
@@ -73,8 +76,11 @@ interface AgentConfigBase<
  * @see Tool
  * @see defineContract
  */
-export function defineAgent<const TContract extends AgentContract<any, any>>(
-  config: AgentConfigBase<TContract> & {
+export function defineAgent<
+  const TContract extends AgentContract<any, any, any>,
+  const TConfig extends AgentConfigBase<TContract>,
+>(
+  config: TConfig & {
     // Lifecycle
     /** Called once when the agent starts. */
     onInit?: (context: HandlerContext) => Promise<void>;
@@ -83,7 +89,7 @@ export function defineAgent<const TContract extends AgentContract<any, any>>(
     /** Called when a message is received (chat interface). */
     onMessage?: (
       message: AgentMessage,
-      ctx: AgentContext,
+      ctx: TypedAgentContext<TConfig>,
     ) => Promise<AgentResponse | ReadableStream>;
     /**
      * Called when the agent is invoked via RPC.

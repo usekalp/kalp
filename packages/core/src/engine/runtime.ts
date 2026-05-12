@@ -261,7 +261,15 @@ export class KalpRuntime {
       {
         name: this.ir.metadata.name,
         systemPrompt: resolvedSystemPrompt,
-        metadata: this.ir.metadata.metadata,
+        metadata: {
+          ...this.ir.metadata.metadata,
+          label: this.ir.metadata.label,
+          tags: this.ir.metadata.tags,
+          emits: this.ir.metadata.emits,
+          public: this.ir.metadata.public,
+          routesPublic: this.ir.metadata.routesPublic,
+          listeners: this.ir.metadata.listeners,
+        },
       },
     );
   }

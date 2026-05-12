@@ -8,6 +8,8 @@ export type {
   WakeReason,
   AskOptions,
   EmitOptions,
+  InferEmitPayload,
+  TypedEmit,
   KalpActions,
   TypedActions,
 } from "@/actions/types";

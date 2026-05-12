@@ -18,6 +18,18 @@ describe("validateIR metadata extensions", () => {
             description: "event description",
           },
         },
+        public: true,
+        routesPublic: {
+          "GET:/health": false,
+          "POST:/webhook": true,
+        },
+        listeners: [
+          {
+            sourceAgentId: "source-agent",
+            event: "ticket_created",
+            targetEntryKey: "listener:source-agent:ticket_created:0",
+          },
+        ],
       },
       entries: {},
       bundles: {},

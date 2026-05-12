@@ -7,7 +7,7 @@ import { runInitialDeploy } from "@/utils/deploy";
 const LOGO = "🦋";
 
 export default defineCommand({
-  meta: { name: "deploy", description: "Deploy Worker + Studio to Cloudflare" },
+  meta: { name: "deploy", description: "Deploy your agents runtime" },
   async run() {
     const cwd = process.cwd();
 
@@ -18,36 +18,23 @@ export default defineCommand({
       process.exit(1);
     });
 
-    const target = await p.select({
-      message: "Choose deployment target",
-      options: [
-        { label: "Cloudflare (Recommended)", value: "cloudflare" },
-        { label: "Kalp Cloud (Coming soon)", value: "kalp-cloud" },
-      ],
+    const proceed = await p.confirm({
+      message: "Deploy your runtime now?",
+      initialValue: true,
     });
-
-    if (p.isCancel(target)) {
+    if (p.isCancel(proceed) || !proceed) {
       p.outro("Cancelled");
       return;
     }
 
-    if (target === "kalp-cloud") {
-      p.note(
-        "Coming soon. Enterprise cloud execution is currently waitlisted.",
-        "Kalp Cloud",
-      );
-      p.outro(pc.dim("No deployment executed."));
-      return;
-    }
-
     const s = p.spinner();
-    s.start("Deploying to Cloudflare");
+    s.start("Deploying your agents runtime");
 
     try {
       const result = await runInitialDeploy(cwd);
       s.stop("Deployment completed");
-      p.log.success(`Worker URL: ${pc.cyan(result.workerUrl)}`);
-      p.outro(pc.green("Cloudflare deployment ready"));
+      p.log.success(`Runtime URL: ${pc.cyan(result.workerUrl)}`);
+      p.outro(pc.green("Your runtime is ready"));
     } catch (error) {
       s.stop("Deployment failed");
       p.log.error(

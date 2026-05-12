@@ -61,6 +61,7 @@ export interface Route<
   kind: "route";
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
+  public?: boolean;
   inputSchema?: I;
 }
 

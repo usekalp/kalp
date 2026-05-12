@@ -43,7 +43,7 @@ export interface RuntimeProviders {
   /** AI provider implementation (e.g. OpenAI, Anthropic, Cloudflare AI). */
   ai: AIProvider;
   /** Authentication context for the current request. */
-  auth: KalpAuth;
+  auth?: KalpAuth;
   /** Memory (conversation history) provider. */
   memory: KalpMemory;
   /** Secrets vault provider. */

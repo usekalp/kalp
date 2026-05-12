@@ -17,6 +17,7 @@ import type { z } from "zod";
 export interface AgentContract<
   TInput extends z.ZodTypeAny = z.ZodTypeAny,
   TOutput extends z.ZodTypeAny = z.ZodTypeAny,
+  TEmits extends Record<string, z.ZodTypeAny | string> | undefined = undefined,
 > {
   readonly kind: "contract";
   readonly agentId: AgentId;
@@ -26,6 +27,7 @@ export interface AgentContract<
     input: TInput;
     output: TOutput;
   };
+  readonly emits?: TEmits;
 }
 
 /**
@@ -46,13 +48,15 @@ export interface AgentContract<
 export function defineContract<
   const TInput extends z.ZodTypeAny,
   const TOutput extends z.ZodTypeAny,
+  const TEmits extends Record<string, z.ZodTypeAny | string> | undefined = undefined,
 >(
   agentId: string,
   contract: {
     input: TInput;
     output: TOutput;
+    emits?: TEmits;
   },
-): AgentContract<TInput, TOutput> {
+): AgentContract<TInput, TOutput, TEmits> {
   return {
     kind: "contract",
     agentId: agentId as AgentId,
@@ -62,5 +66,6 @@ export function defineContract<
       input: contract.input,
       output: contract.output,
     },
+    emits: contract.emits,
   };
 }

@@ -25,6 +25,16 @@ export interface AgentMetadata {
     string,
     { type: "schema"; schema: unknown } | { type: "description"; description: string }
   >;
+  /** Optional default visibility for all routes/entrypoints. */
+  public?: boolean;
+  /** Optional per-route visibility overrides. Key format: METHOD:/path */
+  routesPublic?: Record<string, boolean | undefined>;
+  /** Optional listener wiring metadata for runtime dispatch. */
+  listeners?: Array<{
+    sourceAgentId: string;
+    event: string;
+    targetEntryKey: string;
+  }>;
   /** System prompt or dynamic prompt function. */
   systemPrompt?: string | { type: "function"; dynamic: true };
   /** Additional metadata. */

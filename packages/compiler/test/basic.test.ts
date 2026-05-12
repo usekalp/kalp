@@ -231,4 +231,20 @@ describe("Compiler E2E", () => {
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
+
+  it("should include listeners and public metadata in IR", async () => {
+    const entry = path.join(FIXTURES_DIR, "listener-agent.ts");
+    const outDir = path.join(OUT_DIR, "listener");
+    await buildAgent(entry, outDir);
+    const ir = JSON.parse(fs.readFileSync(path.join(outDir, "ir.json"), "utf-8"));
+    expect(ir.metadata.public).toBe(true);
+    expect(Array.isArray(ir.metadata.listeners)).toBe(true);
+    expect(ir.metadata.listeners[0]).toMatchObject({
+      sourceAgentId: "source-agent",
+      event: "ticket_created",
+    });
+    expect(typeof ir.metadata.listeners[0].targetEntryKey).toBe("string");
+    const entryKey = ir.metadata.listeners[0].targetEntryKey;
+    expect(ir.entries[entryKey]).toBeDefined();
+  });
 });

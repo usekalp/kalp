@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { execa } from "execa";
 import { ensureConfig } from "@/utils/fs";
 import { readAgentManifest, computePushHash } from "@/utils/manifest";
 import { requireAuth } from "@/utils/auth";
@@ -16,6 +15,8 @@ import {
 } from "@/utils/project-state";
 import { validateCompiledIR } from "@/utils/validate";
 import { materializeRuntime, readLocalAgentNames } from "@/utils/runtime";
+import { resolveProvider } from "@/utils/providers";
+import { exportCompiledIrForDebug } from "@/utils/ir/export";
 
 const LOGO = "🦋";
 
@@ -66,6 +67,57 @@ interface PushResult {
   failed: number;
 }
 
+interface RemoteAgentIndexEntry {
+  name: string;
+  hash: string;
+  version: string | null;
+  versionNumber: number | null;
+  updatedAt: string;
+  workerUrl: string | null;
+  label?: string;
+  tags?: string[];
+}
+
+async function readRemoteAgentsIndex(
+  cwd: string,
+  wranglerConfigPath: string,
+): Promise<RemoteAgentIndexEntry[]> {
+  const provider = resolveProvider();
+  const output = await provider.getValue({
+    cwd,
+    configPath: wranglerConfigPath,
+    key: "agents:index",
+  });
+  if (!output) return [];
+  try {
+    const parsed = JSON.parse(output) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed as RemoteAgentIndexEntry[];
+  } catch {
+    return [];
+  }
+}
+
+async function writeRemoteAgentsIndex(
+  cwd: string,
+  wranglerConfigPath: string,
+  entries: RemoteAgentIndexEntry[],
+): Promise<void> {
+  const path = join(cwd, ".kalp", "agents-index.json");
+  await writeFile(path, JSON.stringify(entries, null, 2), "utf-8");
+  const provider = resolveProvider();
+  try {
+    await provider.putManifest({
+      cwd,
+      configPath: wranglerConfigPath,
+      key: "agents:index",
+      jsonPath: path,
+    });
+  } finally {
+    await rm(path, { force: true });
+  }
+}
+
 async function pushRemoteManifest(params: {
   cwd: string;
   wranglerConfigPath: string;
@@ -80,50 +132,27 @@ async function pushRemoteManifest(params: {
   await mkdir(join(cwd, ".kalp"), { recursive: true });
   await writeFile(manifestPath, JSON.stringify(ir), "utf-8");
 
+  const provider = resolveProvider();
   try {
-    await execa(
-      "npx",
-      [
-        "wrangler",
-        "kv",
-        "key",
-        "put",
-        "--binding",
-        "KALP_MANIFESTS",
-        manifestKey,
-        "--path",
-        manifestPath,
-        "--remote",
-        "--config",
-        wranglerConfigPath,
-      ],
-      { cwd },
-    );
-
-    await execa(
-      "npx",
-      [
-        "wrangler",
-        "kv",
-        "key",
-        "put",
-        "--binding",
-        "KALP_MANIFESTS",
-        latestKey,
-        hash,
-        "--remote",
-        "--config",
-        wranglerConfigPath,
-      ],
-      { cwd },
-    );
+    await provider.putManifest({
+      cwd,
+      configPath: wranglerConfigPath,
+      key: manifestKey,
+      jsonPath: manifestPath,
+    });
+    await provider.putValue({
+      cwd,
+      configPath: wranglerConfigPath,
+      key: latestKey,
+      value: hash,
+    });
   } finally {
     await rm(manifestPath, { force: true });
   }
 }
 
 export default defineCommand({
-  meta: { name: "push", description: "Push agent manifest to Cloudflare KV" },
+  meta: { name: "push", description: "Publish agent runtime version" },
   args: {
     agent: {
       type: "string",
@@ -220,7 +249,7 @@ export default defineCommand({
         }
 
         if (target === "remote") {
-          spinner.message("Uploading manifest to Cloudflare KV");
+          spinner.message("Publishing runtime version");
           await pushRemoteManifest({
             cwd,
             wranglerConfigPath: runtime.wranglerConfigPath,
@@ -243,9 +272,34 @@ export default defineCommand({
         } else {
           agentState.lastRemoteHash = hash;
           agentState.lastLocalHash = hash;
+
+          const currentIndex = await readRemoteAgentsIndex(
+            cwd,
+            runtime.wranglerConfigPath,
+          );
+          const nextEntry: RemoteAgentIndexEntry = {
+            name: agentName,
+            hash,
+            version: `v${agentState.currentVersion}`,
+            versionNumber: agentState.currentVersion,
+            updatedAt: agentState.lastPushedAt,
+            workerUrl: agentState.workerUrl,
+            label: manifest.ir.metadata?.label,
+            tags: manifest.ir.metadata?.tags,
+          };
+          const merged = [
+            ...currentIndex.filter((entry) => entry.name !== agentName),
+            nextEntry,
+          ].sort((a, b) => a.name.localeCompare(b.name));
+          await writeRemoteAgentsIndex(cwd, runtime.wranglerConfigPath, merged);
         }
 
         const bundles = manifest.ir.bundles || {};
+        await exportCompiledIrForDebug({
+          cwd,
+          agentName,
+          ir: manifest.ir,
+        });
         const totalSize = Object.values(bundles).reduce(
           (sum, bundle) => sum + Buffer.byteLength(bundle.code),
           0,
@@ -270,6 +324,13 @@ export default defineCommand({
       `Successfully pushed ${result.pushed} agents. ${result.skipped} omitted (no changes). ${result.failed} failed.`,
       target === "local" ? "Local push" : "Remote push",
     );
+    if (target === "remote" && result.pushed > 0) {
+      p.log.info(
+        pc.dim(
+          "Changes propagating to remote Studio (eventual consistency, up to ~60s).",
+        ),
+      );
+    }
 
     if (failures.length > 0) {
       for (const failure of failures) {

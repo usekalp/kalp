@@ -121,6 +121,44 @@ export function validateIR(ir: any): { valid: boolean; errors: string[] } {
         }
       }
     }
+    if (ir.metadata.public !== undefined && typeof ir.metadata.public !== "boolean") {
+      errors.push("IR metadata 'public' must be a boolean when provided.");
+    }
+    if (ir.metadata.routesPublic !== undefined) {
+      if (!ir.metadata.routesPublic || typeof ir.metadata.routesPublic !== "object") {
+        errors.push("IR metadata 'routesPublic' must be an object when provided.");
+      } else {
+        for (const [routeKey, routePublic] of Object.entries(ir.metadata.routesPublic)) {
+          if (routePublic !== undefined && typeof routePublic !== "boolean") {
+            errors.push(
+              `IR metadata routesPublic.${routeKey} must be boolean or undefined.`,
+            );
+          }
+        }
+      }
+    }
+    if (ir.metadata.listeners !== undefined) {
+      if (!Array.isArray(ir.metadata.listeners)) {
+        errors.push("IR metadata 'listeners' must be an array when provided.");
+      } else {
+        for (const listener of ir.metadata.listeners) {
+          if (!listener || typeof listener !== "object") {
+            errors.push("IR metadata listeners entries must be objects.");
+            continue;
+          }
+          const value = listener as Record<string, unknown>;
+          if (typeof value.sourceAgentId !== "string") {
+            errors.push("IR metadata listener.sourceAgentId must be a string.");
+          }
+          if (typeof value.event !== "string") {
+            errors.push("IR metadata listener.event must be a string.");
+          }
+          if (typeof value.targetEntryKey !== "string") {
+            errors.push("IR metadata listener.targetEntryKey must be a string.");
+          }
+        }
+      }
+    }
   }
 
   // Check entries

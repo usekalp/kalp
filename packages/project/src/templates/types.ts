@@ -7,7 +7,7 @@
 /**
  * Available template identifiers.
  */
-export type TemplateId = "researcher" | "support" | "blank";
+export type TemplateId = "researcher" | "support" | "blank" | "ops-revenue";
 
 /**
  * Template definition with metadata and generation function.

@@ -9,6 +9,7 @@ import {
   readDotEnv,
   resolveProviderFromConfig,
 } from "@/utils/ai";
+import { resolveProvider } from "@/utils/providers";
 
 function findWorkersUrl(output: string): string | null {
   const match = output.match(/https:\/\/[^\s]+\.workers\.dev/);
@@ -74,22 +75,12 @@ async function listKvNamespaces(
   cwd: string,
   configPath: string,
 ): Promise<KvNamespaceInfo[]> {
-  const tryJson = await execa(
-    "npx",
-    ["wrangler", "kv", "namespace", "list", "--config", configPath, "--json"],
-    { cwd },
-  ).catch(() => null);
-
-  if (tryJson) {
-    return parseKvListOutput(tryJson.stdout);
-  }
-
-  const plain = await execa(
-    "npx",
-    ["wrangler", "kv", "namespace", "list", "--config", configPath],
-    { cwd },
-  );
-  return parseKvListOutput(plain.stdout);
+  const provider = resolveProvider();
+  const namespaces = await provider.listNamespaces({ cwd, configPath });
+  return namespaces.map((item) => ({
+    id: item.id,
+    title: item.title,
+  }));
 }
 
 async function ensureKvNamespaceBindingId(
@@ -142,17 +133,18 @@ export async function runInitialDeploy(cwd: string): Promise<{
   accountId: string;
 }> {
   const auth = await requireAuth();
-  const provider = await resolveProviderFromConfig(cwd);
-  const requiredProviderSecret = getRequiredSecretForProvider(provider);
+  const aiProvider = await resolveProviderFromConfig(cwd);
+  const requiredProviderSecret = getRequiredSecretForProvider(aiProvider);
   const envMap = await readDotEnv(cwd);
   const providerSecretValue = envMap[requiredProviderSecret]?.trim();
   if (!providerSecretValue) {
     throw new Error(
-      `Missing required secret ${requiredProviderSecret} for provider "${provider}". Add it to .env before deploy.`,
+      `Missing required secret ${requiredProviderSecret} for provider "${aiProvider}". Add it to .env before deploy.`,
     );
   }
 
   const secrets = await ensureStudioSecrets(cwd);
+  const runtimeProvider = resolveProvider();
   const runtime = await materializeRuntime(cwd);
   let secretSyncFailed = false;
   const secretEntries = [
@@ -164,11 +156,12 @@ export async function runInitialDeploy(cwd: string): Promise<{
 
   for (const [name, value] of secretEntries) {
     try {
-      await execa(
-        "npx",
-        ["wrangler", "secret", "put", name, "--config", runtime.wranglerConfigPath],
-        { cwd, input: `${value}\n` },
-      );
+      await runtimeProvider.putSecret({
+        cwd,
+        configPath: runtime.wranglerConfigPath,
+        name,
+        value,
+      });
     } catch {
       secretSyncFailed = true;
       break;
@@ -190,27 +183,28 @@ export async function runInitialDeploy(cwd: string): Promise<{
       ]
     : ["wrangler", "deploy", "--config", runtime.wranglerConfigPath];
 
-  let deploy = await execa("npx", deployArgs, { cwd }).catch((error) => error);
+  let deploy = await runtimeProvider
+    .deployRuntime({
+      cwd,
+      configPath: runtime.wranglerConfigPath,
+      useSecretsFile: secretSyncFailed,
+    })
+    .catch((error) => error);
   if (deploy instanceof Error) {
-    const combined = [String((deploy as { stdout?: string }).stdout ?? ""), String((deploy as { stderr?: string }).stderr ?? ""), deploy.message]
-      .join("\n")
-      .trim();
+    const combined = deploy.message;
     if (isNamespaceAlreadyExistsError(combined)) {
       await ensureKvNamespaceBindingId(cwd, runtime.wranglerConfigPath);
-      deploy = await execa("npx", deployArgs, { cwd });
+      deploy = await runtimeProvider.deployRuntime({
+        cwd,
+        configPath: runtime.wranglerConfigPath,
+        useSecretsFile: secretSyncFailed,
+      });
     } else {
       throw deploy;
     }
   }
 
-  const deployStdout = [deploy.stdout, deploy.stderr]
-    .filter(Boolean)
-    .join("\n");
-
-  const workerUrl = await resolveWorkerUrl(
-    runtime.wranglerConfigPath,
-    deployStdout,
-  );
+  const workerUrl = deploy.workerUrl;
 
   const existingState = await readProjectState(cwd);
 

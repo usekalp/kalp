@@ -63,7 +63,7 @@ export interface HandlerContext {
   memory: KalpMemory;
   vault: KalpVault;
   storage: StoragePrimitive;
-  auth: KalpAuth;
+  auth?: KalpAuth;
   actions: KalpActions;
   log: KalpLog;
   /** MCP (Model Context Protocol) server proxy. */
@@ -100,7 +100,10 @@ export interface AgentContext extends HandlerContext {
  * Agent context with type-safe actions bound to the agent's registered nodes.
  */
 export interface TypedAgentContext<C> extends Omit<AgentContext, "actions"> {
-  actions: TypedActions<InferNodes<C>>;
+  actions: TypedActions<
+    InferNodes<C>,
+    C extends { emits?: infer E } ? E : undefined
+  >;
 }
 
 /** Response from an agent's `onMessage` handler. */

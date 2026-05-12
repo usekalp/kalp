@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
+import { jwtVerify } from "jose";
 import { AgentDurableObject } from "./durable-object";
 import agentsSnapshot from "./agents.snapshot.json";
 
@@ -37,6 +38,7 @@ type RuntimeBindings = Env & {
   KALP_SECRET_KEY?: string;
   KALP_STUDIO_PASSWORD?: string;
   KALP_STUDIO_ADMIN_USER?: string;
+  KALP_ENFORCE_GLOBAL_AUTH?: string;
 };
 
 type RuntimeVariables = {
@@ -52,6 +54,21 @@ const CORS_HEADERS = {
 };
 
 const snapshot = agentsSnapshot as StudioSnapshot;
+const LISTENERS_QUEUE_KEY = "listeners:queue";
+
+type ManifestMetadata = {
+  name?: string;
+  label?: string;
+  tags?: string[];
+  public?: boolean;
+  routesPublic?: Record<string, boolean | undefined>;
+  listeners?: Array<{ sourceAgentId: string; event: string; targetEntryKey: string }>;
+};
+
+type RuntimeManifest = {
+  metadata?: ManifestMetadata;
+  entries?: Record<string, string>;
+};
 
 function withCors(response: Response): Response {
   if (response.status === 101) return response;
@@ -113,6 +130,82 @@ async function requireSession(
   return next();
 }
 
+async function readLatestManifest(
+  env: RuntimeBindings,
+  agentName: string,
+): Promise<RuntimeManifest | null> {
+  const latest = await env.KALP_MANIFESTS.get(`${agentName}:latest`);
+  if (!latest) return null;
+  const raw = await env.KALP_MANIFESTS.get(`${agentName}:${latest}`);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as RuntimeManifest;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveAgentAccess(
+  env: RuntimeBindings,
+  agentName: string,
+  routeKey: string,
+): Promise<{ isPublic: boolean; metadata?: ManifestMetadata }> {
+  const manifest = await readLatestManifest(env, agentName);
+  const metadata = manifest?.metadata;
+  const routePublic = metadata?.routesPublic?.[routeKey];
+  const agentPublic = metadata?.public ?? false;
+  const isPublic = routePublic !== undefined ? routePublic : agentPublic;
+  return { isPublic, metadata };
+}
+
+async function verifyGatewayAuth(c: any): Promise<{ sub?: string } | null> {
+  const enforce = c.env.KALP_ENFORCE_GLOBAL_AUTH !== "false";
+  if (!enforce) return { sub: undefined };
+  const authHeader = c.req.header("Authorization");
+  const token = authHeader?.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return null;
+  const secret = c.env.KALP_SECRET_KEY;
+  if (!secret) return null;
+  try {
+    const encoded = new TextEncoder().encode(secret);
+    const { payload } = await jwtVerify(token, encoded);
+    return { sub: typeof payload.sub === "string" ? payload.sub : undefined };
+  } catch {
+    return null;
+  }
+}
+
+async function queueListenerDispatch(
+  env: RuntimeBindings,
+  sourceAgent: string,
+  eventName: string,
+  payload: unknown,
+): Promise<void> {
+  const currentRaw = await env.KALP_MANIFESTS.get(LISTENERS_QUEUE_KEY);
+  const current = currentRaw ? (JSON.parse(currentRaw) as unknown[]) : [];
+  const next = [
+    ...current,
+    {
+      sourceAgent,
+      eventName,
+      payload,
+      queuedAt: new Date().toISOString(),
+    },
+  ];
+  await env.KALP_MANIFESTS.put(LISTENERS_QUEUE_KEY, JSON.stringify(next));
+}
+
+function parseEventEnvelope(request: Request): { eventName: string; payload: unknown } | null {
+  const eventName = request.headers.get("x-kalp-event-name");
+  if (!eventName) return null;
+  return {
+    eventName,
+    payload: request.headers.get("x-kalp-event-payload")
+      ? JSON.parse(request.headers.get("x-kalp-event-payload") as string)
+      : null,
+  };
+}
+
 function getAgentRouting(url: URL): { agentName: string; passthroughPath: string } {
   const segments = url.pathname.split("/").filter(Boolean);
 
@@ -129,9 +222,25 @@ function getAgentRouting(url: URL): { agentName: string; passthroughPath: string
   };
 }
 
-async function forwardToAgentDO(request: Request, env: RuntimeBindings) {
+async function forwardToAgentDO(c: any, request: Request, env: RuntimeBindings) {
   const url = new URL(request.url);
   const { agentName, passthroughPath } = getAgentRouting(url);
+  const routeKey = `${request.method.toUpperCase()}:${passthroughPath === "/" ? "/" : passthroughPath}`;
+  const access = await resolveAgentAccess(env, agentName, routeKey);
+  if (!access.isPublic) {
+    const identity = await verifyGatewayAuth(c);
+    if (!identity) {
+      return c.json({ ok: false, error: "Unauthorized" }, 401);
+    }
+  }
+
+  const envelope = parseEventEnvelope(request);
+  if (envelope && typeof c.executionCtx?.waitUntil === "function") {
+    c.executionCtx.waitUntil(
+      queueListenerDispatch(env, agentName, envelope.eventName, envelope.payload),
+    );
+  }
+
   const id = env.KALP_RUNTIME_CLOUDFLARE.idFromName(agentName);
   const stub = env.KALP_RUNTIME_CLOUDFLARE.get(id);
 
@@ -139,6 +248,7 @@ async function forwardToAgentDO(request: Request, env: RuntimeBindings) {
   proxiedUrl.pathname = passthroughPath === "/" ? "/" : passthroughPath;
   const headers = new Headers(request.headers);
   headers.set("x-kalp-agent-name", agentName);
+  headers.set("x-kalp-route-public", String(access.isPublic));
 
   const proxyRequest = new Request(proxiedUrl.toString(), {
     method: request.method,
@@ -148,6 +258,35 @@ async function forwardToAgentDO(request: Request, env: RuntimeBindings) {
   });
 
   return stub.fetch(proxyRequest);
+}
+
+function mapIndexToStudioAgents(
+  entries: Array<{
+    name: string;
+    hash?: string;
+    version?: string | null;
+    versionNumber?: number | null;
+    workerUrl?: string | null;
+    updatedAt?: string;
+    label?: string;
+    tags?: string[];
+  }>,
+): StudioAgent[] {
+  return entries.map((entry) => ({
+    name: entry.name,
+    label: entry.label,
+    tags: entry.tags ?? [],
+    environment: "remote",
+    status: entry.workerUrl ? "online" : "offline",
+    hash: entry.hash ?? null,
+    version: entry.version ?? null,
+    versionNumber: entry.versionNumber ?? null,
+    lastRemoteHash: entry.hash ?? null,
+    lastLocalHash: null,
+    workerUrl: entry.workerUrl ?? null,
+    localPath: null,
+    updatedAt: entry.updatedAt ?? null,
+  }));
 }
 
 function createRuntimeApp() {
@@ -209,7 +348,34 @@ function createRuntimeApp() {
   app.use("/api/internal/executions*", requireSession);
   app.use("/api/internal/events*", requireSession);
 
-  app.get("/api/internal/agents", (c) => {
+  app.get("/api/internal/agents", async (c) => {
+    if (snapshot.mode === "remote") {
+      const raw = await c.env.KALP_MANIFESTS.get("agents:index");
+      let parsed: Array<{
+        name: string;
+        hash?: string;
+        version?: string | null;
+        versionNumber?: number | null;
+        workerUrl?: string | null;
+        updatedAt?: string;
+        label?: string;
+        tags?: string[];
+      }> | null = null;
+      if (raw) {
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          parsed = null;
+        }
+      }
+      return c.json({
+        generatedAt: new Date().toISOString(),
+        projectPath: snapshot.projectPath,
+        workerUrl: snapshot.workerUrl,
+        mode: "remote",
+        agents: parsed ? mapIndexToStudioAgents(parsed) : snapshot.agents,
+      });
+    }
     return c.json({
       generatedAt: snapshot.generatedAt,
       projectPath: snapshot.projectPath,
@@ -219,8 +385,35 @@ function createRuntimeApp() {
     });
   });
 
-  app.get("/api/internal/agents/:agentName", (c) => {
+  app.get("/api/internal/agents/:agentName", async (c) => {
     const agentName = c.req.param("agentName");
+    if (snapshot.mode === "remote") {
+      const manifest = await readLatestManifest(c.env, agentName);
+      if (!manifest) {
+        return c.json({ error: `Agent "${agentName}" not found.` }, 404);
+      }
+      const metadata = manifest.metadata ?? {};
+      return c.json({
+        name: metadata.name ?? agentName,
+        label: metadata.label,
+        tags: metadata.tags ?? [],
+        environment: "remote",
+        status: "online",
+        hash: null,
+        version: null,
+        versionNumber: null,
+        lastRemoteHash: null,
+        lastLocalHash: null,
+        workerUrl: snapshot.workerUrl
+          ? `${snapshot.workerUrl.replace(/\/$/, "")}/a/${agentName}`
+          : null,
+        localPath: null,
+        updatedAt: null,
+        public: metadata.public ?? false,
+        routesPublic: metadata.routesPublic ?? {},
+        listeners: metadata.listeners ?? [],
+      });
+    }
     const agent = snapshot.agents.find((item) => item.name === agentName);
     if (!agent) {
       return c.json({ error: `Agent "${agentName}" not found.` }, 404);
@@ -237,11 +430,11 @@ function createRuntimeApp() {
   });
 
   app.all("/a/:agentName/*", async (c) => {
-    return forwardToAgentDO(c.req.raw, c.env);
+    return forwardToAgentDO(c, c.req.raw, c.env);
   });
 
   app.all("/a/:agentName", async (c) => {
-    return forwardToAgentDO(c.req.raw, c.env);
+    return forwardToAgentDO(c, c.req.raw, c.env);
   });
 
   app.get("/studio", (c) => c.redirect("/studio/", 308));

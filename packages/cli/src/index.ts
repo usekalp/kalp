@@ -7,11 +7,11 @@ const LOGO = "🦋";
 
 const COMMANDS = [
   ["create", "Add a new agent"],
-  ["deploy", "Deploy runtime to Cloudflare"],
-  ["push", "Push agent manifest to Cloudflare"],
+  ["deploy", "Deploy your agents runtime"],
+  ["push", "Publish agent runtime version"],
   ["link", "Link project to Kalp cloud"],
   ["secrets", "Manage secrets"],
-  ["login", "Authenticate with Cloudflare"],
+  ["login", "Sign in to remote runtime"],
   ["logout", "Sign out from Kalp"],
   ["dev", "Run Worker + Studio locally"],
 ] as const;

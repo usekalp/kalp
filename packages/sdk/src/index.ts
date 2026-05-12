@@ -86,6 +86,8 @@ export type {
   WakeReason,
   AskOptions,
   EmitOptions,
+  InferEmitPayload,
+  TypedEmit,
   KalpActions,
   TypedActions,
 } from "@/actions";
@@ -146,6 +148,8 @@ export type { InputOf, OutputOf } from "@/utils";
 // ============================================================================
 
 export { defineAgent } from "@/agent";
+export { defineListener } from "@/listeners";
+export type { Listener } from "@/listeners";
 
 // ============================================================================
 // Factory Functions (Definitions)

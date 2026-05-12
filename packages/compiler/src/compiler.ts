@@ -174,6 +174,13 @@ export async function buildAgent(
           | { type: "schema"; schema: unknown }
           | { type: "description"; description: string }
         >;
+        public?: boolean;
+        routesPublic?: Record<string, boolean | undefined>;
+        listeners?: Array<{
+          sourceAgentId: string;
+          event: string;
+          targetEntryKey: string;
+        }>;
         systemPrompt?: string | { type: "function"; dynamic: true };
       };
       entries: Record<string, string>; // event name -> handler hash
@@ -204,6 +211,9 @@ export async function buildAgent(
           ? [...agentConfig.tags]
           : undefined,
         emits: serializeEmits(agentConfig.name, agentConfig.emits),
+        public: typeof agentConfig.public === "boolean" ? agentConfig.public : undefined,
+        routesPublic: {},
+        listeners: [],
         systemPrompt: agentConfig.systemPrompt
           ? typeof agentConfig.systemPrompt === "function"
             ? { type: "function", dynamic: true }
@@ -318,6 +328,10 @@ export async function buildAgent(
         }
 
         const routeKey = `${route.method}:${route.path}`;
+        if (typeof route.public === "boolean") {
+          ir.metadata.routesPublic ??= {};
+          ir.metadata.routesPublic[routeKey] = route.public;
+        }
 
         const bundleRes = await bundleHandler(
           filePath,
@@ -331,6 +345,50 @@ export async function buildAgent(
         storeBundle(bundleRes.hash, bundleRes.code, "route", inSchema);
         ir.entries[routeKey] = bundleRes.hash;
       }
+    }
+
+    // Process listeners (cross-agent event subscriptions)
+    if (Array.isArray(agentConfig.listeners)) {
+      for (let i = 0; i < agentConfig.listeners.length; i++) {
+        const listener = agentConfig.listeners[i];
+        const internalId = listener.__internalId;
+        const filePath = listener.__filePath;
+        const targetFilePath = filePath ?? entryFullPath;
+        let exportName = `listeners[${i}]`;
+        if (filePath && internalId) {
+          const modExports = await getModuleExports(filePath);
+          const exported = Object.entries(modExports).find(
+            ([_, value]) => (value as any)?.__internalId === internalId,
+          );
+          if (!exported) {
+            throw new Error(`Cannot resolve listener export in ${filePath}`);
+          }
+          exportName = exported[0];
+        }
+
+        const targetEntryKey = `listener:${listener.source.agentId}:${String(listener.event)}:${i}`;
+        const bundleRes = await bundleHandler(
+          targetFilePath,
+          outDir,
+          exportName,
+          false,
+        );
+        storeBundle(bundleRes.hash, bundleRes.code, "entry");
+        ir.entries[targetEntryKey] = bundleRes.hash;
+        ir.metadata.listeners ??= [];
+        ir.metadata.listeners.push({
+          sourceAgentId: listener.source.agentId,
+          event: String(listener.event),
+          targetEntryKey,
+        });
+      }
+    }
+
+    if (ir.metadata.routesPublic && Object.keys(ir.metadata.routesPublic).length === 0) {
+      delete ir.metadata.routesPublic;
+    }
+    if (ir.metadata.listeners && ir.metadata.listeners.length === 0) {
+      delete ir.metadata.listeners;
     }
 
     // Process cron schedules

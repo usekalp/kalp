@@ -37,6 +37,11 @@ async function promptTemplateSelection(): Promise<TemplateId> {
         label: "⬜ Blank",
         hint: "Minimal structure with modern Kalp v1 syntax",
       },
+      {
+        value: "ops-revenue",
+        label: "📈 Revenue Ops",
+        hint: "Pipeline qualification + human handoff + event-driven orchestration",
+      },
     ],
   });
 

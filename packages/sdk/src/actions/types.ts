@@ -41,11 +41,25 @@ export interface EmitOptions {
   persist?: boolean;
 }
 
+export type InferEmitPayload<T> = T extends z.ZodTypeAny
+  ? z.infer<T>
+  : T extends string
+    ? unknown
+    : unknown;
+
+export type TypedEmit<E> = E extends Record<string, unknown>
+  ? <K extends keyof E>(
+      eventName: K,
+      payload: InferEmitPayload<E[K]>,
+      options?: EmitOptions,
+    ) => void
+  : (eventName: string, payload: unknown, options?: EmitOptions) => void;
+
 /**
  * Actions primitive for orchestrating agent behavior.
  * All methods return Promises — actual resolution is handled by the runtime.
  */
-export interface KalpActions {
+export interface KalpActions<E = undefined> {
   /** Execute a step or tool with automatic type inference. */
   run: <T extends ExecutableNode>(
     node: T,
@@ -94,7 +108,7 @@ export interface KalpActions {
    * @param payload - The event payload.
    * @param options - Ephemeral/persistence options.
    */
-  emit: (eventName: string, payload: unknown, options?: EmitOptions) => void;
+  emit: TypedEmit<E>;
 
   /**
    * Call another agent via RPC with full type safety.
@@ -143,7 +157,7 @@ export interface KalpActions {
 /**
  * Type-safe actions parameterized by an agent's registered nodes.
  */
-export interface TypedActions<TNodes> {
+export interface TypedActions<TNodes, E = undefined> {
   run: <T extends TNodes>(
     node: T,
     ...args: InputOf<T> extends never ? [] : [input: InputOf<T>]
@@ -160,7 +174,7 @@ export interface TypedActions<TNodes> {
     options?: AskOptions,
   ) => Promise<z.infer<T>>;
   requestApproval: (reason: string, options?: AskOptions) => Promise<boolean>;
-  emit: (eventName: string, payload: unknown, options?: EmitOptions) => void;
+  emit: TypedEmit<E>;
   callAgent: <TContract extends AgentContract<any, any>>(
     contract: TContract,
     input: z.infer<TContract["inputSchema"]>,

@@ -23,6 +23,11 @@ export async function promptTemplateSelection(): Promise<TemplateId> {
         label: "⬜ Blank",
         hint: "Minimal structure with modern Kalp v1 syntax",
       },
+      {
+        value: "ops-revenue",
+        label: "📈 Revenue Ops",
+        hint: "Pipeline qualification + human handoff + event-driven orchestration",
+      },
     ],
   });
 
@@ -109,7 +114,7 @@ export async function promptAgentDetails(opts?: {
 
   return {
     name: answers.name,
-    label: answers.label,
+    label: String(answers.label),
     template: answers.template as TemplateId | undefined,
   };
 }

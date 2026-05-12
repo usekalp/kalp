@@ -35,4 +35,16 @@ describe("defineContract", () => {
     expect(contract.onCall.input).toBeDefined();
     expect(contract.onCall.output).toBeDefined();
   });
+
+  it("supports emits declaration on contract", () => {
+    const contract = defineContract("events-agent", {
+      input: z.object({}),
+      output: z.object({ ok: z.boolean() }),
+      emits: {
+        ping: z.object({ id: z.string() }),
+      },
+    });
+
+    expect(contract.emits?.ping).toBeDefined();
+  });
 });
