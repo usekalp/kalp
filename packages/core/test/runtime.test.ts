@@ -20,7 +20,7 @@ import type { RuntimeProviders } from "../src/engine/context-builder";
 
 // Helper to create mock IR with proper SDK types
 const createMockIR = (): IRGraph => ({
-  version: 3,
+  version: 1,
   metadata: {
     name: "test-runtime-agent",
     description: "Test agent for runtime E2E tests",
@@ -89,6 +89,26 @@ describe("runtime E2E", () => {
   });
 
   describe("basic execution", () => {
+    it("should reject incompatible IR versions with a clear error", async () => {
+      const ir = createMockIR();
+      const incompatibleIr = { ...ir, version: 99 as 1 };
+
+      expect(
+        () =>
+          new KalpRuntime(
+            incompatibleIr,
+            {
+              state: adapters.state,
+              events: adapters.events,
+              idempotency: adapters.state,
+              threads: adapters.state,
+            },
+            adapters.scheduler,
+            providers,
+          ),
+      ).toThrow(/IR incompatible/);
+    });
+
     it("should execute handler on onMessage event", async () => {
       const ir = createMockIR();
       const runtime = new KalpRuntime(
@@ -430,6 +450,97 @@ describe("runtime E2E", () => {
 
       // Result should be defined (actual behavior depends on implementation)
       expect(result).toBeDefined();
+    });
+  });
+
+  describe("listener causality", () => {
+    it("should propagate traceId and parentExecutionId across emit -> listener", async () => {
+      const listenerEntryKey = "listener:test-runtime-agent:ticket_created:0";
+      const ir: IRGraph = {
+        version: 1,
+        metadata: {
+          name: "test-runtime-agent",
+          listeners: [
+            {
+              sourceAgentId: "test-runtime-agent",
+              event: "ticket_created",
+              targetEntryKey: listenerEntryKey,
+            },
+          ],
+        },
+        entries: {
+          onMessage: "emit-entry",
+          [listenerEntryKey]: "listener-entry",
+        },
+        bundles: {
+          "emit-entry": {
+            type: "entry",
+            code: `
+              return async (ctx, payload) => {
+                ctx.actions.emit("ticket_created", { ticketId: payload.ticketId });
+                return { ok: true };
+              };
+            `,
+          },
+          "listener-entry": {
+            type: "entry",
+            code: `
+              return async (ctx, payload) => {
+                await ctx.storage.put("listenerPayload", payload);
+                return { consumed: true };
+              };
+            `,
+          },
+        },
+      };
+
+      const runtime = new KalpRuntime(
+        ir,
+        {
+          state: adapters.state,
+          events: adapters.events,
+          idempotency: adapters.state,
+          threads: adapters.state,
+        },
+        adapters.scheduler,
+        providers,
+      );
+
+      await runtime.handleEvent({
+        type: "onMessage",
+        payload: { ticketId: "t-1" },
+        threadId: "thread-1",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 25));
+
+      const listenerPayload = await adapters.state.get("listenerPayload");
+      expect(listenerPayload).toEqual({ ticketId: "t-1" });
+
+      const events = adapters.events.getEvents();
+      const emitted = events.find(
+        (event) => (event as { type?: string }).type === "emit.dispatched",
+      ) as
+        | {
+            traceId: string;
+            payload: { parentExecutionId: string };
+          }
+        | undefined;
+      const listenerQueued = events.find(
+        (event) => (event as { type?: string }).type === "listener.queued",
+      ) as
+        | {
+            traceId: string;
+            payload: { parentExecutionId: string };
+          }
+        | undefined;
+
+      expect(emitted).toBeDefined();
+      expect(listenerQueued).toBeDefined();
+      expect(listenerQueued?.traceId).toBe(emitted?.traceId);
+      expect(listenerQueued?.payload.parentExecutionId).toBe(
+        emitted?.payload.parentExecutionId,
+      );
     });
   });
 

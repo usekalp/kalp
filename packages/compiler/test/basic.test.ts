@@ -55,9 +55,12 @@ describe("Compiler E2E", () => {
     const ir = JSON.parse(
       fs.readFileSync(path.join(OUT_DIR, "ir.json"), "utf-8"),
     );
+    expect(ir.version).toBe(1);
     // Metadata object with name
     expect(ir.metadata).toBeDefined();
     expect(ir.metadata.name).toBe("test-agent");
+    expect(ir.meta).toBeDefined();
+    expect(typeof ir.meta.compilerVersion).toBe("string");
   });
 
   it("should throw on ID collisions", async () => {

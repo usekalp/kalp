@@ -21,7 +21,7 @@ import type {
   CrossThreadAdapter,
 } from "@/adapters/interfaces";
 import type { AIProvider } from "@/engine/primitives/ai";
-import type { ExecutionContext } from "@/engine/types";
+import type { EventDispatchEnvelope, ExecutionContext } from "@/engine/types";
 import type { EventLogBuffer } from "@/engine/event-log-buffer";
 import type { BundleExecutor, EventPersister } from "@/engine/proxy-factory";
 import { createAIPrimitive } from "@/engine/primitives/ai";
@@ -85,6 +85,10 @@ export function buildHandlerContext(
     metadata?: Record<string, unknown>;
   },
   crossThread?: CrossThreadAdapter,
+  emitDispatch?: {
+    sourceAgentId?: string;
+    onEmitDispatch?: (envelope: EventDispatchEnvelope) => Promise<void> | void;
+  },
 ): HandlerContext {
   const ids = {
     executionId: execCtx.executionId,
@@ -103,14 +107,15 @@ export function buildHandlerContext(
       persistEvent,
       ir,
       crossThread,
+      emitDispatch,
     ),
     auth: providers.auth,
     memory: providers.memory,
     vault: providers.vault,
     mcp: createMcpPrimitive(eventStore, execCtx),
     agent: {
-      agentId: execCtx.executionId,
-      runId: execCtx.traceId,
+      agentId: agentConfig?.name ?? execCtx.threadId ?? "unknown",
+      runId: execCtx.executionId,
       name: agentConfig?.name ?? "unknown",
       systemPrompt: agentConfig?.systemPrompt ?? "",
       metadata: agentConfig?.metadata,

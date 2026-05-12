@@ -71,7 +71,7 @@ export function analyzeHandler(code: string): {
 /**
  * Validates the structural integrity of the generated IR.
  *
- * The IR v3 format has:
+ * The IR v1 format has:
  * - metadata: { name, systemPrompt?, metadata? }
  * - entries: Record<string, IRNodeId>
  * - bundles: Record<string, { code: string }>
@@ -82,6 +82,12 @@ export function validateIR(ir: any): { valid: boolean; errors: string[] } {
   if (!ir || typeof ir !== "object") {
     errors.push("IR must be a valid JSON object.");
     return { valid: false, errors };
+  }
+
+  if (ir.version !== 1) {
+    errors.push(
+      `Unsupported IR version "${String(ir.version)}". Expected version 1.`,
+    );
   }
 
   // Check metadata
@@ -180,7 +186,7 @@ export function validateIR(ir: any): { valid: boolean; errors: string[] } {
 /**
  * Ensures all handler references in the IR are present in the provided bundle.
  *
- * The IR v3 format uses:
+ * The IR v1 format uses:
  * - entries: Record<string, string> - maps entry keys (e.g., "steps.create_ticket", "GET:/health", "onMessage") to handler hashes
  * - bundles: Record<string, { code: string }> - maps handler hashes to code
  */

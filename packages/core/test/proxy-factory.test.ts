@@ -18,7 +18,7 @@ import type { IRGraph } from "@kalphq/sdk";
 
 // Mock IR manifest for testing
 const mockIR: IRGraph = {
-  version: 3,
+  version: 1,
   entries: {},
   bundles: {},
   metadata: {

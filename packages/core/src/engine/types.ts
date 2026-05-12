@@ -56,6 +56,18 @@ export interface ExecutionContext {
   seqCounter: number;
 }
 
+/**
+ * Envelope propagated across asynchronous event dispatch boundaries.
+ * Used to preserve causal traceability when an emit wakes listener handlers.
+ */
+export interface EventDispatchEnvelope {
+  eventName: string;
+  payload: unknown;
+  traceId: string;
+  parentExecutionId: string;
+  sourceAgentId?: string;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Execution Events — the system's source of truth
 // ────────────────────────────────────────────────────────────────────────────
@@ -182,6 +194,51 @@ export type ExecutionEvent =
       timestamp: number;
     }
   | {
+      type: "emit.dispatched";
+      payload: EventDispatchEnvelope;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "listener.queued";
+      listenerEntryKey: string;
+      payload: EventDispatchEnvelope;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "listener.started";
+      listenerEntryKey: string;
+      payload: EventDispatchEnvelope;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "listener.completed";
+      listenerEntryKey: string;
+      payload: EventDispatchEnvelope;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "listener.failed";
+      listenerEntryKey: string;
+      error: string;
+      payload: EventDispatchEnvelope;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
       type: "action.schedule";
       at: number;
       payload: unknown;
@@ -284,7 +341,7 @@ export type ExecutionEvent =
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Runtime event types matching IR V3 entries.
+ * Runtime event types matching IR entries.
  * Includes lifecycle hooks, routes, schedules, and resume events.
  */
 export type RuntimeEventType =

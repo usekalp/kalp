@@ -13,16 +13,14 @@
  */
 export interface AgentIntrospection {
   /**
-   * Agent type identifier (format: ag_<ulid>).
-   * Generated server-side during deployment.
-   * @example "ag_01h455vb4pexf"
+   * Stable agent identifier for the running actor.
+   * In local runtimes this is typically the agent name/thread binding.
    */
   agentId: string;
 
   /**
-   * Execution run identifier (format: run_<ulid>).
-   * Unique for each execution instance.
-   * @example "run_01h455xc9qzp"
+   * Execution run identifier.
+   * Unique for each handler execution/resume flow.
    */
   runId: string;
 

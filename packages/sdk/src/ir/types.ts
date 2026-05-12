@@ -68,15 +68,15 @@ export interface ScheduleEntry {
 }
 
 /**
- * The complete v3 IR manifest - a static registry of agent artifacts.
+ * The complete IR manifest - a static registry of agent artifacts.
  *
  * The IR contains no graph edges or flow control - the user's JavaScript
  * code is the orchestrator. The runtime simply loads the appropriate
  * handler bundle when an event arrives.
  */
 export interface IRGraph {
-  /** IR schema version - always 3 for this format. */
-  version: 3;
+  /** Semantic version of the IR schema. */
+  version: 1;
   /** Agent metadata for introspection. */
   metadata: AgentMetadata;
   /**

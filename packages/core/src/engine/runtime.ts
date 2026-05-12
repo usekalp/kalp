@@ -14,7 +14,11 @@ import type {
   PersistenceAdapter,
   SchedulerAdapter,
 } from "@/adapters/interfaces";
-import type { RuntimeEvent, ExecutionContext } from "@/engine/types";
+import type {
+  RuntimeEvent,
+  EventDispatchEnvelope,
+  ExecutionContext,
+} from "@/engine/types";
 import type { IntentEvent } from "@/engine/event-log-buffer";
 import { EventLogBuffer } from "@/engine/event-log-buffer";
 import { SuspensionException } from "@/engine/suspension";
@@ -33,12 +37,20 @@ import {
  * 4. Catching SuspensionException for deferred wake-up
  */
 export class KalpRuntime {
+  private static readonly SUPPORTED_IR_VERSION = 1;
+
   constructor(
     private ir: IRGraph,
     private persistence: PersistenceAdapter,
     private scheduler: SchedulerAdapter,
     private providers: RuntimeProviders,
-  ) {}
+  ) {
+    if (Number(ir.version) !== KalpRuntime.SUPPORTED_IR_VERSION) {
+      throw new Error(
+        `IR incompatible (received v${String(ir.version)}, expected v${KalpRuntime.SUPPORTED_IR_VERSION}). Recompile with the current SDK/Compiler.`,
+      );
+    }
+  }
 
   /**
    * Handles an external event by executing the corresponding handler.
@@ -60,8 +72,10 @@ export class KalpRuntime {
         ? (payload as { executionId: string }).executionId
         : crypto.randomUUID();
 
-    // Generate traceId for this handleEvent call
-    const traceId = crypto.randomUUID();
+    // Preserve incoming trace for causal chains (emit -> listener fan-out)
+    const traceId =
+      event.traceId ??
+      (this.isDispatchEnvelope(payload) ? payload.traceId : crypto.randomUUID());
 
     // Load event log from SQLite into memory
     const log = new EventLogBuffer();
@@ -86,6 +100,82 @@ export class KalpRuntime {
 
     // Execute handler with drift protection
     return this.executeHandler(handlerHash, event, execCtx, log);
+  }
+
+  private isDispatchEnvelope(payload: unknown): payload is EventDispatchEnvelope {
+    if (!payload || typeof payload !== "object") return false;
+    const value = payload as Record<string, unknown>;
+    return (
+      typeof value.eventName === "string" &&
+      typeof value.traceId === "string" &&
+      typeof value.parentExecutionId === "string"
+    );
+  }
+
+  private async dispatchListenersFromEmit(
+    envelope: EventDispatchEnvelope,
+    threadId: string,
+  ): Promise<void> {
+    const listeners =
+      this.ir.metadata.listeners?.filter((listener) => {
+        if (listener.event !== envelope.eventName) return false;
+        if (!envelope.sourceAgentId) return true;
+        return listener.sourceAgentId === envelope.sourceAgentId;
+      }) ?? [];
+
+    for (const listener of listeners) {
+      await this.persistence.events.append({
+        type: "listener.queued",
+        listenerEntryKey: listener.targetEntryKey,
+        payload: envelope,
+        executionId: envelope.parentExecutionId,
+        traceId: envelope.traceId,
+        threadId,
+        timestamp: Date.now(),
+      });
+
+      void (async () => {
+        const listenerExecutionId = crypto.randomUUID();
+        await this.persistence.events.append({
+          type: "listener.started",
+          listenerEntryKey: listener.targetEntryKey,
+          payload: envelope,
+          executionId: listenerExecutionId,
+          traceId: envelope.traceId,
+          threadId,
+          timestamp: Date.now(),
+        });
+
+        try {
+          await this.handleEvent({
+            type: listener.targetEntryKey as RuntimeEvent["type"],
+            payload: envelope.payload,
+            threadId,
+            traceId: envelope.traceId,
+          });
+          await this.persistence.events.append({
+            type: "listener.completed",
+            listenerEntryKey: listener.targetEntryKey,
+            payload: envelope,
+            executionId: listenerExecutionId,
+            traceId: envelope.traceId,
+            threadId,
+            timestamp: Date.now(),
+          });
+        } catch (error) {
+          await this.persistence.events.append({
+            type: "listener.failed",
+            listenerEntryKey: listener.targetEntryKey,
+            error: error instanceof Error ? error.message : String(error),
+            payload: envelope,
+            executionId: listenerExecutionId,
+            traceId: envelope.traceId,
+            threadId,
+            timestamp: Date.now(),
+          });
+        }
+      })();
+    }
   }
 
   /**
@@ -221,6 +311,8 @@ export class KalpRuntime {
       await this.persistence.events.append(event);
     };
 
+    let runtimeContext: HandlerContext | null = null;
+
     const executeBundle = async (
       targetHandlerHash: string,
       input: unknown,
@@ -236,7 +328,7 @@ export class KalpRuntime {
         return __handler.default;
       `)();
 
-      return fn(input);
+      return fn(input, runtimeContext);
     };
 
     // Resolve system prompt (support both static string and dynamic function)
@@ -248,7 +340,7 @@ export class KalpRuntime {
         ? "" // Dynamic prompts resolved at runtime by the handler
         : (systemPrompt ?? "");
 
-    return buildHandlerContext(
+    const context = buildHandlerContext(
       this.persistence.state,
       this.persistence.events,
       this.scheduler,
@@ -271,6 +363,15 @@ export class KalpRuntime {
           listeners: this.ir.metadata.listeners,
         },
       },
+      undefined,
+      {
+        sourceAgentId: this.ir.metadata.name,
+        onEmitDispatch: (envelope) =>
+          this.dispatchListenersFromEmit(envelope, execCtx.threadId),
+      },
     );
+
+    runtimeContext = context;
+    return context;
   }
 }

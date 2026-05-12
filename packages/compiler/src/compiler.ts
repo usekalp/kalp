@@ -92,6 +92,18 @@ function getSdkVersion(): string {
   }
 }
 
+function getCompilerVersion(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const require = (0, eval)("require");
+    const pkgPath = require.resolve("@kalphq/compiler/package.json");
+    const pkg = require(pkgPath);
+    return pkg.version;
+  } catch {
+    return "unknown";
+  }
+}
+
 /**
  * Calculates the IR hash for identity validation.
  * This function includes sortKeys internally to ensure deterministic hashing
@@ -170,9 +182,9 @@ export async function buildAgent(
     const registry = getRegistry();
     assertUniqueIds(registry);
 
-    // v3 Manifest format: static registry only, no graph edges
+    // Manifest format: static registry only, no graph edges
     const ir: {
-      version: 3;
+      version: 1;
       metadata: {
         name: string;
         label?: string;
@@ -211,7 +223,7 @@ export async function buildAgent(
         }
       >;
     } = {
-      version: 3,
+      version: 1,
       metadata: {
         name: agentConfig.name,
         label: agentConfig.label ?? deriveLabelFromName(agentConfig.name),
@@ -451,6 +463,7 @@ export async function buildAgent(
     const sortedIR = sortKeys(ir);
     (sortedIR as any).meta = {
       kalpVersion: getSdkVersion(),
+      compilerVersion: getCompilerVersion(),
       buildTimestamp: Date.now(),
       nodeVersion: process.version,
     };

@@ -24,7 +24,7 @@ import type {
   SchedulerAdapter,
   CrossThreadAdapter,
 } from "@/adapters/interfaces";
-import type { ExecutionContext } from "@/engine/types";
+import type { EventDispatchEnvelope, ExecutionContext } from "@/engine/types";
 import { SuspensionException } from "@/engine/suspension";
 import { serializeError } from "@/engine/event-log-buffer";
 import type { IRGraph } from "@kalphq/sdk";
@@ -61,6 +61,10 @@ export function createActionProxy(
   persistEvent: EventPersister,
   ir: IRGraph,
   crossThread?: CrossThreadAdapter,
+  dispatchOptions?: {
+    sourceAgentId?: string;
+    onEmitDispatch?: (envelope: EventDispatchEnvelope) => Promise<void> | void;
+  },
 ): KalpActions {
   return {
     async run<T extends ExecutableNode>(
@@ -348,17 +352,40 @@ export function createActionProxy(
     emit(eventName: string, payload: unknown, options?: EmitOptions): void {
       // SYNCHRONOUS: assign sequence number NOW
       const seq = ++execCtx.seqCounter;
+      const envelope: EventDispatchEnvelope = {
+        eventName,
+        payload,
+        traceId: execCtx.traceId,
+        parentExecutionId: execCtx.executionId,
+        sourceAgentId: dispatchOptions?.sourceAgentId ?? undefined,
+      };
 
       // Fire-and-forget emit
-      void persistEvent({
-        seq,
-        type: "intent.emit",
-        executionId: execCtx.executionId,
-        traceId: execCtx.traceId,
-        threadId: execCtx.threadId,
-        timestamp: Date.now(),
-        payload: { eventName, payload, options },
-      });
+      void (async () => {
+        await persistEvent({
+          seq,
+          type: "intent.emit",
+          executionId: execCtx.executionId,
+          traceId: execCtx.traceId,
+          threadId: execCtx.threadId,
+          timestamp: Date.now(),
+          payload: { eventName, payload, options, envelope },
+        });
+
+        await persistEvent({
+          seq: ++execCtx.seqCounter,
+          type: "emit.dispatched",
+          executionId: execCtx.executionId,
+          traceId: execCtx.traceId,
+          threadId: execCtx.threadId,
+          timestamp: Date.now(),
+          payload: envelope,
+        });
+
+        if (dispatchOptions?.onEmitDispatch) {
+          await dispatchOptions.onEmitDispatch(envelope);
+        }
+      })();
     },
 
     async callAgent<TInput extends z.ZodTypeAny, TOutput extends z.ZodTypeAny>(
