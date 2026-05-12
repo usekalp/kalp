@@ -34,13 +34,25 @@ export default defineCommand({
       const result = await runInitialDeploy(cwd);
       s.stop("Deployment completed");
       p.log.success(`Runtime URL: ${pc.cyan(result.workerUrl)}`);
+      if (result.customDomains.length > 0) {
+        p.note(
+          result.customDomains.map((domain) => pc.cyan(`https://${domain}`)).join("\n"),
+          "Custom domains detected",
+        );
+      }
+
+      const preferredStudioBase =
+        result.customDomains.length > 0
+          ? `https://${result.customDomains[0]}`
+          : result.workerUrl;
+
       if (result.credentialsChanged) {
         p.note(
           [
             `${pc.bold("Studio credentials")}`,
             `${pc.dim("Username:")} ${pc.cyan(result.studioAdminUser)}`,
             `${pc.dim("Password:")} ${pc.cyan(result.studioPassword)}`,
-            `${pc.dim("Studio:")} ${pc.cyan(`${result.workerUrl.replace(/\/$/, "")}/studio/login`)}`,
+            `${pc.dim("Studio:")} ${pc.cyan(`${preferredStudioBase.replace(/\/$/, "")}/studio/login`)}`,
           ].join("\n"),
           "Admin access",
         );

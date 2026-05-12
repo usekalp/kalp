@@ -46,6 +46,34 @@ function shouldTreatAsStaticAsset(assetPath) {
   return assetPath.includes(".");
 }
 
+function inferRuntimeMode(c) {
+  const host = new URL(c.req.url).hostname.toLowerCase();
+
+  const explicitEnv = c.env.KALP_ENV;
+  if (explicitEnv === "remote") return "remote";
+  if (explicitEnv === "local") return "local";
+
+  const runtimeMode = c.env.KALP_RUNTIME_MODE;
+  if (runtimeMode === "local") return "local";
+  if (runtimeMode === "remote") return "remote";
+
+  const hasKvBinding = !!c.env.KALP_MANIFESTS;
+  const isWranglerLocal =
+    host === "localhost" || host === "127.0.0.1" || host === "::1";
+
+  if (hasKvBinding && !isWranglerLocal) return "remote";
+  if (isWranglerLocal) return "local";
+
+  if (host.endsWith(".workers.dev") || host.endsWith(".pages.dev")) {
+    return "remote";
+  }
+
+  const cfMeta = c.req.raw && c.req.raw.cf;
+  if (cfMeta) return "remote";
+
+  return agentsSnapshot.mode === "remote" ? "remote" : "local";
+}
+
 async function readSession(c) {
   const secret = c.env.KALP_SECRET_KEY;
   if (!secret) return null;
@@ -62,6 +90,38 @@ async function requireSession(c, next) {
   }
   c.set("session", session);
   return next();
+}
+
+function mapIndexToStudioAgents(entries) {
+  return entries.map((entry) => ({
+    name: entry.name,
+    label: entry.label,
+    tags: entry.tags ?? [],
+    environment: "remote",
+    status: entry.workerUrl ? "online" : "offline",
+    hash: entry.hash ?? null,
+    version: entry.version ?? null,
+    versionNumber: entry.versionNumber ?? null,
+    lastRemoteHash: entry.hash ?? null,
+    lastLocalHash: null,
+    workerUrl: entry.workerUrl ?? null,
+    localPath: null,
+    updatedAt: entry.updatedAt ?? null,
+  }));
+}
+
+async function readLatestManifest(env, agentName) {
+  const latest = await env.KALP_MANIFESTS.get(`${agentName}:latest`);
+  if (!latest) return null;
+
+  const raw = await env.KALP_MANIFESTS.get(`${agentName}:${latest}`);
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 export class AgentDurableObject extends DurableObject {
@@ -233,16 +293,73 @@ app.use("/api/internal/executions*", requireSession);
 app.use("/api/internal/events*", requireSession);
 
 app.get("/api/internal/agents", (c) => {
+  const runtimeMode = inferRuntimeMode(c);
+
+  if (runtimeMode === "remote") {
+    return c.env.KALP_MANIFESTS.get("agents:index").then((raw) => {
+      let parsed = null;
+      if (raw) {
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          parsed = null;
+        }
+      }
+
+      return c.json({
+        generatedAt: new Date().toISOString(),
+        projectPath: agentsSnapshot.projectPath,
+        workerUrl: agentsSnapshot.workerUrl,
+        mode: "remote",
+        agents: Array.isArray(parsed)
+          ? mapIndexToStudioAgents(parsed)
+          : agentsSnapshot.agents,
+      });
+    });
+  }
+
   return c.json({
     generatedAt: agentsSnapshot.generatedAt,
     projectPath: agentsSnapshot.projectPath,
     workerUrl: agentsSnapshot.workerUrl,
+    mode: "local",
     agents: agentsSnapshot.agents,
   });
 });
 
-app.get("/api/internal/agents/:agentName", (c) => {
+app.get("/api/internal/agents/:agentName", async (c) => {
   const agentName = c.req.param("agentName");
+  const runtimeMode = inferRuntimeMode(c);
+
+  if (runtimeMode === "remote") {
+    const manifest = await readLatestManifest(c.env, agentName);
+    if (!manifest) {
+      return c.json({ error: `Agent "${agentName}" not found.` }, 404);
+    }
+
+    const metadata = manifest.metadata ?? {};
+    return c.json({
+      name: metadata.name ?? agentName,
+      label: metadata.label,
+      tags: metadata.tags ?? [],
+      environment: "remote",
+      status: "online",
+      hash: null,
+      version: null,
+      versionNumber: null,
+      lastRemoteHash: null,
+      lastLocalHash: null,
+      workerUrl: agentsSnapshot.workerUrl
+        ? `${agentsSnapshot.workerUrl.replace(/\/$/, "")}/a/${agentName}`
+        : null,
+      localPath: null,
+      updatedAt: null,
+      public: metadata.public ?? false,
+      routesPublic: metadata.routesPublic ?? {},
+      listeners: metadata.listeners ?? [],
+    });
+  }
+
   const agent = agentsSnapshot.agents.find((item) => item.name === agentName);
   if (!agent) {
     return c.json({ error: `Agent "${agentName}" not found.` }, 404);

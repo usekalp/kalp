@@ -76,7 +76,7 @@ interface WranglerConfig {
   observability: { enabled: boolean };
   upload_source_maps: boolean;
   vars: {
-    KALP_ENV: "remote";
+    KALP_ENV: "local" | "remote";
   };
   secrets: { required: string[] };
 }
@@ -123,7 +123,10 @@ function buildWorkerName(slug: string, cwd: string): string {
   return clipped || `kalp-${cwdHash}`;
 }
 
-function createRuntimeConfig(workerName: string): WranglerConfig {
+function createRuntimeConfig(
+  workerName: string,
+  mode: "local" | "remote",
+): WranglerConfig {
   return {
     $schema: "node_modules/wrangler/config-schema.json",
     name: workerName,
@@ -157,7 +160,7 @@ function createRuntimeConfig(workerName: string): WranglerConfig {
     observability: { enabled: true },
     upload_source_maps: true,
     vars: {
-      KALP_ENV: "remote",
+      KALP_ENV: mode,
     },
     secrets: {
       required: [
@@ -379,6 +382,19 @@ async function createAgentsSnapshot(
   };
 }
 
+export async function writeRuntimeAgentsSnapshot(params: {
+  cwd: string;
+  runtimeDir: string;
+  mode: "local" | "remote";
+}): Promise<void> {
+  const snapshot = await createAgentsSnapshot(params.cwd, params.mode);
+  await writeFile(
+    join(params.runtimeDir, "agents.snapshot.json"),
+    `${JSON.stringify(snapshot, null, 2)}\n`,
+    "utf-8",
+  );
+}
+
 export async function materializeRuntime(
   cwd: string,
   options: MaterializeRuntimeOptions = {},
@@ -396,16 +412,11 @@ export async function materializeRuntime(
   await cp(template.studioTemplateDir, studioDir, { recursive: true });
   await cp(template.workerEntryPath, workerEntrypointPath);
   await ensureStudioIndex(studioDir);
-  const agentsSnapshot = await createAgentsSnapshot(cwd, mode);
-  await writeFile(
-    join(runtimeDir, "agents.snapshot.json"),
-    `${JSON.stringify(agentsSnapshot, null, 2)}\n`,
-    "utf-8",
-  );
+  await writeRuntimeAgentsSnapshot({ cwd, runtimeDir, mode });
 
   const projectSlug = await resolveProjectSlug(cwd);
   const workerName = buildWorkerName(projectSlug, cwd);
-  const wranglerConfig = createRuntimeConfig(workerName);
+  const wranglerConfig = createRuntimeConfig(workerName, mode);
   await writeFile(
     wranglerConfigPath,
     `${JSON.stringify(wranglerConfig, null, 2)}\n`,

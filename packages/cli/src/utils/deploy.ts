@@ -131,6 +131,7 @@ async function resolveWorkerUrl(
 
 export async function runInitialDeploy(cwd: string): Promise<{
   workerUrl: string;
+  customDomains: string[];
   accountId: string;
   studioAdminUser: string;
   studioPassword: string;
@@ -209,6 +210,7 @@ export async function runInitialDeploy(cwd: string): Promise<{
   }
 
   const workerUrl = deploy.workerUrl;
+  const customDomains = deploy.customDomains ?? [];
 
   const existingState = await readProjectState(cwd);
 
@@ -228,6 +230,7 @@ export async function runInitialDeploy(cwd: string): Promise<{
 
   return {
     workerUrl,
+    customDomains,
     accountId: auth.accountId,
     studioAdminUser: secrets.studioAdminUser,
     studioPassword: secrets.studioPassword,

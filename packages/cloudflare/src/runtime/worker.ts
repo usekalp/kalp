@@ -39,6 +39,8 @@ type RuntimeBindings = Env & {
   KALP_STUDIO_PASSWORD?: string;
   KALP_STUDIO_ADMIN_USER?: string;
   KALP_ENFORCE_GLOBAL_AUTH?: string;
+  KALP_ENV?: "local" | "remote";
+  KALP_RUNTIME_MODE?: "local" | "remote";
 };
 
 type RuntimeVariables = {
@@ -229,6 +231,8 @@ function getAgentRouting(url: URL): {
 }
 
 function inferRuntimeMode(c: any): "local" | "remote" {
+  const host = new URL(c.req.url).hostname.toLowerCase();
+
   const explicitEnv = c.env.KALP_ENV;
   if (explicitEnv === "remote") return "remote";
   if (explicitEnv === "local") return "local";
@@ -238,18 +242,13 @@ function inferRuntimeMode(c: any): "local" | "remote" {
   if (runtimeMode === "remote") return "remote";
 
   const hasKvBinding = !!c.env.KALP_MANIFESTS;
-
-  const isWranglerLocal =
-    runtimeMode === "local" ||
-    new URL(c.req.url).hostname === "localhost" ||
-    new URL(c.req.url).hostname === "127.0.0.1";
+  const isWranglerLocal = host === "localhost" || host === "127.0.0.1" || host === "::1";
 
   if (hasKvBinding && !isWranglerLocal) {
     return "remote";
   }
 
-  const host = new URL(c.req.url).hostname.toLowerCase();
-  if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+  if (isWranglerLocal) {
     return "local";
   }
   if (host.endsWith(".workers.dev") || host.endsWith(".pages.dev")) {

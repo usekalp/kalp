@@ -6,6 +6,7 @@ export interface ProviderIdentity {
 
 export interface DeployResult {
   workerUrl: string;
+  customDomains?: string[];
   rawOutput: string;
 }
 
@@ -22,6 +23,7 @@ export interface RuntimeProvider {
   deployRuntime(params: {
     cwd: string;
     configPath: string;
+    accountId?: string;
     useSecretsFile?: boolean;
   }): Promise<DeployResult>;
   putManifest(params: {
@@ -35,6 +37,11 @@ export interface RuntimeProvider {
     configPath: string;
     key: string;
     value: string;
+  }): Promise<void>;
+  deleteValue(params: {
+    cwd: string;
+    configPath: string;
+    key: string;
   }): Promise<void>;
   getValue(params: {
     cwd: string;

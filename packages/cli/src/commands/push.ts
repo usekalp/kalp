@@ -79,6 +79,11 @@ interface RemoteAgentIndexEntry {
   tags?: string[];
 }
 
+interface PruneResult {
+  removedAgents: string[];
+  deletedKeys: number;
+}
+
 async function readRemoteAgentsIndex(
   cwd: string,
   wranglerConfigPath: string,
@@ -119,6 +124,97 @@ async function writeRemoteAgentsIndex(
   } finally {
     await rm(path, { force: true });
   }
+}
+
+async function pruneStaleRemoteAgents(params: {
+  cwd: string;
+  wranglerConfigPath: string;
+  remoteEntries: RemoteAgentIndexEntry[];
+  localAgentNames: string[];
+}): Promise<PruneResult> {
+  const { cwd, wranglerConfigPath, remoteEntries, localAgentNames } = params;
+  const localSet = new Set(localAgentNames);
+  const staleEntries = remoteEntries.filter((entry) => !localSet.has(entry.name));
+
+  if (staleEntries.length === 0) {
+    return { removedAgents: [], deletedKeys: 0 };
+  }
+
+  const preview = staleEntries.slice(0, 3).map((entry) => entry.name).join(", ");
+  const suffix =
+    staleEntries.length > 3 ? ` and ${staleEntries.length - 3} more` : "";
+  const confirmation = await p.confirm({
+    message: `Found ${staleEntries.length} stale remote agents that no longer exist locally (e.g., ${pc.cyan(preview)}${suffix}). Do you want to prune them from the remote runtime?`,
+    initialValue: true,
+  });
+
+  if (p.isCancel(confirmation)) {
+    p.outro("Cancelled");
+    process.exit(0);
+  }
+
+  if (!confirmation) {
+    return { removedAgents: [], deletedKeys: 0 };
+  }
+
+  const provider = resolveProvider();
+  let deletedKeys = 0;
+
+  for (const entry of staleEntries) {
+    const latestKey = `${entry.name}:latest`;
+    const latestHash = await provider
+      .getValue({ cwd, configPath: wranglerConfigPath, key: latestKey })
+      .catch(() => null);
+
+    const hashes = new Set<string>();
+    if (entry.hash) hashes.add(entry.hash);
+    if (latestHash) hashes.add(latestHash);
+
+    const latestDeleted = await provider
+      .deleteValue({
+        cwd,
+        configPath: wranglerConfigPath,
+        key: latestKey,
+      })
+      .then(() => true)
+      .catch(() => false);
+    if (latestDeleted) deletedKeys += 1;
+
+    for (const hash of hashes) {
+      const deleted = await provider
+        .deleteValue({
+          cwd,
+          configPath: wranglerConfigPath,
+          key: `${entry.name}:${hash}`,
+        })
+        .then(() => true)
+        .catch(() => false);
+      if (deleted) deletedKeys += 1;
+    }
+  }
+
+  const filtered = remoteEntries.filter((entry) => localSet.has(entry.name));
+  await writeRemoteAgentsIndex(cwd, wranglerConfigPath, filtered);
+
+  return {
+    removedAgents: staleEntries.map((entry) => entry.name).sort((a, b) => a.localeCompare(b)),
+    deletedKeys,
+  };
+}
+
+async function mergeRemoteAgentIndexEntry(params: {
+  cwd: string;
+  wranglerConfigPath: string;
+  entry: RemoteAgentIndexEntry;
+}): Promise<void> {
+  const { cwd, wranglerConfigPath, entry } = params;
+  const currentIndex = await readRemoteAgentsIndex(cwd, wranglerConfigPath);
+  const merged = [
+    ...currentIndex.filter((existing) => existing.name !== entry.name),
+    entry,
+  ].sort((a, b) => a.name.localeCompare(b.name));
+
+  await writeRemoteAgentsIndex(cwd, wranglerConfigPath, merged);
 }
 
 async function pushRemoteManifest(params: {
@@ -173,6 +269,7 @@ export default defineCommand({
   async run({ args }) {
     const cwd = process.cwd();
     const target: PushTarget = args.local ? "local" : "remote";
+    const isBulkPush = !args.agent;
 
     p.intro(`${LOGO} ${pc.bold("kalp push")}`);
 
@@ -217,6 +314,22 @@ export default defineCommand({
       }
 
       runtime = await materializeRuntime(cwd, { mode: "remote" });
+
+      if (isBulkPush) {
+        const currentIndex = await readRemoteAgentsIndex(cwd, runtime.wranglerConfigPath);
+        const prune = await pruneStaleRemoteAgents({
+          cwd,
+          wranglerConfigPath: runtime.wranglerConfigPath,
+          remoteEntries: currentIndex,
+          localAgentNames: availableAgents,
+        });
+
+        if (prune.removedAgents.length > 0) {
+          p.log.info(
+            `Pruned stale remote agents: ${pc.cyan(prune.removedAgents.join(", "))} ${pc.dim(`(${prune.deletedKeys} keys cleaned)`)}`,
+          );
+        }
+      }
     }
 
     const spinner = p.spinner();
@@ -276,10 +389,6 @@ export default defineCommand({
           agentState.lastRemoteHash = hash;
           agentState.lastLocalHash = hash;
 
-          const currentIndex = await readRemoteAgentsIndex(
-            cwd,
-            runtime.wranglerConfigPath,
-          );
           const nextEntry: RemoteAgentIndexEntry = {
             name: agentName,
             hash,
@@ -290,11 +399,11 @@ export default defineCommand({
             label: manifest.ir.metadata?.label,
             tags: manifest.ir.metadata?.tags,
           };
-          const merged = [
-            ...currentIndex.filter((entry) => entry.name !== agentName),
-            nextEntry,
-          ].sort((a, b) => a.name.localeCompare(b.name));
-          await writeRemoteAgentsIndex(cwd, runtime.wranglerConfigPath, merged);
+          await mergeRemoteAgentIndexEntry({
+            cwd,
+            wranglerConfigPath: runtime.wranglerConfigPath,
+            entry: nextEntry,
+          });
         }
 
         const bundles = manifest.ir.bundles || {};
