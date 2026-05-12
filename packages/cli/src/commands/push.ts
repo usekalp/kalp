@@ -30,6 +30,7 @@ function createInitialState(): ProjectState {
     workerUrl: null,
     deployedAt: null,
     accountId: null,
+    studioCredentialsFingerprint: null,
     agents: {},
   };
 }
@@ -83,11 +84,13 @@ async function readRemoteAgentsIndex(
   wranglerConfigPath: string,
 ): Promise<RemoteAgentIndexEntry[]> {
   const provider = resolveProvider();
-  const output = await provider.getValue({
-    cwd,
-    configPath: wranglerConfigPath,
-    key: "agents:index",
-  });
+  const output = await provider
+    .getValue({
+      cwd,
+      configPath: wranglerConfigPath,
+      key: "agents:index",
+    })
+    .catch(() => null);
   if (!output) return [];
   try {
     const parsed = JSON.parse(output) as unknown;

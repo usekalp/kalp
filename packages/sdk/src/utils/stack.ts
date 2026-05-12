@@ -1,7 +1,31 @@
+import { normalize, sep } from "node:path";
+import { fileURLToPath } from "node:url";
+
 /**
  * Utility to capture the file path of the caller using stack traces.
  * This is used by the SDK registry to attach __filePath metadata to nodes.
  */
+
+function normalizeCapturedPath(rawPath: string): string {
+  let path = rawPath;
+
+  if (path.startsWith("file:///")) {
+    path = fileURLToPath(path);
+  }
+
+  if (process.platform === "win32") {
+    // Git Bash/MSYS format: /c/Users/... -> C:/Users/...
+    const driveStyle = path.match(/^\/([a-zA-Z])\/(.*)$/);
+    if (driveStyle) {
+      path = `${driveStyle[1]}:/${driveStyle[2]}`;
+    } else if (path.startsWith("/Users/")) {
+      // Defensive fallback seen in some stacks running on Windows shells
+      path = `C:${path}`;
+    }
+  }
+
+  return normalize(path).split(sep).join("/");
+}
 
 /**
  * Extract the first file path from a stack trace string that isn't from the SDK itself.
@@ -13,46 +37,35 @@ export function extractFilePath(stack?: string): string | undefined {
   const lines = stack.split(/\r?\n/);
 
   for (const line of lines) {
+    const normalizedLine = line.replace(/\\/g, "/");
+
     // Skip frames from this utility or the SDK's core registration logic
     if (
-      line.includes("captureFilePath") ||
-      line.includes("extractFilePath") ||
-      line.includes("registerNode") ||
-      line.includes("defineStep") ||
-      line.includes("defineTool") ||
-      line.includes("defineRoute") ||
-      line.includes("Error")
+      normalizedLine.includes("captureFilePath") ||
+      normalizedLine.includes("extractFilePath") ||
+      normalizedLine.includes("registerNode") ||
+      normalizedLine.includes("defineStep") ||
+      normalizedLine.includes("defineTool") ||
+      normalizedLine.includes("defineRoute") ||
+      normalizedLine.includes("defineListener") ||
+      normalizedLine.includes("@kalphq/sdk/") ||
+      normalizedLine.includes("/packages/sdk/") ||
+      normalizedLine.includes("Error")
     ) {
       continue;
     }
 
-    // Match file paths. We look for absolute paths or file URIs.
-    // We want to stop before the first colon that starts the line number.
-    // Patterns:
-    // - (C:\path\to\file.ts:10:5)
-    // - at /path/to/file.ts:10:5
-    // - file:///C:/path/to/file.ts:10:5
+    const patterns = [
+      /\((file:\/\/\/[^\s)]+|[A-Za-z]:\\[^:]+|\/[^:]+):\d+:\d+\)/,
+      /at\s+(file:\/\/\/[^\s)]+|[A-Za-z]:\\[^:]+|\/[^:]+):\d+:\d+/,
+      /(file:\/\/\/[^\s)]+|[A-Za-z]:\\[^:]+|\/[^:]+):\d+:\d+/,
+    ];
 
-    // Improved regex to capture the path. It looks for something that looks like a path
-    // and ends before a colon followed by a number.
-    const match = line.match(/(?:file:\/\/\/|\/|[A-Za-z]:[\\/])(?:(?![ :]).)+/);
+    for (const pattern of patterns) {
+      const match = line.match(pattern);
+      if (!match?.[1]) continue;
 
-    if (match) {
-      let path = match[0];
-
-      // Clean up file URIs
-      if (path.startsWith("file:///")) {
-        path = path.replace("file:///", "");
-        // Windows file:///C:/... becomes /C:/... -> remove leading slash
-        if (/^\/[A-Za-z]:/.test(path)) {
-          path = path.substring(1);
-        }
-      }
-
-      // Normalize backslashes to forward slashes
-      path = path.replace(/\\/g, "/");
-
-      return path;
+      return normalizeCapturedPath(match[1]);
     }
   }
 

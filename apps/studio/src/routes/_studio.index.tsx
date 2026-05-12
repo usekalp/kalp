@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, ArrowUpRight, Cloud, Globe, House, Laptop, Orbit } from 'lucide-react'
+import { Activity, ArrowUpRight, BotOff, Cloud, Globe, Laptop, Orbit } from 'lucide-react'
 import { getAgents } from '#/lib/api'
 import { deriveLabelFromName } from '#/lib/labels'
 import { Badge } from '#/components/ui/badge'
@@ -20,7 +20,7 @@ function DashboardPage() {
   })
 
   const cards = useMemo(() => agentsQuery.data?.agents ?? [], [agentsQuery.data])
-  const mode = agentsQuery.data?.mode ?? 'local'
+  const mode = formatRuntimeMode(agentsQuery.data?.mode ?? 'local')
 
   return (
     <main>
@@ -113,16 +113,27 @@ function DashboardPage() {
       </section>
 
       {!agentsQuery.isLoading && cards.length === 0 && (
-        <section className="studio-tile mt-8 flex w-full max-w-2xl flex-col items-center justify-center rounded-[5px] border-dashed p-12 text-center">
-          <House className="mb-4 h-8 w-8 text-muted-foreground" />
+        <section className="studio-tile mt-8 flex min-h-[300px] w-full flex-col items-center justify-center rounded-[5px] border-dashed p-12 text-center">
+          <BotOff className="mb-4 h-9 w-9 text-muted-foreground/80" />
           <h2 className="text-lg font-medium">No agents found</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Create an agent with <code>kalp create</code> and push it to populate this dashboard.
-          </p>
+          {mode === 'Local' ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Create with <code>kalp create</code>, then run <code>kalp push --local</code> or{' '}
+              <code>kalp push</code>.
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Push agents to publish versions to this runtime.
+            </p>
+          )}
         </section>
       )}
     </main>
   )
+}
+
+function formatRuntimeMode(mode: 'local' | 'remote') {
+  return mode === 'local' ? 'Local' : 'Remote'
 }
 
 function formatEnvironment(environment: 'local' | 'remote' | 'both') {

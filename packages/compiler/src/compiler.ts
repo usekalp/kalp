@@ -16,6 +16,15 @@ function deriveLabelFromName(name: string): string {
     .join(" ");
 }
 
+function isSdkInternalPath(filePath?: string): boolean {
+  if (!filePath) return false;
+  const normalized = filePath.replace(/\\/g, "/");
+  return (
+    normalized.includes("/node_modules/@kalphq/sdk/") ||
+    normalized.includes("/packages/sdk/")
+  );
+}
+
 function serializeEmits(
   agentName: string,
   emits: Record<string, z.ZodTypeAny | string> | undefined,
@@ -355,13 +364,33 @@ export async function buildAgent(
         const filePath = listener.__filePath;
         const targetFilePath = filePath ?? entryFullPath;
         let exportName = `listeners[${i}]`;
-        if (filePath && internalId) {
+        if (filePath && internalId && !isSdkInternalPath(filePath)) {
           const modExports = await getModuleExports(filePath);
           const exported = Object.entries(modExports).find(
             ([_, value]) => (value as any)?.__internalId === internalId,
           );
           if (!exported) {
-            throw new Error(`Cannot resolve listener export in ${filePath}`);
+            // Listener can be defined as a local const (not exported) and then
+            // attached to defineAgent({ listeners: [...] }). In that case we
+            // bundle through the agent default export path instead.
+            exportName = `listeners[${i}]`;
+            const fallbackFilePath = entryFullPath;
+            const targetEntryKey = `listener:${listener.source.agentId}:${String(listener.event)}:${i}`;
+            const bundleRes = await bundleHandler(
+              fallbackFilePath,
+              outDir,
+              exportName,
+              false,
+            );
+            storeBundle(bundleRes.hash, bundleRes.code, "entry");
+            ir.entries[targetEntryKey] = bundleRes.hash;
+            ir.metadata.listeners ??= [];
+            ir.metadata.listeners.push({
+              sourceAgentId: listener.source.agentId,
+              event: String(listener.event),
+              targetEntryKey,
+            });
+            continue;
           }
           exportName = exported[0];
         }

@@ -34,6 +34,23 @@ export default defineCommand({
       const result = await runInitialDeploy(cwd);
       s.stop("Deployment completed");
       p.log.success(`Runtime URL: ${pc.cyan(result.workerUrl)}`);
+      if (result.credentialsChanged) {
+        p.note(
+          [
+            `${pc.bold("Studio credentials")}`,
+            `${pc.dim("Username:")} ${pc.cyan(result.studioAdminUser)}`,
+            `${pc.dim("Password:")} ${pc.cyan(result.studioPassword)}`,
+            `${pc.dim("Studio:")} ${pc.cyan(`${result.workerUrl.replace(/\/$/, "")}/studio/login`)}`,
+          ].join("\n"),
+          "Admin access",
+        );
+      } else {
+        p.log.info(
+          pc.dim(
+            "Studio credentials unchanged. Check your local .env if you need to recover them.",
+          ),
+        );
+      }
       p.outro(pc.green("Your runtime is ready"));
     } catch (error) {
       s.stop("Deployment failed");

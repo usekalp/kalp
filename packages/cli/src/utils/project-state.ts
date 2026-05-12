@@ -15,6 +15,7 @@ export interface ProjectState {
   workerUrl: string | null;
   deployedAt: string | null;
   accountId: string | null;
+  studioCredentialsFingerprint?: string | null;
   agents: Record<string, ProjectAgentState>;
 }
 
@@ -35,6 +36,11 @@ function normalizeProjectState(raw: unknown): ProjectState | null {
   const accountId =
     typeof value.accountId === "string" && value.accountId.length > 0
       ? value.accountId
+      : null;
+  const studioCredentialsFingerprint =
+    typeof value.studioCredentialsFingerprint === "string" &&
+    value.studioCredentialsFingerprint.length > 0
+      ? value.studioCredentialsFingerprint
       : null;
 
   const agents: Record<string, ProjectAgentState> = {};
@@ -67,7 +73,7 @@ function normalizeProjectState(raw: unknown): ProjectState | null {
     };
   }
 
-  return { workerUrl, deployedAt, accountId, agents };
+  return { workerUrl, deployedAt, accountId, studioCredentialsFingerprint, agents };
 }
 
 export async function readProjectState(cwd: string): Promise<ProjectState | null> {

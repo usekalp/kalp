@@ -75,6 +75,9 @@ interface WranglerConfig {
   };
   observability: { enabled: boolean };
   upload_source_maps: boolean;
+  vars: {
+    KALP_ENV: "remote";
+  };
   secrets: { required: string[] };
 }
 
@@ -153,6 +156,9 @@ function createRuntimeConfig(workerName: string): WranglerConfig {
     },
     observability: { enabled: true },
     upload_source_maps: true,
+    vars: {
+      KALP_ENV: "remote",
+    },
     secrets: {
       required: [
         "KALP_SECRET_KEY",

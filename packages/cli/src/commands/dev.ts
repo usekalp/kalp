@@ -1,4 +1,4 @@
-import { copyFile } from "node:fs/promises";
+import { copyFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { defineCommand } from "citty";
@@ -20,6 +20,17 @@ export default defineCommand({
 
     await ensureSecretKey(cwd);
     await copyFile(join(cwd, ".env"), join(cwd, ".dev.vars"));
+    const devVarsPath = join(cwd, ".dev.vars");
+    const devVarsContent = await readFile(devVarsPath, "utf-8");
+    const nextDevVars = devVarsContent
+      .replace(/^KALP_ENV=.*$/m, "")
+      .replace(/^KALP_RUNTIME_MODE=.*$/m, "")
+      .trimEnd();
+    await writeFile(
+      devVarsPath,
+      `${nextDevVars}\nKALP_ENV=local\nKALP_RUNTIME_MODE=local\n`,
+      "utf-8",
+    );
     const runtime = await materializeRuntime(cwd, { mode: "local" });
 
     p.note("Starting local runtime (wrangler dev :8787)");

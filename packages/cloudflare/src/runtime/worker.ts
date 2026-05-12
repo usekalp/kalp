@@ -62,7 +62,11 @@ type ManifestMetadata = {
   tags?: string[];
   public?: boolean;
   routesPublic?: Record<string, boolean | undefined>;
-  listeners?: Array<{ sourceAgentId: string; event: string; targetEntryKey: string }>;
+  listeners?: Array<{
+    sourceAgentId: string;
+    event: string;
+    targetEntryKey: string;
+  }>;
 };
 
 type RuntimeManifest = {
@@ -118,10 +122,7 @@ async function readSession(c: any): Promise<StudioSession | null> {
   return { username };
 }
 
-async function requireSession(
-  c: any,
-  next: () => Promise<void>,
-) {
+async function requireSession(c: any, next: () => Promise<void>) {
   const session = await readSession(c);
   if (!session) {
     return c.json({ error: "Unauthorized" }, 401);
@@ -195,7 +196,9 @@ async function queueListenerDispatch(
   await env.KALP_MANIFESTS.put(LISTENERS_QUEUE_KEY, JSON.stringify(next));
 }
 
-function parseEventEnvelope(request: Request): { eventName: string; payload: unknown } | null {
+function parseEventEnvelope(
+  request: Request,
+): { eventName: string; payload: unknown } | null {
   const eventName = request.headers.get("x-kalp-event-name");
   if (!eventName) return null;
   return {
@@ -206,7 +209,10 @@ function parseEventEnvelope(request: Request): { eventName: string; payload: unk
   };
 }
 
-function getAgentRouting(url: URL): { agentName: string; passthroughPath: string } {
+function getAgentRouting(url: URL): {
+  agentName: string;
+  passthroughPath: string;
+} {
   const segments = url.pathname.split("/").filter(Boolean);
 
   if (segments[0] === "a" && segments[1]) {
@@ -222,7 +228,42 @@ function getAgentRouting(url: URL): { agentName: string; passthroughPath: string
   };
 }
 
-async function forwardToAgentDO(c: any, request: Request, env: RuntimeBindings) {
+function inferRuntimeMode(c: any): "local" | "remote" {
+  const explicitEnv = c.env.KALP_ENV;
+  if (explicitEnv === "remote") return "remote";
+  if (explicitEnv === "local") return "local";
+
+  const runtimeMode = c.env.KALP_RUNTIME_MODE;
+  if (runtimeMode === "local") return "local";
+  if (runtimeMode === "remote") return "remote";
+
+  const hasKvBinding = !!c.env.KALP_MANIFESTS;
+
+  const isWranglerLocal =
+    runtimeMode === "local" ||
+    new URL(c.req.url).hostname === "localhost" ||
+    new URL(c.req.url).hostname === "127.0.0.1";
+
+  if (hasKvBinding && !isWranglerLocal) {
+    return "remote";
+  }
+
+  const host = new URL(c.req.url).hostname.toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
+    return "local";
+  }
+  if (host.endsWith(".workers.dev") || host.endsWith(".pages.dev")) {
+    return "remote";
+  }
+  const cfMeta = c.req.raw && (c.req.raw as any).cf;
+  return cfMeta ? "remote" : snapshot.mode;
+}
+
+async function forwardToAgentDO(
+  c: any,
+  request: Request,
+  env: RuntimeBindings,
+) {
   const url = new URL(request.url);
   const { agentName, passthroughPath } = getAgentRouting(url);
   const routeKey = `${request.method.toUpperCase()}:${passthroughPath === "/" ? "/" : passthroughPath}`;
@@ -237,7 +278,12 @@ async function forwardToAgentDO(c: any, request: Request, env: RuntimeBindings) 
   const envelope = parseEventEnvelope(request);
   if (envelope && typeof c.executionCtx?.waitUntil === "function") {
     c.executionCtx.waitUntil(
-      queueListenerDispatch(env, agentName, envelope.eventName, envelope.payload),
+      queueListenerDispatch(
+        env,
+        agentName,
+        envelope.eventName,
+        envelope.payload,
+      ),
     );
   }
 
@@ -290,7 +336,10 @@ function mapIndexToStudioAgents(
 }
 
 function createRuntimeApp() {
-  const app = new Hono<{ Bindings: RuntimeBindings; Variables: RuntimeVariables }>();
+  const app = new Hono<{
+    Bindings: RuntimeBindings;
+    Variables: RuntimeVariables;
+  }>();
 
   app.use("*", async (c, next) => {
     if (c.req.method === "OPTIONS") {
@@ -309,9 +358,9 @@ function createRuntimeApp() {
       return c.json({ error: "Studio auth is not configured." }, 500);
     }
 
-    const body = await c.req
+    const body = (await c.req
       .json()
-      .catch(() => ({ username: undefined, password: undefined })) as {
+      .catch(() => ({ username: undefined, password: undefined }))) as {
       username?: string;
       password?: string;
     };
@@ -349,7 +398,8 @@ function createRuntimeApp() {
   app.use("/api/internal/events*", requireSession);
 
   app.get("/api/internal/agents", async (c) => {
-    if (snapshot.mode === "remote") {
+    const runtimeMode = inferRuntimeMode(c);
+    if (runtimeMode === "remote") {
       const raw = await c.env.KALP_MANIFESTS.get("agents:index");
       let parsed: Array<{
         name: string;
@@ -380,14 +430,15 @@ function createRuntimeApp() {
       generatedAt: snapshot.generatedAt,
       projectPath: snapshot.projectPath,
       workerUrl: snapshot.workerUrl,
-      mode: snapshot.mode,
+      mode: runtimeMode,
       agents: snapshot.agents,
     });
   });
 
   app.get("/api/internal/agents/:agentName", async (c) => {
     const agentName = c.req.param("agentName");
-    if (snapshot.mode === "remote") {
+    const runtimeMode = inferRuntimeMode(c);
+    if (runtimeMode === "remote") {
       const manifest = await readLatestManifest(c.env, agentName);
       if (!manifest) {
         return c.json({ error: `Agent "${agentName}" not found.` }, 404);

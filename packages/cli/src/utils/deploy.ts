@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { execa } from "execa";
 import { requireAuth } from "@/utils/auth";
 import { ensureStudioSecrets } from "@/utils/secret";
@@ -131,6 +132,9 @@ async function resolveWorkerUrl(
 export async function runInitialDeploy(cwd: string): Promise<{
   workerUrl: string;
   accountId: string;
+  studioAdminUser: string;
+  studioPassword: string;
+  credentialsChanged: boolean;
 }> {
   const auth = await requireAuth();
   const aiProvider = await resolveProviderFromConfig(cwd);
@@ -208,12 +212,25 @@ export async function runInitialDeploy(cwd: string): Promise<{
 
   const existingState = await readProjectState(cwd);
 
+  const credentialsFingerprint = createHash("sha256")
+    .update(`${secrets.studioAdminUser}:${secrets.studioPassword}`)
+    .digest("hex");
+  const credentialsChanged =
+    existingState?.studioCredentialsFingerprint !== credentialsFingerprint;
+
   await writeProjectState(cwd, {
     workerUrl,
     deployedAt: new Date().toISOString(),
     accountId: auth.accountId,
+    studioCredentialsFingerprint: credentialsFingerprint,
     agents: existingState?.agents ?? {},
   });
 
-  return { workerUrl, accountId: auth.accountId };
+  return {
+    workerUrl,
+    accountId: auth.accountId,
+    studioAdminUser: secrets.studioAdminUser,
+    studioPassword: secrets.studioPassword,
+    credentialsChanged,
+  };
 }
