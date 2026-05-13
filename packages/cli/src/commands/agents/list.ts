@@ -1,23 +1,21 @@
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { requireAuth } from "@/utils/auth";
 import {
-  readRemoteAgentPointers,
+  type RemoteAgentIndexEntry,
   readRemoteAgentsIndex,
 } from "@/utils/agents-remote";
-import { readProjectState } from "@/utils/project-state";
-import { readLocalAgentNames } from "@/utils/runtime";
 import { resolveSecretsRuntimeConfigPath } from "@/utils/secrets-runtime";
 
 const LOGO = "🦋";
+const CACHE_TTL_MS = 20_000;
 
-interface AgentViewRow {
-  name: string;
-  localStatus: "yes" | "no";
-  remoteStatus: "online" | "offline";
-  remoteVersion: string;
-  updatedAt: string;
+interface RemoteAgentListCache {
+  cachedAt: string;
+  entries: RemoteAgentIndexEntry[];
 }
 
 function pad(value: string, width: number): string {
@@ -26,53 +24,102 @@ function pad(value: string, width: number): string {
     : `${value}${" ".repeat(width - value.length)}`;
 }
 
-function renderTable(rows: AgentViewRow[]): void {
+function renderTable(rows: RemoteAgentIndexEntry[]): void {
   const headers = {
     name: "Agent",
-    local: "Local",
-    remote: "Remote",
-    version: "Remote Version",
+    version: "Version",
     updated: "Updated",
+    status: "Status",
   };
 
   const widths = {
     name: Math.max(headers.name.length, ...rows.map((r) => r.name.length), 5),
-    local: headers.local.length,
-    remote: headers.remote.length,
     version: Math.max(
       headers.version.length,
-      ...rows.map((r) => r.remoteVersion.length),
-      14,
+      ...rows.map((r) => (r.version ?? "—").length),
+      7,
     ),
-    updated: Math.max(headers.updated.length, ...rows.map((r) => r.updatedAt.length), 7),
+    updated: Math.max(
+      headers.updated.length,
+      ...rows.map((r) => (r.updatedAt || "—").length),
+      7,
+    ),
+    status: headers.status.length,
   };
 
-  const divider = `  ${"-".repeat(widths.name)}  ${"-".repeat(widths.local)}  ${"-".repeat(widths.remote)}  ${"-".repeat(widths.version)}  ${"-".repeat(widths.updated)}`;
+  const divider = `  ${"-".repeat(widths.name)}  ${"-".repeat(widths.version)}  ${"-".repeat(widths.updated)}  ${"-".repeat(widths.status)}`;
   console.log(
-    `  ${pc.bold(pad(headers.name, widths.name))}  ${pc.bold(pad(headers.local, widths.local))}  ${pc.bold(pad(headers.remote, widths.remote))}  ${pc.bold(pad(headers.version, widths.version))}  ${pc.bold(pad(headers.updated, widths.updated))}`,
+    `  ${pc.bold(pad(headers.name, widths.name))}  ${pc.bold(pad(headers.version, widths.version))}  ${pc.bold(pad(headers.updated, widths.updated))}  ${pc.bold(pad(headers.status, widths.status))}`,
   );
   console.log(pc.dim(divider));
+
   for (const row of rows) {
-    const localText = row.localStatus === "yes" ? "yes" : "no";
-    const remoteText = row.remoteStatus === "online" ? "online" : "offline";
-    const local =
-      row.localStatus === "yes" ? pc.green(localText) : pc.dim(localText);
-    const remote =
-      row.remoteStatus === "online" ? pc.green(remoteText) : pc.dim(remoteText);
-    const localCell = `${local}${" ".repeat(Math.max(0, widths.local - localText.length))}`;
-    const remoteCell = `${remote}${" ".repeat(Math.max(0, widths.remote - remoteText.length))}`;
+    const version = row.version ?? "—";
+    const updated = row.updatedAt || "—";
+    const statusText = "online";
+    const status = `${pc.green(statusText)}${" ".repeat(Math.max(0, widths.status - statusText.length))}`;
     console.log(
-      `  ${pad(row.name, widths.name)}  ${localCell}  ${remoteCell}  ${pad(row.remoteVersion, widths.version)}  ${pad(row.updatedAt, widths.updated)}`,
+      `  ${pad(row.name, widths.name)}  ${pad(version, widths.version)}  ${pad(updated, widths.updated)}  ${status}`,
     );
   }
+}
+
+function getCachePath(cwd: string): string {
+  return join(cwd, ".kalp", "cache", "agents-list-remote.json");
+}
+
+async function readCache(cwd: string): Promise<RemoteAgentListCache | null> {
+  const cachePath = getCachePath(cwd);
+  try {
+    await access(cachePath);
+  } catch {
+    return null;
+  }
+
+  const raw = await readFile(cachePath, "utf-8").catch(() => null);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as RemoteAgentListCache;
+    if (!parsed || !Array.isArray(parsed.entries) || !parsed.cachedAt) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCache(
+  cwd: string,
+  entries: RemoteAgentIndexEntry[],
+): Promise<void> {
+  const cachePath = getCachePath(cwd);
+  await mkdir(dirname(cachePath), { recursive: true });
+  const payload: RemoteAgentListCache = {
+    cachedAt: new Date().toISOString(),
+    entries,
+  };
+  await writeFile(cachePath, JSON.stringify(payload, null, 2), "utf-8");
+}
+
+function isFresh(cache: RemoteAgentListCache): boolean {
+  const cachedAt = Date.parse(cache.cachedAt);
+  if (!Number.isFinite(cachedAt)) return false;
+  return Date.now() - cachedAt <= CACHE_TTL_MS;
 }
 
 export default defineCommand({
   meta: {
     name: "list",
-    description: "List local agents and compare with remote runtime",
+    description: "List remote agents",
   },
   args: {
+    refresh: {
+      type: "boolean",
+      description: "Force refresh remote data (skip cache)",
+      default: false,
+    },
     help: {
       type: "boolean",
       alias: "h",
@@ -82,7 +129,7 @@ export default defineCommand({
   },
   async run({ args }) {
     if (args.help) {
-      p.log.info(`${pc.bold("Usage")}: kalp agents list`);
+      p.log.info(`${pc.bold("Usage")}: kalp agents list [--refresh]`);
       return;
     }
 
@@ -95,64 +142,33 @@ export default defineCommand({
     });
 
     const spinner = p.spinner();
-    spinner.start("Loading local and remote agent status");
+    spinner.start("Loading remote agents");
 
     try {
-      const configPath = await resolveSecretsRuntimeConfigPath(cwd);
-      const [localNames, state, indexEntries, remotePointers] =
-        await Promise.all([
-          readLocalAgentNames(cwd),
-          readProjectState(cwd),
-          readRemoteAgentsIndex(cwd, configPath),
-          readRemoteAgentPointers(cwd, configPath),
-        ]);
+      const cache = args.refresh ? null : await readCache(cwd);
+      let entries: RemoteAgentIndexEntry[];
 
-      const localSet = new Set(localNames);
-      const remoteIndexByName = new Map(
-        indexEntries.map((entry) => [entry.name, entry]),
-      );
-      const remotePointerByName = new Map(
-        remotePointers.map((entry) => [entry.name, entry.hash]),
-      );
-      const names = [
-        ...new Set([
-          ...localNames,
-          ...remotePointerByName.keys(),
-          ...remoteIndexByName.keys(),
-        ]),
-      ].sort((a, b) => a.localeCompare(b));
+      if (cache && isFresh(cache)) {
+        entries = cache.entries;
+        spinner.stop(
+          `Loaded ${entries.length} agents ${pc.dim("(cached, remote)")}`,
+        );
+      } else {
+        const configPath = await resolveSecretsRuntimeConfigPath(cwd);
+        entries = await readRemoteAgentsIndex(cwd, configPath);
+        await writeCache(cwd, entries).catch(() => null);
+        spinner.stop(`Loaded ${entries.length} agents from remote runtime`);
+      }
 
-      const rows: AgentViewRow[] = names.map((name) => {
-        const index = remoteIndexByName.get(name);
-        const remoteExists = remotePointerByName.has(name) || !!index;
-        const stateAgent = state?.agents?.[name];
-        const remoteVersion =
-          index?.version ??
-          (typeof index?.versionNumber === "number" && index.versionNumber > 0
-            ? `v${index.versionNumber}`
-            : stateAgent?.lastRemoteHash
-              ? `v${stateAgent.currentVersion}`
-              : "—");
-        return {
-          name,
-          localStatus: localSet.has(name) ? "yes" : "no",
-          remoteStatus: remoteExists ? "online" : "offline",
-          remoteVersion,
-          updatedAt: index?.updatedAt ?? stateAgent?.lastPushedAt ?? "—",
-        };
-      });
-
-      spinner.stop(`Found ${rows.length} agents`);
+      const rows = [...entries].sort((a, b) => a.name.localeCompare(b.name));
       if (rows.length === 0) {
-        p.log.info(pc.dim("No agents found locally or remotely."));
-        p.outro("Done");
+        p.log.info(pc.dim("No remote agents found."));
         return;
       }
 
       renderTable(rows);
-      p.outro("Done");
     } catch (error) {
-      spinner.stop("Failed to load agent status");
+      spinner.stop("Failed to load remote agents");
       p.log.error(error instanceof Error ? error.message : String(error));
       process.exit(1);
     }

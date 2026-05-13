@@ -22,14 +22,18 @@ export default defineCommand({
     delete: () => import("./delete").then((r) => r.default),
   },
   run({ args }) {
+    const subcommand = process.argv[3];
+    if (subcommand && subcommand !== "--help" && subcommand !== "-h") {
+      return;
+    }
+
     p.intro(`${LOGO} ${pc.bold("kalp agents")}`);
     p.log.message(pc.bold("Available subcommands:"));
-    p.log.message(`  ${pc.cyan("list")}    Compare local and remote agent status`);
+    p.log.message(`  ${pc.cyan("list")}    List remote agents`);
     p.log.message(`  ${pc.cyan("delete")}  Delete an agent from remote runtime`);
     p.log.message("");
     p.log.message(
       `Run ${pc.cyan("kalp agents <subcommand> --help")} for more info.`,
     );
-    p.outro(args.help ? pc.dim("Done") : pc.dim("Select a subcommand above."));
   },
 });

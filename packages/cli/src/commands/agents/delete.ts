@@ -23,7 +23,7 @@ export default defineCommand({
       type: "string",
       alias: "a",
       description: "Agent name to delete from remote runtime",
-      required: false,
+      required: true,
     },
     yes: {
       type: "boolean",
@@ -80,17 +80,12 @@ export default defineCommand({
         return;
       }
 
-      let agentName = args.agent?.trim();
+      const agentName = args.agent?.trim();
       if (!agentName) {
-        const selected = await p.select({
-          message: "Select remote agent to delete",
-          options: remoteNames.map((name) => ({ value: name, label: name })),
-        });
-        if (p.isCancel(selected)) {
-          p.outro("Cancelled");
-          return;
-        }
-        agentName = String(selected);
+        p.log.error(
+          `Agent name is required. Use ${pc.cyan("kalp agents delete -a <agent>")}.`,
+        );
+        process.exit(1);
       }
 
       if (!remoteNames.includes(agentName)) {
@@ -104,7 +99,7 @@ export default defineCommand({
           initialValue: false,
         });
         if (p.isCancel(confirm) || !confirm) {
-          p.outro("Cancelled");
+          p.log.info("Cancelled.");
           return;
         }
       }
@@ -144,7 +139,6 @@ export default defineCommand({
           `Local files were not changed. Delete ./agents/${agentName} manually if you no longer need it.`,
         ),
       );
-      p.outro("Done");
     } catch (error) {
       spinner.stop("Failed to delete remote agent");
       p.log.error(error instanceof Error ? error.message : String(error));
