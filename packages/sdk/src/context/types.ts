@@ -12,6 +12,7 @@ import type {
 } from "@/primitives";
 import type { KalpActions, TypedActions } from "@/actions/types";
 import type { ExecutableNode } from "@/nodes";
+import type { AgentContract } from "@/contracts/types";
 import { UserId } from "@/identity";
 
 /**
@@ -54,17 +55,25 @@ export type InferNodes<C> =
   | (C extends { tools: readonly (infer T)[] } ? T : never)
   | ExecutableNode;
 
+type NormalizeEmits<T> = T extends Record<string, unknown> ? T : {};
+type AgentConfigEmits<C> = C extends { emits?: infer E } ? E : undefined;
+type AgentContractEmits<C> =
+  C extends { contract?: AgentContract<any, any, infer E> } ? E : undefined;
+
+export type InferAgentEmits<C> = NormalizeEmits<AgentConfigEmits<C>> &
+  NormalizeEmits<AgentContractEmits<C>>;
+
 /**
  * Context passed to all handlers (steps, tools, routes).
  * Flat structure: `context.ai`, `context.memory`, `context.actions`, etc.
  */
-export interface HandlerContext {
+export interface HandlerContext<E = undefined> {
   ai: KalpAI;
   memory: KalpMemory;
   vault: KalpVault;
   storage: StoragePrimitive;
   auth?: KalpAuth;
-  actions: KalpActions;
+  actions: KalpActions<E>;
   log: KalpLog;
   /** MCP (Model Context Protocol) server proxy. */
   mcp: KalpMcp;
@@ -91,7 +100,7 @@ export interface AgentMessage {
 /**
  * Extended context for conversation handlers with conversation state.
  */
-export interface AgentContext extends HandlerContext {
+export interface AgentContext<E = undefined> extends HandlerContext<E> {
   history: KalpHistoryMessage[];
   state: Record<string, unknown>;
 }
@@ -99,10 +108,11 @@ export interface AgentContext extends HandlerContext {
 /**
  * Agent context with type-safe actions bound to the agent's registered nodes.
  */
-export interface TypedAgentContext<C> extends Omit<AgentContext, "actions"> {
+export interface TypedAgentContext<C>
+  extends Omit<AgentContext<InferAgentEmits<C>>, "actions"> {
   actions: TypedActions<
     InferNodes<C>,
-    C extends { emits?: infer E } ? E : undefined
+    InferAgentEmits<C>
   >;
 }
 

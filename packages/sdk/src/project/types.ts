@@ -31,7 +31,7 @@ export interface McpServerConfig {
  * @typeParam TIdentity - Single identity configuration for the project
  */
 export interface KalpProjectConfig<
-  TSecrets extends string[] = string[],
+  TSecrets extends readonly string[] = readonly string[],
   TIdentity extends IdentityConfig = IdentityConfig,
   TProvider extends AIProvider = AIProvider,
 > {
@@ -94,8 +94,8 @@ export interface KalpProjectConfig<
 
   /**
    * MCP (Model Context Protocol) server configurations.
-   * Servers defined here can be bound to specific agents via `mcp: ["serverName"]`
-   * in their defineAgent configuration.
+   * Servers defined here are available at runtime through `ctx.mcp.<server>.*`.
+   * Use `kalp mcp generate` to generate strongly typed tool signatures.
    *
    * @example
    * ```typescript

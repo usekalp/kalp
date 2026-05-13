@@ -76,7 +76,36 @@ export type {
   TimezoneFormatter,
   KalpMath,
   KalpMcp,
+  McpRegistry,
 } from "@/primitives";
+
+// ============================================================================
+// Schedule Module
+// ============================================================================
+
+export {
+  cron,
+  everyDayAt,
+  everyWeekdayAt,
+  everyXMinutes,
+  everyMinute,
+  everyHour,
+  everySixHours,
+  everyDayAtMidnight,
+  everyDayAtNoon,
+  everyDayAt12Pm,
+  everyWeekdayAt9Am,
+  everySundayAt3Am,
+  IANA_TIMEZONES,
+} from "@/schedule";
+
+export type {
+  CronExpression,
+  CronSchedule,
+  CronHour,
+  CronMinute,
+  IanaTimezone,
+} from "@/schedule";
 
 // ============================================================================
 // Actions Module
@@ -117,6 +146,7 @@ export type {
 
 export type {
   InferNodes,
+  InferAgentEmits,
   KalpAuth,
   HandlerContext,
   KalpCtx,
@@ -158,7 +188,11 @@ export type { Listener } from "@/listeners";
 export { defineStep, defineTool } from "@/definitions";
 export { defineRoute } from "@/definitions";
 export { defineConfig } from "@/project";
-export type { KalpProjectConfig, McpServerConfig } from "@/project";
+export type {
+  KalpProjectConfig,
+  McpServerConfig,
+  KalpAIEnvironment,
+} from "@/project";
 
 // ============================================================================
 // Registry

@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { KalpAIEnvironment } from "@/project/ai-env";
 
 /**
  * Available AI providers and their model identifiers.

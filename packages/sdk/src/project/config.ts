@@ -49,8 +49,8 @@ import type { AIProvider } from "@/primitives/ai";
  * ```
  */
 export function defineConfig<
-  TSecrets extends string[],
-  const TIdentity extends IdentityConfig,
+  const TSecrets extends readonly string[],
+  const TIdentity extends IdentityConfig = IdentityConfig,
   const TProvider extends AIProvider = AIProvider,
 >(
   config: KalpProjectConfig<TSecrets, TIdentity, TProvider>,

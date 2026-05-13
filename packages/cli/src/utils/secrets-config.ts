@@ -3,6 +3,19 @@ import { join } from "node:path";
 
 const SECRETS_ARRAY_REGEX = /secrets:\s*\[([\s\S]*?)\]/m;
 const SECRET_LITERAL_REGEX = /["'`]([^"'`]+)["'`]/g;
+const INTERNAL_PREFIX = "KALP_";
+
+export function isInternalSecret(name: string): boolean {
+  return name.trim().toUpperCase().startsWith(INTERNAL_PREFIX);
+}
+
+export function filterInternalSecrets(
+  secrets: string[],
+  includeInternal = false,
+): string[] {
+  if (includeInternal) return [...secrets];
+  return secrets.filter((name) => !isInternalSecret(name));
+}
 
 export async function readLocalSecretsFromConfig(cwd: string): Promise<string[]> {
   const configPath = join(cwd, "kalp.config.ts");

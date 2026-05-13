@@ -39,7 +39,7 @@ export type {
   KalpVault,
 } from "@/primitives/auth";
 
-export type { KalpMcp } from "@/primitives/mcp";
+export type { KalpMcp, McpRegistry } from "@/primitives/mcp";
 
 export type { AgentIntrospection } from "@/primitives/agent-meta";
 

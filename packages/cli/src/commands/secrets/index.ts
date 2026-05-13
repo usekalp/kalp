@@ -22,6 +22,7 @@ export default defineCommand({
     add: () => import("./add").then((r) => r.default),
     delete: () => import("./delete").then((r) => r.default),
     sync: () => import("./sync").then((r) => r.default),
+    pull: () => import("./pull").then((r) => r.default),
   },
   run({ args }) {
     if (!args.help) {
@@ -35,6 +36,9 @@ export default defineCommand({
     p.log.message(`  ${pc.cyan("delete")} Delete a secret from remote runtime`);
     p.log.message(
       `  ${pc.cyan("sync")}   Merge remote secrets into local config`,
+    );
+    p.log.message(
+      `  ${pc.cyan("pull")}   Alias of sync (remote -> local merge)`,
     );
     p.log.message("");
     p.log.message(

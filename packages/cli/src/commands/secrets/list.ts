@@ -3,7 +3,10 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { requireAuth } from "@/utils/auth";
 import { resolveProvider } from "@/utils/providers";
-import { readLocalSecretsFromConfig } from "@/utils/secrets-config";
+import {
+  filterInternalSecrets,
+  readLocalSecretsFromConfig,
+} from "@/utils/secrets-config";
 import { resolveSecretsRuntimeConfigPath } from "@/utils/secrets-runtime";
 
 const LOGO = "🦋";
@@ -14,6 +17,11 @@ export default defineCommand({
     description: "List remote runtime secrets",
   },
   args: {
+    includeInternal: {
+      type: "boolean",
+      description: "Include internal Kalp runtime secrets (KALP_*)",
+      default: false,
+    },
     help: {
       type: "boolean",
       alias: "h",
@@ -47,8 +55,17 @@ export default defineCommand({
         readLocalSecretsFromConfig(cwd),
       ]);
 
-      const remoteNames = remoteSecrets.map((item) => item.name).sort((a, b) => a.localeCompare(b));
-      const syncedCount = remoteNames.filter((name) => localSecrets.includes(name)).length;
+      const remoteNames = filterInternalSecrets(
+        remoteSecrets.map((item) => item.name),
+        args.includeInternal,
+      ).sort((a, b) => a.localeCompare(b));
+      const localUserSecrets = filterInternalSecrets(
+        localSecrets,
+        args.includeInternal,
+      );
+      const syncedCount = remoteNames.filter((name) =>
+        localUserSecrets.includes(name),
+      ).length;
       spinner.stop(`Found ${remoteNames.length} remote secrets`);
 
       if (remoteNames.length === 0) {
@@ -60,19 +77,23 @@ export default defineCommand({
 
       p.log.info(pc.bold("Remote runtime secrets"));
       for (const name of remoteNames) {
-        const synced = localSecrets.includes(name);
+        const synced = localUserSecrets.includes(name);
         const icon = synced ? pc.green("✓") : pc.yellow("○");
         console.log(`  ${icon} ${pc.cyan(name)}`);
       }
 
       if (syncedCount !== remoteNames.length) {
-        const missingLocal = remoteNames.filter((name) => !localSecrets.includes(name));
+        const missingLocal = remoteNames.filter(
+          (name) => !localUserSecrets.includes(name),
+        );
         p.log.warn(
           `Missing in kalp.config.ts: ${missingLocal.map((name) => pc.cyan(name)).join(", ")}`,
         );
       }
 
-      const localOnly = localSecrets.filter((name) => !remoteNames.includes(name));
+      const localOnly = localUserSecrets.filter(
+        (name) => !remoteNames.includes(name),
+      );
       if (localOnly.length > 0) {
         p.log.warn(
           `Local-only secrets (not remote): ${localOnly.map((name) => pc.cyan(name)).join(", ")}`,

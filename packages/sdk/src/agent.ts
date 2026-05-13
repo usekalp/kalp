@@ -2,12 +2,19 @@ import type { z } from "zod";
 import type { AgentContract } from "@/contracts";
 import type { Route } from "@/nodes";
 import type { Listener } from "@/listeners";
+import type { CronExpression, IanaTimezone } from "@/schedule";
 import type {
   HandlerContext,
+  InferAgentEmits,
   TypedAgentContext,
   AgentMessage,
   AgentResponse,
 } from "@/context";
+
+type ContractInput<TContract extends AgentContract<any, any, any>> =
+  TContract extends AgentContract<infer I, any, any> ? z.infer<I> : never;
+type ContractOutput<TContract extends AgentContract<any, any, any>> =
+  TContract extends AgentContract<any, infer O, any> ? z.infer<O> : never;
 
 /**
  * Base configuration for an agent definition.
@@ -19,7 +26,7 @@ import type {
  *                        When provided, `onCall` is typed from the contract.
  */
 interface AgentConfigBase<
-  TContract extends AgentContract<any, any> = AgentContract<any, any>,
+  TContract extends AgentContract<any, any, any> | undefined = undefined,
 > {
   /**
    * Display name for the agent. Must be unique within the project.
@@ -30,6 +37,13 @@ interface AgentConfigBase<
   label?: string;
   description?: string;
   tags?: readonly string[];
+  /**
+   * Event schemas emitted by this agent.
+   * These events are used for:
+   * - typed `ctx.actions.emit(...)` autocomplete
+   * - typed listener payload inference
+   * - Studio/IR event metadata introspection
+   */
   emits?: Record<string, z.ZodTypeAny | string>;
   public?: boolean;
   systemPrompt?:
@@ -39,13 +53,11 @@ interface AgentConfigBase<
   listeners?: readonly Listener[];
   /** Contract declaration — injects types for onCall handler. */
   contract?: TContract;
-  /** MCP server bindings for this agent. References servers from kalp.config.ts. */
-  mcp?: readonly string[];
   /** Scheduled cron jobs for this agent. */
   cron?: readonly {
-    expression: string;
+    expression: CronExpression;
     handler: () => Promise<void>;
-    timezone?: string;
+    timezone?: IanaTimezone;
   }[];
 }
 
@@ -77,15 +89,19 @@ interface AgentConfigBase<
  * @see defineContract
  */
 export function defineAgent<
-  const TContract extends AgentContract<any, any, any>,
+  const TContract extends AgentContract<any, any, any> | undefined,
   const TConfig extends AgentConfigBase<TContract>,
 >(
   config: TConfig & {
     // Lifecycle
     /** Called once when the agent starts. */
-    onInit?: (context: HandlerContext) => Promise<void>;
+    onInit?: (
+      context: HandlerContext<InferAgentEmits<TConfig>>,
+    ) => Promise<void>;
     /** Called periodically on a timer. */
-    onTick?: (context: HandlerContext) => Promise<void>;
+    onTick?: (
+      context: HandlerContext<InferAgentEmits<TConfig>>,
+    ) => Promise<void>;
     /** Called when a message is received (chat interface). */
     onMessage?: (
       message: AgentMessage,
@@ -96,8 +112,11 @@ export function defineAgent<
      * Only available when a contract is declared.
      * Types are automatically inferred from the contract.
      */
-    onCall?: TContract extends AgentContract<infer I, infer O>
-      ? (input: z.infer<I>, context: HandlerContext) => Promise<z.infer<O>>
+    onCall?: TContract extends AgentContract<any, any, any>
+      ? (
+          input: ContractInput<TContract>,
+          context: HandlerContext<InferAgentEmits<TConfig>>,
+        ) => Promise<ContractOutput<TContract>>
       : never;
   },
 ) {

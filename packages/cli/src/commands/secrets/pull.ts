@@ -16,8 +16,8 @@ const LOGO = "🦋";
 
 export default defineCommand({
   meta: {
-    name: "sync",
-    description: "Merge remote secrets into local kalp.config.ts",
+    name: "pull",
+    description: "Pull remote secrets into local kalp.config.ts",
   },
   args: {
     includeInternal: {
@@ -29,7 +29,7 @@ export default defineCommand({
   async run({ args }) {
     const cwd = process.cwd();
 
-    p.intro(`${LOGO} ${pc.bold("kalp secrets sync")}`);
+    p.intro(`${LOGO} ${pc.bold("kalp secrets pull")}`);
 
     await requireAuth().catch(() => {
       p.log.error("Not authenticated. Run `kalp login` first.");
@@ -57,7 +57,7 @@ export default defineCommand({
       await writeLocalSecretsToConfig(cwd, merged);
       await generateTypes(cwd);
 
-      spinner.stop(`Synced ${remoteNames.length} remote secrets`);
+      spinner.stop(`Pulled ${remoteNames.length} remote secrets`);
       if (added.length > 0) {
         p.log.success(
           `Added to local config: ${added.map((name) => pc.cyan(name)).join(", ")}`,
@@ -67,7 +67,7 @@ export default defineCommand({
       }
       p.outro("Done");
     } catch (error) {
-      spinner.stop("Sync failed");
+      spinner.stop("Pull failed");
       p.log.error(error instanceof Error ? error.message : String(error));
       process.exit(1);
     }

@@ -4,6 +4,7 @@ import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { ensureConfig } from "@/utils/fs";
+import { generateTypes } from "@/utils/codegen";
 import { readAgentManifest, computePushHash } from "@/utils/manifest";
 import { requireAuth } from "@/utils/auth";
 import { runInitialDeploy } from "@/utils/deploy";
@@ -290,6 +291,7 @@ export default defineCommand({
       p.log.error(`${pc.cyan("kalp.config.ts")} not found`);
       process.exit(1);
     });
+    await generateTypes(cwd);
 
     const availableAgents = await readLocalAgentNames(cwd);
     if (availableAgents.length === 0) {

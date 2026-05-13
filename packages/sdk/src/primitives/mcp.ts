@@ -1,43 +1,32 @@
 /**
- * MCP (Model Context Protocol) primitive interface.
+ * Registry interface for module augmentation by generated project types.
  *
- * This interface provides type-safe access to MCP servers configured
- * in kalp.config.ts. The CLI uses Declaration Merging to replace
- * the `unknown` types with actual Zod/JSON Schema types from the
- * server definitions.
+ * `kalp mcp generate` writes `.kalp/mcp.types.d.ts` and augments this
+ * interface with concrete server/tool signatures.
  *
- * Note: McpServerConfig is defined in @/project/types as it is part
- * of the project-level configuration in kalp.config.ts.
- *
- * @module
+ * @example
+ * ```ts
+ * declare module "@kalphq/sdk" {
+ *   interface McpRegistry {
+ *     google: {
+ *       search: (input: { query: string }) => Promise<unknown>;
+ *     };
+ *   }
+ * }
+ * ```
  */
+export interface McpRegistry {}
+
+type UnknownMcpTool = (input: unknown) => Promise<unknown>;
+type UnknownMcpServer = Record<string, UnknownMcpTool>;
+type KnownServerKeys = Extract<keyof McpRegistry, string>;
 
 /**
  * MCP proxy interface for calling external tools.
  * Access tools via `ctx.mcp.{serverName}.{toolName}(input)`.
- *
- * The CLI performs Declaration Merging to inject actual types
- * from the MCP server schemas defined in kalp.config.ts.
- *
- * @example
- * ```typescript
- * // With types from CLI:
- * const result = await ctx.mcp.github.createIssue({
- *   title: "Bug report",
- *   body: "Description..."
- * });
- * ```
  */
-export interface KalpMcp {
-  /**
-   * Dynamic access to MCP servers and their tools.
-   * Each server exposes its tools as methods.
-   */
-  [serverName: string]: {
-    /**
-     * Dynamic access to tools within an MCP server.
-     * CLI replaces `unknown` with actual types from server schemas.
-     */
-    [toolName: string]: (input: unknown) => Promise<unknown>;
-  };
-}
+export type KalpMcp = {
+  [K in KnownServerKeys]: McpRegistry[K];
+} & {
+  [serverName: string]: UnknownMcpServer;
+};

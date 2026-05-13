@@ -6,6 +6,7 @@
 
 export type {
   InferNodes,
+  InferAgentEmits,
   KalpAuth,
   HandlerContext,
   KalpCtx,

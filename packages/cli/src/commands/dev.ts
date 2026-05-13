@@ -7,6 +7,7 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { execa } from "execa";
 import open from "open";
+import { generateTypes } from "@/utils/codegen";
 import { ensureSecretKey } from "@/utils/secret";
 import { readAgentManifest, computePushHash } from "@/utils/manifest";
 import { validateCompiledIR } from "@/utils/validate";
@@ -133,6 +134,7 @@ export default defineCommand({
 
     p.intro(`${LOGO} ${pc.bold("kalp dev")}`);
 
+    await generateTypes(cwd);
     await ensureSecretKey(cwd);
     await copyFile(join(cwd, ".env"), join(cwd, ".dev.vars"));
     const devVarsPath = join(cwd, ".dev.vars");

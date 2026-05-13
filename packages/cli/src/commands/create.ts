@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { scaffoldAgent } from "@kalphq/project";
 import { isProjectInitialized } from "@/utils/fs";
+import { generateTypes } from "@/utils/codegen";
 import { promptAgentDetails } from "@/utils/ui";
 
 const LOGO = "🦋";
@@ -54,6 +55,7 @@ export default defineCommand({
       cwd,
       template: agentAnswers.template,
     });
+    await generateTypes(cwd);
     s.stop(
       agentAnswers.template
         ? `Agent created (${agentAnswers.template} template)`

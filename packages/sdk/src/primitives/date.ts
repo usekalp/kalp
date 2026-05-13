@@ -7,6 +7,8 @@
  * @module
  */
 
+import type { IanaTimezone } from "@/schedule/timezones";
+
 /**
  * Timezone-aware formatter interface.
  */
@@ -72,5 +74,5 @@ export interface KalpDate {
    * @returns TimezoneFormatter for the converted time.
    * @example "America/Argentina/Buenos_Aires"
    */
-  timezone: (tz: string) => TimezoneFormatter;
+  timezone: (tz: IanaTimezone) => TimezoneFormatter;
 }

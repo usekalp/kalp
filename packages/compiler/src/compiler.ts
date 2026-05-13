@@ -7,6 +7,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { z } from "zod";
 
+const CRON_EXPRESSION_PATTERN = /^\S+\s+\S+\s+\S+\s+\S+\s+\S+$/;
+
 function deriveLabelFromName(name: string): string {
   return name
     .split(/[_-]+/g)
@@ -23,6 +25,14 @@ function isSdkInternalPath(filePath?: string): boolean {
     normalized.includes("/node_modules/@kalphq/sdk/") ||
     normalized.includes("/packages/sdk/")
   );
+}
+
+function assertCronExpression(agentName: string, expression: string, index: number): void {
+  if (!CRON_EXPRESSION_PATTERN.test(expression.trim())) {
+    throw new Error(
+      `Invalid cron expression for ${agentName}.cron[${index}]: "${expression}". Expected 5 space-separated fields.`,
+    );
+  }
 }
 
 function serializeEmits(
@@ -438,6 +448,7 @@ export async function buildAgent(
       for (let i = 0; i < agentConfig.cron.length; i++) {
         const schedule = agentConfig.cron[i];
         const scheduleId = `schedule:${i}`;
+        assertCronExpression(agentConfig.name, schedule.expression, i);
 
         // Bundle the cron handler
         const bundleRes = await bundleHandler(

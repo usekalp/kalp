@@ -4,6 +4,7 @@ import { validateIR } from "../src/analysis";
 describe("validateIR metadata extensions", () => {
   it("accepts label, tags and emits structures", () => {
     const result = validateIR({
+      version: 1,
       metadata: {
         name: "support",
         label: "Support",

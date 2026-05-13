@@ -7,6 +7,8 @@
  * @module
  */
 
+import type { CronExpression, IanaTimezone } from "@/schedule";
+
 /**
  * Agent metadata for introspection (static compile-time info).
  * Runtime IDs (agentId, runId) are injected by the runtime, not stored here.
@@ -60,11 +62,11 @@ export interface HandlerBundle {
  */
 export interface ScheduleEntry {
   /** Cron expression (e.g., "0 9 * * 1-5"). */
-  cron: string;
+  cron: CronExpression;
   /** Handler hash to execute. */
   handlerHash: string;
   /** Optional timezone (e.g., "America/New_York"). */
-  timezone?: string;
+  timezone?: IanaTimezone;
 }
 
 /**

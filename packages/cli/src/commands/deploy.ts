@@ -1,6 +1,7 @@
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
+import { generateTypes } from "@/utils/codegen";
 import { requireAuth } from "@/utils/auth";
 import { runInitialDeploy } from "@/utils/deploy";
 import { promptDeployTarget, showKalpCloudWaitlist } from "@/utils/deploy-target";
@@ -13,6 +14,7 @@ export default defineCommand({
     const cwd = process.cwd();
 
     p.intro(`${LOGO} ${pc.bold("kalp deploy")}`);
+    await generateTypes(cwd);
 
     await requireAuth().catch(() => {
       p.log.error("Not authenticated. Run `kalp login` first.");

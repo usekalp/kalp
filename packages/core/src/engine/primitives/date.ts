@@ -6,7 +6,7 @@
  * @module
  */
 
-import type { KalpDate, TimezoneFormatter } from "@kalphq/sdk";
+import type { KalpDate, TimezoneFormatter, IanaTimezone } from "@kalphq/sdk";
 import type { EventStore } from "@/adapters/interfaces";
 import type { ExecutionContext } from "@/engine/types";
 
@@ -127,7 +127,7 @@ export function createDatePrimitive(
      * @param tz - IANA timezone identifier (e.g., "America/Argentina/Buenos_Aires").
      * @returns A TimezoneFormatter for the converted time.
      */
-    timezone(tz: string): TimezoneFormatter {
+    timezone(tz: IanaTimezone): TimezoneFormatter {
       const formatter: TimezoneFormatter = {
         /**
          * Formats the date in the specified timezone using a format string.

@@ -9,4 +9,4 @@
 
 export type { KalpProjectConfig, McpServerConfig } from "@/project/types";
 export { defineConfig } from "@/project/config";
-export type {} from "@/project/ai-env";
+export type { KalpAIEnvironment } from "@/project/ai-env";

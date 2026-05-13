@@ -123,10 +123,10 @@ export interface KalpActions<E = undefined> {
   ) => Promise<z.infer<TContract["outputSchema"]>>;
 
   /**
-   * Pausa el agente hasta que ocurra un evento externo.
-   * @param eventName - Nombre del evento a esperar.
-   * @param timeout - Timeout opcional (ms o string como "2h").
-   * @returns WakeReason con type: "event".
+   * Suspends the agent until an external event arrives.
+   * @param eventName - Event name to wait for.
+   * @param timeout - Optional timeout (ms or human-readable string like "2h").
+   * @returns WakeReason with type: "event".
    */
   waitForEvent: (
     eventName: string,
@@ -134,18 +134,18 @@ export interface KalpActions<E = undefined> {
   ) => Promise<WakeReason>;
 
   /**
-   * Pausa el agente hasta una fecha específica (bloqueante).
-   * @param date - Date object, ISO string, o Unix timestamp (ms).
-   * @returns WakeReason con type: "scheduled_time_reached".
+   * Suspends the agent until a specific date/time.
+   * @param date - Date object, ISO string, or Unix timestamp in milliseconds.
+   * @returns WakeReason with type: "scheduled_time_reached".
    */
   waitUntil: (date: Date | string | number) => Promise<WakeReason>;
 
   /**
-   * Programa un nodo (step/tool) para ejecución futura sin bloquear.
-   * @param node - El nodo a ejecutar.
-   * @param date - Cuándo ejecutarlo.
-   * @param input - Input opcional para el nodo.
-   * @returns Objeto con scheduleId.
+   * Schedules a node (step/tool) for future execution without blocking.
+   * @param node - Node to execute.
+   * @param date - When to execute it.
+   * @param input - Optional node input.
+   * @returns Object containing scheduleId.
    */
   schedule: <T extends ExecutableNode>(
     node: T,

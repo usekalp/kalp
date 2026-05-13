@@ -106,6 +106,53 @@ export default defineConfig({
 `;
   await writeFileIfNotExists(join(targetDir, "kalp.config.ts"), kalpConfig);
 
+  const kalpTypesDir = join(targetDir, ".kalp");
+  await ensureDir(kalpTypesDir);
+  const generatedTypes = `// 🦋 Kalp Generated Types
+// This file is auto-generated. Do not edit manually.
+/**
+ * Registered secrets from kalp.config.ts
+ * @generated
+ */
+export type RegisteredSecretKeys = readonly [${JSON.stringify(providerSecret)}];
+
+/**
+ * AI provider resolved from kalp.config.ts
+ * @generated
+ */
+export type ConfiguredAIProvider = ${JSON.stringify(aiProvider)};
+
+/**
+ * Custom model suggestions resolved from kalp.config.ts
+ * @generated
+ */
+export type ConfiguredAICustomModels = readonly [];
+`;
+  await writeFileIfNotExists(
+    join(kalpTypesDir, "types.d.ts"),
+    generatedTypes,
+  );
+
+  const kalpDts = `import "@kalphq/sdk";
+import type {
+  RegisteredSecretKeys,
+  ConfiguredAIProvider,
+  ConfiguredAICustomModels,
+} from "./.kalp/types";
+
+declare module "@kalphq/sdk" {
+  interface SecretsRegistry {
+    keys: RegisteredSecretKeys;
+  }
+
+  interface KalpAIEnvironment {
+    provider: ConfiguredAIProvider;
+    customModels: ConfiguredAICustomModels;
+  }
+}
+`;
+  await writeFileIfNotExists(join(targetDir, "kalp.d.ts"), kalpDts);
+
   // Generate Studio authentication secrets
   const secretKey = randomBytes(32).toString("hex");
   const studioPassword = randomBytes(24).toString("base64url");
