@@ -2,7 +2,7 @@ import { execa } from "execa";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { RuntimeProvider } from "@/utils/providers/types";
+import type { RuntimeProvider, RemoteSecret } from "@/utils/providers/types";
 import { getCloudflareIdentity } from "@/utils/auth";
 
 function parseNamespaceList(stdout: string): Array<{ id: string; title: string }> {
@@ -18,6 +18,31 @@ function parseNamespaceList(stdout: string): Array<{ id: string; title: string }
     }
   } catch {}
   return [];
+}
+
+function parseSecretsList(stdout: string): RemoteSecret[] {
+  const trimmed = stdout.trim();
+  if (!trimmed) return [];
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const secrets: RemoteSecret[] = [];
+    for (const item of parsed) {
+      const record = item as Record<string, unknown>;
+      const name = record.name;
+      if (typeof name !== "string" || name.length === 0) continue;
+      const type = typeof record.type === "string" ? record.type : undefined;
+      if (type) {
+        secrets.push({ name, type });
+      } else {
+        secrets.push({ name });
+      }
+    }
+    return secrets;
+  } catch {
+    return [];
+  }
 }
 
 function findWorkerUrl(output: string): string | null {
@@ -147,6 +172,36 @@ export const cloudflareProvider: RuntimeProvider = {
       "npx",
       ["wrangler", "secret", "put", name, "--config", configPath],
       { cwd, input: `${value}\n` },
+    );
+  },
+  async listSecrets({ cwd, configPath }) {
+    const jsonAttempt = await execa(
+      "npx",
+      [
+        "wrangler",
+        "secret",
+        "list",
+        "--config",
+        configPath,
+        "--format",
+        "json",
+      ],
+      { cwd },
+    ).catch(() => null);
+    if (jsonAttempt) return parseSecretsList(jsonAttempt.stdout);
+
+    const fallback = await execa(
+      "npx",
+      ["wrangler", "secret", "list", "--config", configPath],
+      { cwd },
+    );
+    return parseSecretsList(fallback.stdout);
+  },
+  async deleteSecret({ cwd, configPath, name }) {
+    await execa(
+      "npx",
+      ["wrangler", "secret", "delete", name, "--config", configPath],
+      { cwd },
     );
   },
   async deployRuntime({ cwd, configPath, useSecretsFile }) {

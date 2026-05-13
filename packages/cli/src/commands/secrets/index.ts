@@ -7,7 +7,7 @@ const LOGO = "🦋";
 export default defineCommand({
   meta: {
     name: "secrets",
-    description: "Manage Kalp Cloud secrets",
+    description: "Manage remote runtime secrets",
   },
   args: {
     help: {
@@ -30,11 +30,11 @@ export default defineCommand({
 
     p.intro(`${LOGO} ${pc.bold("kalp secrets")}`);
     p.log.message(pc.bold("Available subcommands:"));
-    p.log.message(`  ${pc.cyan("list")}   List secrets from Kalp Cloud`);
-    p.log.message(`  ${pc.cyan("add")}    Add a secret to Kalp Cloud`);
-    p.log.message(`  ${pc.cyan("delete")} Delete a secret from Kalp Cloud`);
+    p.log.message(`  ${pc.cyan("list")}   List secrets from remote runtime`);
+    p.log.message(`  ${pc.cyan("add")}    Add a secret to remote runtime`);
+    p.log.message(`  ${pc.cyan("delete")} Delete a secret from remote runtime`);
     p.log.message(
-      `  ${pc.cyan("sync")}   Sync secrets from Kalp Cloud to local config`,
+      `  ${pc.cyan("sync")}   Merge remote secrets into local config`,
     );
     p.log.message("");
     p.log.message(

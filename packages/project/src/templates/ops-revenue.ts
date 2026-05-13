@@ -13,17 +13,13 @@ async function generateOpsRevenue(opts: {
 
   const agentIndex = [
     'import { defineAgent } from "@kalphq/sdk";',
-    "",
     'import { revenueContract } from "./contract/revenue-contract";',
     'import { approvalListener } from "./listeners/approval-listener";',
-    "",
     'import { onInit } from "./hooks/on-init";',
     'import { onTick } from "./hooks/on-tick";',
     'import { dailyPipelineScan } from "./crons/daily-pipeline-scan";',
-    "",
     'import { intakeRoute } from "./routes/intake";',
     'import { adminRoute } from "./routes/admin";',
-    "",
     'import { lookupAccountSignals } from "./tools/lookup-account-signals";',
     'import { scoreOpportunity } from "./steps/score-opportunity";',
     'import { riskGate } from "./steps/risk-gate";',
@@ -62,7 +58,7 @@ async function generateOpsRevenue(opts: {
     "",
     "    const scored = await ctx.actions.run(scoreOpportunity, {",
     "      transcript: message.text,",
-    "      accountTier: signals.accountTier,",
+    "      accountTier: signals.accountTier as 'enterprise' | 'mid-market' | 'smb',",
     "    });",
     "    await ctx.actions.emit('opportunity_scored', scored);",
     "",
@@ -109,11 +105,12 @@ async function generateOpsRevenue(opts: {
     "    risk: z.enum(['low', 'medium', 'high']),",
     "    accountTier: z.enum(['enterprise', 'mid-market', 'smb']),",
     "  }),",
+    "",
     "  async handler({ transcript, accountTier }) {",
     "    const baseScore = Math.min(99, transcript.length % 100);",
     "    const tierBoost = accountTier === 'enterprise' ? 8 : accountTier === 'mid-market' ? 4 : 0;",
     "    const score = Math.min(99, baseScore + tierBoost);",
-    "    const risk = score > 75 ? 'low' : score > 45 ? 'medium' : 'high';",
+    "    const risk: 'low' | 'medium' | 'high' = score > 75 ? 'low' : score > 45 ? 'medium' : 'high';",
     "    return {",
     "      opportunityId: `opp_${Date.now()}`,",
     "      score,",
@@ -142,6 +139,7 @@ async function generateOpsRevenue(opts: {
     "    accountTier: z.enum(['enterprise', 'mid-market', 'smb']),",
     "    approved: z.boolean(),",
     "  }),",
+    "",
     "  async handler(input) {",
     "    const approved = input.score >= 55 && input.risk !== 'high';",
     "    return { ...input, approved };",
@@ -165,6 +163,7 @@ async function generateOpsRevenue(opts: {
     "    opportunityId: z.string(),",
     "    summary: z.string(),",
     "  }),",
+    "",
     "  async handler(input, ctx) {",
     "    const summary = await ctx.ai.generate({",
     "      model: 'gpt-4o-mini',",
@@ -185,6 +184,7 @@ async function generateOpsRevenue(opts: {
     "export const lookupAccountSignals = defineTool({",
     '  id: "lookup_account_signals",',
     "  inputSchema: z.object({ transcript: z.string() }),",
+    "",
     "  async handler({ transcript }) {",
     "    const normalized = transcript.toLowerCase();",
     "    const accountTier = normalized.includes('enterprise')",
@@ -208,6 +208,7 @@ async function generateOpsRevenue(opts: {
     '  method: "POST",',
     '  path: "/webhooks/intake",',
     "  public: true,",
+    "",
     "  async handler(req, res) {",
     "    const body = await req.json();",
     "    res.json({ ok: true, received: body });",
@@ -223,6 +224,7 @@ async function generateOpsRevenue(opts: {
     '  method: "GET",',
     '  path: "/admin/status",',
     "  public: false,",
+    "",
     "  async handler(_req, res, ctx) {",
     "    if (!ctx.auth) return res.status(401).json({ error: 'Unauthorized' });",
     "    res.json({ ok: true, userId: ctx.auth.userId });",
@@ -231,13 +233,17 @@ async function generateOpsRevenue(opts: {
   ].join("\n");
 
   const onInitHook = [
-    "export async function onInit(ctx: any): Promise<void> {",
+    "import { HandlerContext } from '@kalphq/sdk';",
+    "",
+    "export async function onInit(ctx: HandlerContext): Promise<void> {",
     "  await ctx.storage.put('ops:initializedAt', ctx.date.toISOString());",
     "}",
   ].join("\n");
 
   const onTickHook = [
-    "export async function onTick(ctx: any): Promise<void> {",
+    "import { HandlerContext } from '@kalphq/sdk';",
+    "",
+    "export async function onTick(ctx: HandlerContext): Promise<void> {",
     "  const ticks = (await ctx.storage.get('ops:tickCount')) ?? 0;",
     "  await ctx.storage.put('ops:tickCount', Number(ticks) + 1);",
     "}",
@@ -257,8 +263,9 @@ async function generateOpsRevenue(opts: {
     "export const approvalListener = defineListener({",
     "  source: approvalContract,",
     '  event: "approval_decided",',
+    "",
     "  async handler(payload, ctx) {",
-    '    await ctx.storage.put(`approval:${payload.opportunityId}`, payload);',
+    "    await ctx.storage.put(`approval:${payload.opportunityId}`, payload);",
     "  },",
     "});",
   ].join("\n");
@@ -276,6 +283,7 @@ async function generateOpsRevenue(opts: {
     "    action: z.string(),",
     "    receivedAt: z.string(),",
     "  }),",
+    "",
     "  emits: {",
     "    opportunity_scored: z.object({",
     "      opportunityId: z.string(),",
@@ -300,6 +308,7 @@ async function generateOpsRevenue(opts: {
     "export const approvalContract = defineContract('approval-service', {",
     "  input: z.object({ opportunityId: z.string() }),",
     "  output: z.object({ ok: z.boolean() }),",
+    "",
     "  emits: {",
     "    approval_decided: z.object({",
     "      opportunityId: z.string(),",
@@ -310,27 +319,48 @@ async function generateOpsRevenue(opts: {
   ].join("\n");
 
   await writeTemplateFile(agentDir, "index.ts", agentIndex);
-  await writeTemplateFile(join(agentDir, "steps"), "score-opportunity.ts", scoreStep);
+  await writeTemplateFile(
+    join(agentDir, "steps"),
+    "score-opportunity.ts",
+    scoreStep,
+  );
   await writeTemplateFile(join(agentDir, "steps"), "risk-gate.ts", riskStep);
-  await writeTemplateFile(join(agentDir, "steps"), "draft-proposal.ts", draftStep);
-  await writeTemplateFile(join(agentDir, "tools"), "lookup-account-signals.ts", lookupTool);
+  await writeTemplateFile(
+    join(agentDir, "steps"),
+    "draft-proposal.ts",
+    draftStep,
+  );
+  await writeTemplateFile(
+    join(agentDir, "tools"),
+    "lookup-account-signals.ts",
+    lookupTool,
+  );
   await writeTemplateFile(join(agentDir, "routes"), "intake.ts", intakeRoute);
   await writeTemplateFile(join(agentDir, "routes"), "admin.ts", adminRoute);
   await writeTemplateFile(join(agentDir, "hooks"), "on-init.ts", onInitHook);
   await writeTemplateFile(join(agentDir, "hooks"), "on-tick.ts", onTickHook);
-  await writeTemplateFile(join(agentDir, "crons"), "daily-pipeline-scan.ts", cronJob);
+  await writeTemplateFile(
+    join(agentDir, "crons"),
+    "daily-pipeline-scan.ts",
+    cronJob,
+  );
   await writeTemplateFile(
     join(agentDir, "listeners"),
     "approval-listener.ts",
     listenerFile,
   );
-  await writeTemplateFile(join(agentDir, "contract"), "revenue-contract.ts", contract);
+  await writeTemplateFile(
+    join(agentDir, "contract"),
+    "revenue-contract.ts",
+    contract,
+  );
 }
 
 export const opsRevenueTemplate: TemplateDefinition = {
   id: "ops-revenue",
   name: "Revenue Ops",
-  description: "Pipeline qualification + human handoff with event-driven orchestration",
+  description:
+    "Pipeline qualification + human handoff with event-driven orchestration",
   icon: "📈",
   generate: generateOpsRevenue,
 };

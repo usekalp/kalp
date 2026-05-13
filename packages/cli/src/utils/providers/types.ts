@@ -4,6 +4,11 @@ export interface ProviderIdentity {
   email: string;
 }
 
+export interface RemoteSecret {
+  name: string;
+  type?: string;
+}
+
 export interface DeployResult {
   workerUrl: string;
   customDomains?: string[];
@@ -19,6 +24,15 @@ export interface RuntimeProvider {
     configPath: string;
     name: string;
     value: string;
+  }): Promise<void>;
+  listSecrets(params: {
+    cwd: string;
+    configPath: string;
+  }): Promise<RemoteSecret[]>;
+  deleteSecret(params: {
+    cwd: string;
+    configPath: string;
+    name: string;
   }): Promise<void>;
   deployRuntime(params: {
     cwd: string;

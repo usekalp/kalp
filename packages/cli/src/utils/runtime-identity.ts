@@ -1,30 +1,11 @@
 import { build } from "esbuild";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import {
   loadProjectConfig,
   resolveRuntimeIdentityConfig,
   type RuntimeIdentityConfig,
 } from "@/utils/project-config";
-
-const NODE_BUILTIN_IMPORTS = new Set([
-  "fs",
-  "path",
-  "crypto",
-  "os",
-  "child_process",
-  "worker_threads",
-  "net",
-  "tls",
-  "http",
-  "https",
-  "zlib",
-  "stream",
-  "url",
-  "process",
-  "buffer",
-]);
 
 export interface MaterializeRuntimeIdentityResult {
   identityConfig: RuntimeIdentityConfig;
@@ -46,29 +27,41 @@ function readIdentityMapCandidate(rawConfig: Record<string, unknown>): unknown {
   return (rawConfig.identity as Record<string, unknown>).mapIdentity;
 }
 
+function assertEdgeSafeSource(mapIdentitySource: string): void {
+  const blockedPatterns: Array<{ regex: RegExp; label: string }> = [
+    { regex: /\brequire\s*\(/, label: "require(...)" },
+    { regex: /\bnode:/, label: "node:* imports" },
+    { regex: /\bprocess\./, label: "process.*" },
+    { regex: /\bBuffer\b/, label: "Buffer" },
+    { regex: /\bimport\s*\(/, label: "dynamic import(...)" },
+  ];
+
+  const hit = blockedPatterns.find((item) => item.regex.test(mapIdentitySource));
+  if (!hit) return;
+
+  throw new Error(
+    `mapIdentity uses "${hit.label}", which is not supported in edge runtime.`,
+  );
+}
+
 async function writeDefaultIdentityMap(identityMapPath: string): Promise<void> {
   await writeFile(identityMapPath, DEFAULT_IDENTITY_MAP_SOURCE, "utf-8");
 }
 
 async function bundleIdentityMap(params: {
   cwd: string;
-  configPath: string;
+  mapIdentitySource: string;
   identityMapPath: string;
 }): Promise<void> {
-  const { cwd, configPath, identityMapPath } = params;
-  const configSpecifier = pathToFileURL(configPath).href;
-  const entrySource = `
-import configModule from ${JSON.stringify(configSpecifier)};
-const config = (configModule && typeof configModule === "object" && "default" in configModule)
-  ? (configModule.default ?? configModule)
-  : configModule;
+  const { cwd, mapIdentitySource, identityMapPath } = params;
+  assertEdgeSafeSource(mapIdentitySource);
 
-const mapper = config?.identity?.mapIdentity;
-if (typeof mapper !== "function") {
+  const entrySource = `
+const mapIdentity = (${mapIdentitySource});
+if (typeof mapIdentity !== "function") {
   throw new Error("identity.mapIdentity must be a function.");
 }
-
-export default mapper;
+export default mapIdentity;
 `;
 
   try {
@@ -81,28 +74,6 @@ export default mapper;
       write: true,
       outfile: identityMapPath,
       logLevel: "silent",
-      plugins: [
-        {
-          name: "kalp-edge-identity-guard",
-          setup(buildContext) {
-            buildContext.onResolve({ filter: /.*/ }, (args) => {
-              const raw = args.path.startsWith("node:")
-                ? args.path.slice(5)
-                : args.path;
-              if (NODE_BUILTIN_IMPORTS.has(raw)) {
-                return {
-                  errors: [
-                    {
-                      text: `Node builtin "${args.path}" is not supported in identity.mapIdentity for edge runtime.`,
-                    },
-                  ],
-                };
-              }
-              return null;
-            });
-          },
-        },
-      ],
       stdin: {
         contents: entrySource,
         resolveDir: cwd,
@@ -113,7 +84,15 @@ export default mapper;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `Could not bundle identity.mapIdentity for runtime. Ensure mapIdentity is edge-safe (no Node built-ins). ${message}`,
+      [
+        "Could not bundle identity.mapIdentity for runtime.",
+        "Please verify:",
+        "  • kalp.config.ts exists and exports default defineConfig(...)",
+        "  • mapIdentity is declared inline and does not capture external variables",
+        "  • mapIdentity does not use Node-specific APIs",
+        "  • kalp.config.ts has no broken imports",
+        `Technical details: ${message}`,
+      ].join("\n"),
     );
   }
 }
@@ -127,24 +106,31 @@ export async function materializeRuntimeIdentity(params: {
   const identityMapPath = join(runtimeDir, "identity.map.mjs");
 
   let rawConfig: Record<string, unknown> = {};
-  let configPath: string | null = null;
   try {
     const loaded = await loadProjectConfig(cwd);
     rawConfig = loaded.raw;
-    configPath = loaded.path;
   } catch {
     rawConfig = {};
-    configPath = null;
   }
 
   const identityConfig = resolveRuntimeIdentityConfig(rawConfig);
-  await writeFile(identityConfigPath, `${JSON.stringify(identityConfig, null, 2)}\n`, "utf-8");
+  await writeFile(
+    identityConfigPath,
+    `${JSON.stringify(identityConfig, null, 2)}\n`,
+    "utf-8",
+  );
 
   const mapIdentity = readIdentityMapCandidate(rawConfig);
-  if (typeof mapIdentity === "function" && configPath) {
+  if (typeof mapIdentity === "function") {
+    const mapIdentitySource = mapIdentity.toString();
+    if (!mapIdentitySource || /\[native code\]/.test(mapIdentitySource)) {
+      throw new Error(
+        "Could not serialize identity.mapIdentity. Define it inline in kalp.config.ts as a regular function.",
+      );
+    }
     await bundleIdentityMap({
       cwd,
-      configPath,
+      mapIdentitySource,
       identityMapPath,
     });
   } else {

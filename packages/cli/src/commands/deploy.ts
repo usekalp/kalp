@@ -3,6 +3,7 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { requireAuth } from "@/utils/auth";
 import { runInitialDeploy } from "@/utils/deploy";
+import { promptDeployTarget, showKalpCloudWaitlist } from "@/utils/deploy-target";
 
 const LOGO = "🦋";
 
@@ -18,12 +19,14 @@ export default defineCommand({
       process.exit(1);
     });
 
-    const proceed = await p.confirm({
-      message: "Deploy your runtime now?",
-      initialValue: true,
-    });
-    if (p.isCancel(proceed) || !proceed) {
+    const target = await promptDeployTarget("Choose where to deploy your runtime");
+    if (!target) {
       p.outro("Cancelled");
+      return;
+    }
+    if (target === "kalp-cloud") {
+      showKalpCloudWaitlist();
+      p.outro(pc.green("Got it — you'll hear from us soon."));
       return;
     }
 
@@ -47,17 +50,18 @@ export default defineCommand({
           : result.workerUrl;
 
       if (result.credentialsChanged || result.serviceKeyChanged) {
-        p.note(
-          [
-            `${pc.bold("Studio credentials")}`,
-            `${pc.dim("Username:")} ${pc.cyan(result.studioAdminUser)}`,
-            `${pc.dim("Password:")} ${pc.cyan(result.studioPassword)}`,
-            "",
-            `${pc.bold("Service key")}`,
-            `${pc.dim("Authorization:")} ${pc.cyan(`Bearer ${result.serviceKey}`)}`,
-            `${pc.dim("Studio:")} ${pc.cyan(`${preferredStudioBase.replace(/\/$/, "")}/studio/login`)}`,
-          ].join("\n"),
-          "Admin access",
+        p.log.info(pc.bold("Admin access"));
+        console.log(
+          `  ${pc.dim("Username:")} ${pc.cyan(result.studioAdminUser)}`,
+        );
+        console.log(
+          `  ${pc.dim("Password:")} ${pc.cyan(result.studioPassword)}`,
+        );
+        console.log(
+          `  ${pc.dim("Service key:")} ${pc.cyan(`Bearer ${result.serviceKey}`)}`,
+        );
+        console.log(
+          `  ${pc.dim("Studio URL:")} ${pc.cyan(`${preferredStudioBase.replace(/\/$/, "")}/studio/login`)}`,
         );
       } else {
         p.log.info(

@@ -17,6 +17,7 @@ import { validateCompiledIR } from "@/utils/validate";
 import { materializeRuntime, readLocalAgentNames } from "@/utils/runtime";
 import { resolveProvider } from "@/utils/providers";
 import { exportCompiledIrForDebug } from "@/utils/ir/export";
+import { promptDeployTarget, showKalpCloudWaitlist } from "@/utils/deploy-target";
 
 const LOGO = "🦋";
 
@@ -306,6 +307,16 @@ export default defineCommand({
       });
 
       if (!state.workerUrl) {
+        const target = await promptDeployTarget("No remote runtime detected yet. Where do you want to deploy?");
+        if (!target) {
+          p.outro("Cancelled");
+          return;
+        }
+        if (target === "kalp-cloud") {
+          showKalpCloudWaitlist();
+          p.outro(pc.green("Got it — you'll hear from us soon."));
+          return;
+        }
         p.log.warn("No .kalp/state.json found. Running initial deploy first...");
         const deploy = await runInitialDeploy(cwd);
         state = (await readProjectState(cwd)) ?? createInitialState();

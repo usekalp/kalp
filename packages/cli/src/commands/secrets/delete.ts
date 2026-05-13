@@ -1,91 +1,30 @@
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { getAuthToken } from "@/utils/auth";
+import { requireAuth } from "@/utils/auth";
 import { generateTypes } from "@/utils/codegen";
+import { resolveProvider } from "@/utils/providers";
+import { readLocalSecretsFromConfig, writeLocalSecretsToConfig } from "@/utils/secrets-config";
+import { resolveSecretsRuntimeConfigPath } from "@/utils/secrets-runtime";
 
 const LOGO = "🦋";
-
-interface CloudSecret {
-  key: string;
-}
-
-async function fetchSecretsFromCloud(): Promise<CloudSecret[]> {
-  // TODO: Implement real API call to Kalp Cloud
-  return [{ key: "STRIPE_SECRET_KEY" }, { key: "OPENAI_API_KEY" }];
-}
-
-async function deleteSecretFromCloud(key: string): Promise<void> {
-  // TODO: Implement real API call to Kalp Cloud
-  console.log(pc.dim(`[Simulated] Deleting secret ${key} from Kalp Cloud...`));
-}
-
-async function removeSecretFromLocalConfig(
-  cwd: string,
-  key: string,
-): Promise<void> {
-  const configPath = join(cwd, "kalp.config.ts");
-  let content: string;
-
-  try {
-    content = await readFile(configPath, "utf-8");
-  } catch {
-    throw new Error(
-      "kalp.config.ts not found. Run `npx create-kalp@latest` first.",
-    );
-  }
-
-  // Check if key exists
-  const regex = new RegExp(`["']${key}["']`);
-  if (!regex.test(content)) {
-    // Key not in local config, that's ok
-    throw new Error(`Secret ${key} not found in local config`);
-  }
-
-  // Remove secret from array
-  const match = content.match(/secrets:\s*\[([^\]]*)\]/);
-
-  if (!match) {
-    throw new Error("Could not find secrets array in kalp.config.ts");
-  }
-
-  const currentArray = match[1];
-  if (!currentArray) {
-    throw new Error("Secrets array is empty in kalp.config.ts");
-  }
-
-  // Remove the key and clean up commas
-  let newArray = currentArray
-    .replace(new RegExp(`["']${key}["']\\s*,?\\s*`), "")
-    .trim();
-  // Remove trailing comma if any
-  newArray = newArray.replace(/,\s*$/, "");
-
-  content = content.replace(
-    /secrets:\s*\[([^\]]*)\]/,
-    `secrets: [${newArray}]`,
-  );
-
-  await writeFile(configPath, content, "utf-8");
-}
-
-async function regenerateTypes(cwd: string): Promise<void> {
-  // Regenerate .kalp/types.d.ts based on kalp.config.ts
-  await generateTypes(cwd);
-}
 
 export default defineCommand({
   meta: {
     name: "delete",
-    description: "Delete a secret from Kalp Cloud and local config",
+    description: "Delete a secret from remote runtime and local config",
   },
   args: {
     key: {
       type: "string",
       alias: "k",
-      description: "Secret key name to delete",
+      description: "Secret key to delete",
+    },
+    yes: {
+      type: "boolean",
+      alias: "y",
+      description: "Skip confirmation prompt",
+      default: false,
     },
     help: {
       type: "boolean",
@@ -93,91 +32,95 @@ export default defineCommand({
       description: "Show help",
       default: false,
     },
-    yes: {
-      type: "boolean",
-      alias: "y",
-      description: "Skip confirmation",
-      default: false,
-    },
   },
   async run({ args }) {
     const cwd = process.cwd();
 
     if (args.help) {
-      p.log.info(`${pc.bold("Usage")}: kalp secrets delete -k <key>`);
-      p.log.info(pc.dim("Example: kalp secrets delete -k STRIPE_SECRET_KEY"));
+      p.log.info(`${pc.bold("Usage")}: kalp secrets delete -k <KEY>`);
       return;
     }
 
     p.intro(`${LOGO} ${pc.bold("kalp secrets delete")}`);
 
-    const token = await getAuthToken();
-    if (!token) {
-      p.log.warn(pc.yellow("Not logged in. Run `kalp login` first."));
-      p.outro("Authentication required");
+    await requireAuth().catch(() => {
+      p.log.error("Not authenticated. Run `kalp login` first.");
+      process.exit(1);
+    });
+
+    let configPath: string;
+    try {
+      configPath = await resolveSecretsRuntimeConfigPath(cwd);
+    } catch (error) {
+      p.log.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+
+    const provider = resolveProvider();
+    let remoteSecrets;
+    try {
+      remoteSecrets = await provider.listSecrets({ cwd, configPath });
+    } catch (error) {
+      p.log.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+
+    if (!remoteSecrets || remoteSecrets.length === 0) {
+      p.log.info(pc.dim("No remote secrets to delete."));
+      p.outro("Done");
       return;
     }
 
-    let key = args.key;
-
-    // Interactive selection if not provided
+    let key = args.key?.trim();
     if (!key) {
-      const secrets = await fetchSecretsFromCloud();
-      if (secrets.length === 0) {
-        p.log.info(pc.dim("No secrets found in Kalp Cloud."));
-        p.outro("Nothing to delete");
-        return;
-      }
-
       const selected = await p.select({
         message: "Select a secret to delete",
-        options: secrets.map((s) => ({ value: s.key, label: s.key })),
+        options: remoteSecrets
+          .map((secret) => secret.name)
+          .sort((a, b) => a.localeCompare(b))
+          .map((name) => ({ value: name, label: name })),
       });
-
       if (p.isCancel(selected)) {
         p.outro("Cancelled");
         return;
       }
-
-      key = selected as string;
+      key = String(selected);
     }
 
-    // Confirmation unless --yes flag
+    const existsRemote = remoteSecrets.some((secret) => secret.name === key);
+    if (!existsRemote) {
+      p.log.error(`Secret ${pc.cyan(key)} not found in remote runtime.`);
+      process.exit(1);
+    }
+
     if (!args.yes) {
-      const confirm = await p.confirm({
-        message: `Are you sure you want to delete ${pc.cyan(key)}? This action cannot be undone.`,
+      const confirmed = await p.confirm({
+        message: `Delete ${pc.cyan(key)} from remote runtime and local config?`,
         initialValue: false,
       });
-
-      if (p.isCancel(confirm) || !confirm) {
+      if (p.isCancel(confirmed) || !confirmed) {
         p.outro("Cancelled");
         return;
       }
     }
 
-    const s = p.spinner();
-    s.start(`Deleting ${pc.cyan(key)}...`);
+    const spinner = p.spinner();
+    spinner.start(`Deleting ${pc.cyan(key)}`);
 
     try {
-      // Delete from cloud (simulated)
-      await deleteSecretFromCloud(key);
+      await provider.deleteSecret({ cwd, configPath, name: key });
+      const localSecrets = await readLocalSecretsFromConfig(cwd);
+      await writeLocalSecretsToConfig(
+        cwd,
+        localSecrets.filter((secret) => secret !== key),
+      );
+      await generateTypes(cwd);
 
-      // Remove from local config
-      await removeSecretFromLocalConfig(cwd, key);
-
-      // Regenerate types from config
-      await regenerateTypes(cwd);
-
-      s.stop(`Secret ${pc.cyan(key)} deleted successfully`);
+      spinner.stop(`Secret ${pc.cyan(key)} deleted`);
       p.outro("Done");
     } catch (error) {
-      s.stop("Failed to delete secret");
-      p.log.error(
-        pc.red(
-          `Error: ${error instanceof Error ? error.message : String(error)}`,
-        ),
-      );
-      p.outro("Failed");
+      spinner.stop("Failed to delete secret");
+      p.log.error(error instanceof Error ? error.message : String(error));
       process.exit(1);
     }
   },

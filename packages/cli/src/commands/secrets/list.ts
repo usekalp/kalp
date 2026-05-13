@@ -1,56 +1,17 @@
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { getAuthToken } from "@/utils/auth";
+import { requireAuth } from "@/utils/auth";
+import { resolveProvider } from "@/utils/providers";
+import { readLocalSecretsFromConfig } from "@/utils/secrets-config";
+import { resolveSecretsRuntimeConfigPath } from "@/utils/secrets-runtime";
 
 const LOGO = "🦋";
-
-interface CloudSecret {
-  key: string;
-  createdAt: string;
-}
-
-async function fetchSecretsFromCloud(): Promise<CloudSecret[]> {
-  return [
-    { key: "STRIPE_SECRET_KEY", createdAt: "2024-01-15T10:30:00Z" },
-    { key: "OPENAI_API_KEY", createdAt: "2024-01-16T14:22:00Z" },
-  ];
-}
-
-async function readLocalSecrets(cwd: string): Promise<string[]> {
-  try {
-    const configPath = join(cwd, "kalp.config.ts");
-    const content = await readFile(configPath, "utf-8");
-    // Extract secrets array from config
-    const match = content.match(/secrets:\s*\[([^\]]*)\]/);
-    if (!match) return [];
-    const secretsStr = match[1];
-    // Extract quoted strings
-    const secrets: string[] = [];
-    const regex = /["']([^"']+)["']/g;
-
-    if (!secretsStr) {
-      return [];
-    }
-
-    let m: RegExpExecArray | null;
-    while ((m = regex.exec(secretsStr)) !== null) {
-      if (m[1]) {
-        secrets.push(m[1]);
-      }
-    }
-    return secrets;
-  } catch {
-    return [];
-  }
-}
 
 export default defineCommand({
   meta: {
     name: "list",
-    description: "List all secrets from Kalp Cloud",
+    description: "List remote runtime secrets",
   },
   args: {
     help: {
@@ -70,62 +31,58 @@ export default defineCommand({
 
     p.intro(`${LOGO} ${pc.bold("kalp secrets list")}`);
 
-    const token = await getAuthToken();
-    if (!token) {
-      p.log.warn(pc.yellow("Not logged in. Run `kalp login` first."));
-      p.outro("Authentication required");
-      return;
-    }
+    await requireAuth().catch(() => {
+      p.log.error("Not authenticated. Run `kalp login` first.");
+      process.exit(1);
+    });
 
-    const s = p.spinner();
-    s.start("Fetching secrets from Kalp Cloud...");
+    const spinner = p.spinner();
+    spinner.start("Loading remote secrets");
 
     try {
-      const [cloudSecrets, localSecrets] = await Promise.all([
-        fetchSecretsFromCloud(),
-        readLocalSecrets(cwd),
+      const configPath = await resolveSecretsRuntimeConfigPath(cwd);
+      const provider = resolveProvider();
+      const [remoteSecrets, localSecrets] = await Promise.all([
+        provider.listSecrets({ cwd, configPath }),
+        readLocalSecretsFromConfig(cwd),
       ]);
 
-      s.stop(`Found ${cloudSecrets.length} secrets`);
+      const remoteNames = remoteSecrets.map((item) => item.name).sort((a, b) => a.localeCompare(b));
+      const syncedCount = remoteNames.filter((name) => localSecrets.includes(name)).length;
+      spinner.stop(`Found ${remoteNames.length} remote secrets`);
 
-      if (cloudSecrets.length === 0) {
-        p.log.info(pc.dim("No secrets found in Kalp Cloud."));
-        p.log.info(pc.dim(`Add secrets with: ${pc.cyan("kalp secrets add")}`));
-      } else {
-        console.log("");
-        p.log.info(pc.bold("Cloud Secrets:"));
-        for (const secret of cloudSecrets) {
-          const isSynced = localSecrets.includes(secret.key);
-          const syncIcon = isSynced ? pc.green("✓") : pc.yellow("○");
-          console.log(
-            `  ${syncIcon} ${pc.cyan(secret.key)} ${pc.dim(`(${secret.createdAt})`)}`,
-          );
-        }
+      if (remoteNames.length === 0) {
+        p.log.info(pc.dim("No remote secrets found."));
+        p.log.info(pc.dim(`Add one with ${pc.cyan("kalp secrets add -k KEY -v VALUE")}`));
+        p.outro("Done");
+        return;
+      }
 
-        if (localSecrets.length > 0) {
-          const unsynced = localSecrets.filter(
-            (k) => !cloudSecrets.some((s) => s.key === k),
-          );
-          if (unsynced.length > 0) {
-            console.log("");
-            p.log.warn(
-              pc.yellow(
-                `Local-only secrets (not synced): ${unsynced.join(", ")}`,
-              ),
-            );
-          }
-        }
+      p.log.info(pc.bold("Remote runtime secrets"));
+      for (const name of remoteNames) {
+        const synced = localSecrets.includes(name);
+        const icon = synced ? pc.green("✓") : pc.yellow("○");
+        console.log(`  ${icon} ${pc.cyan(name)}`);
+      }
+
+      if (syncedCount !== remoteNames.length) {
+        const missingLocal = remoteNames.filter((name) => !localSecrets.includes(name));
+        p.log.warn(
+          `Missing in kalp.config.ts: ${missingLocal.map((name) => pc.cyan(name)).join(", ")}`,
+        );
+      }
+
+      const localOnly = localSecrets.filter((name) => !remoteNames.includes(name));
+      if (localOnly.length > 0) {
+        p.log.warn(
+          `Local-only secrets (not remote): ${localOnly.map((name) => pc.cyan(name)).join(", ")}`,
+        );
       }
 
       p.outro("Done");
     } catch (error) {
-      s.stop("Failed to fetch secrets");
-      p.log.error(
-        pc.red(
-          `Error: ${error instanceof Error ? error.message : String(error)}`,
-        ),
-      );
-      p.outro("Failed");
+      spinner.stop("Failed to load secrets");
+      p.log.error(error instanceof Error ? error.message : String(error));
       process.exit(1);
     }
   },

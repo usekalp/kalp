@@ -5,4 +5,9 @@ export function resolveProvider(): RuntimeProvider {
   return cloudflareProvider;
 }
 
-export type { RuntimeProvider, ProviderIdentity, DeployResult } from "@/utils/providers/types";
+export type {
+  RuntimeProvider,
+  ProviderIdentity,
+  DeployResult,
+  RemoteSecret,
+} from "@/utils/providers/types";
