@@ -40,6 +40,7 @@
       "KALP_SECRET_KEY",
       "KALP_STUDIO_PASSWORD",
       "KALP_STUDIO_ADMIN_USER",
+      "KALP_SERVICE_KEY",
     ],
   },
   "upload_source_maps": true,

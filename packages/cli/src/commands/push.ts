@@ -31,6 +31,7 @@ function createInitialState(): ProjectState {
     deployedAt: null,
     accountId: null,
     studioCredentialsFingerprint: null,
+    serviceKeyFingerprint: null,
     agents: {},
   };
 }

@@ -12,7 +12,12 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deriveLabelFromName } from "@kalphq/project";
+import { getRequiredSecretForProvider, resolveProviderFromConfig } from "@/utils/ai";
+import {
+  resolveIdentityAuthRequirements,
+} from "@/utils/project-config";
 import { readProjectState } from "@/utils/project-state";
+import { materializeRuntimeIdentity } from "@/utils/runtime-identity";
 
 const RUNTIME_ROOT = ".kalp";
 const RUNTIME_DIR = "runtime";
@@ -126,6 +131,7 @@ function buildWorkerName(slug: string, cwd: string): string {
 function createRuntimeConfig(
   workerName: string,
   mode: "local" | "remote",
+  requiredSecrets: string[],
 ): WranglerConfig {
   return {
     $schema: "node_modules/wrangler/config-schema.json",
@@ -163,11 +169,7 @@ function createRuntimeConfig(
       KALP_ENV: mode,
     },
     secrets: {
-      required: [
-        "KALP_SECRET_KEY",
-        "KALP_STUDIO_PASSWORD",
-        "KALP_STUDIO_ADMIN_USER",
-      ],
+      required: requiredSecrets,
     },
   };
 }
@@ -413,10 +415,34 @@ export async function materializeRuntime(
   await cp(template.workerEntryPath, workerEntrypointPath);
   await ensureStudioIndex(studioDir);
   await writeRuntimeAgentsSnapshot({ cwd, runtimeDir, mode });
+  const identity = await materializeRuntimeIdentity({ cwd, runtimeDir });
 
   const projectSlug = await resolveProjectSlug(cwd);
   const workerName = buildWorkerName(projectSlug, cwd);
-  const wranglerConfig = createRuntimeConfig(workerName, mode);
+  const requiredSecrets = new Set<string>([
+    "KALP_SECRET_KEY",
+    "KALP_STUDIO_PASSWORD",
+    "KALP_STUDIO_ADMIN_USER",
+    "KALP_SERVICE_KEY",
+  ]);
+
+  try {
+    const provider = await resolveProviderFromConfig(cwd);
+    requiredSecrets.add(getRequiredSecretForProvider(provider));
+  } catch {
+    // Ignore provider resolution errors here; deploy preflight handles strict checks.
+  }
+
+  const identityRequirements = resolveIdentityAuthRequirements(identity.identityConfig);
+  for (const requirement of identityRequirements) {
+    requiredSecrets.add(requirement.envKey);
+  }
+
+  const wranglerConfig = createRuntimeConfig(
+    workerName,
+    mode,
+    [...requiredSecrets].sort((a, b) => a.localeCompare(b)),
+  );
   await writeFile(
     wranglerConfigPath,
     `${JSON.stringify(wranglerConfig, null, 2)}\n`,

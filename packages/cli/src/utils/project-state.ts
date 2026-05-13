@@ -16,6 +16,7 @@ export interface ProjectState {
   deployedAt: string | null;
   accountId: string | null;
   studioCredentialsFingerprint?: string | null;
+  serviceKeyFingerprint?: string | null;
   agents: Record<string, ProjectAgentState>;
 }
 
@@ -41,6 +42,11 @@ function normalizeProjectState(raw: unknown): ProjectState | null {
     typeof value.studioCredentialsFingerprint === "string" &&
     value.studioCredentialsFingerprint.length > 0
       ? value.studioCredentialsFingerprint
+      : null;
+  const serviceKeyFingerprint =
+    typeof value.serviceKeyFingerprint === "string" &&
+    value.serviceKeyFingerprint.length > 0
+      ? value.serviceKeyFingerprint
       : null;
 
   const agents: Record<string, ProjectAgentState> = {};
@@ -73,7 +79,14 @@ function normalizeProjectState(raw: unknown): ProjectState | null {
     };
   }
 
-  return { workerUrl, deployedAt, accountId, studioCredentialsFingerprint, agents };
+  return {
+    workerUrl,
+    deployedAt,
+    accountId,
+    studioCredentialsFingerprint,
+    serviceKeyFingerprint,
+    agents,
+  };
 }
 
 export async function readProjectState(cwd: string): Promise<ProjectState | null> {

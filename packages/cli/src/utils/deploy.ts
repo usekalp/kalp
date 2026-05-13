@@ -1,6 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { execa } from "execa";
 import { requireAuth } from "@/utils/auth";
 import { ensureStudioSecrets } from "@/utils/secret";
 import { readProjectState, writeProjectState } from "@/utils/project-state";
@@ -10,12 +9,12 @@ import {
   readDotEnv,
   resolveProviderFromConfig,
 } from "@/utils/ai";
+import {
+  loadProjectConfig,
+  resolveIdentityAuthRequirements,
+  resolveRuntimeIdentityConfig,
+} from "@/utils/project-config";
 import { resolveProvider } from "@/utils/providers";
-
-function findWorkersUrl(output: string): string | null {
-  const match = output.match(/https:\/\/[^\s]+\.workers\.dev/);
-  return match?.[0] ?? null;
-}
 
 interface RuntimeWranglerConfig {
   name?: string;
@@ -43,33 +42,6 @@ async function writeWranglerConfig(
 
 function deriveKvNamespaceTitle(workerName: string, binding: string): string {
   return `${workerName}-${binding.toLowerCase().replace(/_/g, "-")}`;
-}
-
-function parseKvListOutput(stdout: string): KvNamespaceInfo[] {
-  const trimmed = stdout.trim();
-  if (!trimmed) return [];
-
-  try {
-    const parsed = JSON.parse(trimmed);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map((item) => ({
-          id: String((item as { id?: string }).id ?? ""),
-          title: String((item as { title?: string }).title ?? ""),
-        }))
-        .filter((item) => !!item.id && !!item.title);
-    }
-  } catch {
-    // fallback to text parsing below
-  }
-
-  const matches = trimmed.match(/[a-f0-9]{32}\s+[^\r\n]+/gi) ?? [];
-  return matches
-    .map((line) => {
-      const [id, ...rest] = line.trim().split(/\s+/g);
-      return { id: id ?? "", title: rest.join(" ") };
-    })
-    .filter((item) => !!item.id && !!item.title);
 }
 
 async function listKvNamespaces(
@@ -110,36 +82,23 @@ function isNamespaceAlreadyExistsError(output: string): boolean {
   return output.includes("[code: 10014]") && output.includes("already exists");
 }
 
-async function resolveWorkerUrl(
-  configPath: string,
-  deployOutput: string,
-): Promise<string> {
-  const fromOutput = findWorkersUrl(deployOutput);
-  if (fromOutput) return fromOutput;
-
-  const configText = await readFile(configPath, "utf-8").catch(
-    () => null as string | null,
-  );
-  const workerName = configText?.match(/"name"\s*:\s*"([^"]+)"/)?.[1];
-
-  if (workerName) {
-    return `https://${workerName}.workers.dev`;
-  }
-
-  throw new Error("Could not resolve worker URL from wrangler deploy output.");
-}
-
 export async function runInitialDeploy(cwd: string): Promise<{
   workerUrl: string;
   customDomains: string[];
   accountId: string;
   studioAdminUser: string;
   studioPassword: string;
+  serviceKey: string;
   credentialsChanged: boolean;
+  serviceKeyChanged: boolean;
 }> {
   const auth = await requireAuth();
+  const loadedConfig = await loadProjectConfig(cwd);
+  const identityConfig = resolveRuntimeIdentityConfig(loadedConfig.raw);
+  const identitySecretRequirements = resolveIdentityAuthRequirements(identityConfig);
   const aiProvider = await resolveProviderFromConfig(cwd);
   const requiredProviderSecret = getRequiredSecretForProvider(aiProvider);
+  const secrets = await ensureStudioSecrets(cwd);
   const envMap = await readDotEnv(cwd);
   const providerSecretValue = envMap[requiredProviderSecret]?.trim();
   if (!providerSecretValue) {
@@ -148,7 +107,16 @@ export async function runInitialDeploy(cwd: string): Promise<{
     );
   }
 
-  const secrets = await ensureStudioSecrets(cwd);
+  const resolvedIdentitySecrets = identitySecretRequirements.map((requirement) => {
+    const value = envMap[requirement.envKey]?.trim();
+    if (!value) {
+      throw new Error(
+        `Missing required secret ${requirement.envKey} for ${requirement.reason}. Add it to .env before deploy.`,
+      );
+    }
+    return { name: requirement.envKey, value };
+  });
+
   const runtimeProvider = resolveProvider();
   const runtime = await materializeRuntime(cwd);
   let secretSyncFailed = false;
@@ -156,10 +124,16 @@ export async function runInitialDeploy(cwd: string): Promise<{
     ["KALP_SECRET_KEY", secrets.key],
     ["KALP_STUDIO_PASSWORD", secrets.studioPassword],
     ["KALP_STUDIO_ADMIN_USER", secrets.studioAdminUser],
+    ["KALP_SERVICE_KEY", secrets.serviceKey],
     [requiredProviderSecret, providerSecretValue],
-  ] as const;
-
+    ...resolvedIdentitySecrets.map((item) => [item.name, item.value] as const),
+  ];
+  const dedupedSecrets = new Map<string, string>();
   for (const [name, value] of secretEntries) {
+    dedupedSecrets.set(name, value);
+  }
+
+  for (const [name, value] of dedupedSecrets.entries()) {
     try {
       await runtimeProvider.putSecret({
         cwd,
@@ -176,17 +150,6 @@ export async function runInitialDeploy(cwd: string): Promise<{
   await ensureKvNamespaceBindingId(cwd, runtime.wranglerConfigPath).catch(
     () => null,
   );
-
-  const deployArgs = secretSyncFailed
-    ? [
-        "wrangler",
-        "deploy",
-        "--config",
-        runtime.wranglerConfigPath,
-        "--secrets-file",
-        ".env",
-      ]
-    : ["wrangler", "deploy", "--config", runtime.wranglerConfigPath];
 
   let deploy = await runtimeProvider
     .deployRuntime({
@@ -219,12 +182,18 @@ export async function runInitialDeploy(cwd: string): Promise<{
     .digest("hex");
   const credentialsChanged =
     existingState?.studioCredentialsFingerprint !== credentialsFingerprint;
+  const serviceKeyFingerprint = createHash("sha256")
+    .update(secrets.serviceKey)
+    .digest("hex");
+  const serviceKeyChanged =
+    existingState?.serviceKeyFingerprint !== serviceKeyFingerprint;
 
   await writeProjectState(cwd, {
     workerUrl,
     deployedAt: new Date().toISOString(),
     accountId: auth.accountId,
     studioCredentialsFingerprint: credentialsFingerprint,
+    serviceKeyFingerprint,
     agents: existingState?.agents ?? {},
   });
 
@@ -234,6 +203,8 @@ export async function runInitialDeploy(cwd: string): Promise<{
     accountId: auth.accountId,
     studioAdminUser: secrets.studioAdminUser,
     studioPassword: secrets.studioPassword,
+    serviceKey: secrets.serviceKey,
     credentialsChanged,
+    serviceKeyChanged,
   };
 }

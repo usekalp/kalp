@@ -2,9 +2,14 @@ import { randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const SECRET_KEY = "KALP_SECRET_KEY";
-const STUDIO_PASSWORD = "KALP_STUDIO_PASSWORD";
-const STUDIO_ADMIN_USER = "KALP_STUDIO_ADMIN_USER";
+export const SECRET_KEY = "KALP_SECRET_KEY";
+export const STUDIO_PASSWORD = "KALP_STUDIO_PASSWORD";
+export const STUDIO_ADMIN_USER = "KALP_STUDIO_ADMIN_USER";
+export const SERVICE_KEY = "KALP_SERVICE_KEY";
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function parseEnv(content: string): Record<string, string> {
   const result: Record<string, string> = {};
@@ -20,15 +25,20 @@ function parseEnv(content: string): Record<string, string> {
   return result;
 }
 
-function toEnvContent(values: Record<string, string>): string {
-  const lines = [
-    "# Kalp Studio Authentication Secrets",
-    `${SECRET_KEY}=${values[SECRET_KEY]}`,
-    `${STUDIO_PASSWORD}=${values[STUDIO_PASSWORD]}`,
-    `${STUDIO_ADMIN_USER}=${values[STUDIO_ADMIN_USER]}`,
-    "",
-  ];
-  return lines.join("\n");
+function applyEnvUpdates(content: string, updates: Record<string, string>): string {
+  let next = content;
+  for (const [key, value] of Object.entries(updates)) {
+    const line = `${key}=${value}`;
+    const pattern = new RegExp(`^${escapeRegExp(key)}=.*$`, "m");
+    if (pattern.test(next)) {
+      next = next.replace(pattern, line);
+      continue;
+    }
+    const trimmed = next.trimEnd();
+    next = trimmed.length > 0 ? `${trimmed}\n${line}\n` : `${line}\n`;
+  }
+
+  return next.trimEnd() + "\n";
 }
 
 async function readEnvFile(cwd: string): Promise<string> {
@@ -40,43 +50,66 @@ async function readEnvFile(cwd: string): Promise<string> {
   }
 }
 
+async function readDevVarsFile(cwd: string): Promise<string> {
+  const devVarsPath = join(cwd, ".dev.vars");
+  try {
+    return await readFile(devVarsPath, "utf-8");
+  } catch {
+    return "";
+  }
+}
+
 function generateStudioPassword(): string {
   return randomBytes(24).toString("base64url");
+}
+
+function generateServiceKey(): string {
+  return `kalp_sk_live_${randomBytes(32).toString("base64url")}`;
 }
 
 export interface StudioSecrets {
   key: string;
   studioPassword: string;
   studioAdminUser: string;
+  serviceKey: string;
   isNew: boolean;
 }
 
 export async function ensureStudioSecrets(cwd: string): Promise<StudioSecrets> {
   const envPath = join(cwd, ".env");
+  const devVarsPath = join(cwd, ".dev.vars");
   const content = await readEnvFile(cwd);
   const parsed = parseEnv(content);
 
-  const key = parsed[SECRET_KEY] || randomBytes(32).toString("hex");
-  const studioPassword = parsed[STUDIO_PASSWORD] || generateStudioPassword();
-  const studioAdminUser = parsed[STUDIO_ADMIN_USER] || "admin";
+  const key = parsed[SECRET_KEY]?.trim() || randomBytes(32).toString("hex");
+  const studioPassword = parsed[STUDIO_PASSWORD]?.trim() || generateStudioPassword();
+  const studioAdminUser = parsed[STUDIO_ADMIN_USER]?.trim() || "admin";
+  const serviceKey = parsed[SERVICE_KEY]?.trim() || generateServiceKey();
 
   const isNew =
-    !parsed[SECRET_KEY] || !parsed[STUDIO_PASSWORD] || !parsed[STUDIO_ADMIN_USER];
+    !parsed[SECRET_KEY]?.trim() ||
+    !parsed[STUDIO_PASSWORD]?.trim() ||
+    !parsed[STUDIO_ADMIN_USER]?.trim() ||
+    !parsed[SERVICE_KEY]?.trim();
 
-  if (isNew || !content.trim()) {
-    await writeFile(
-      envPath,
-      toEnvContent({
-        ...parsed,
-        [SECRET_KEY]: key,
-        [STUDIO_PASSWORD]: studioPassword,
-        [STUDIO_ADMIN_USER]: studioAdminUser,
-      }),
-      "utf-8",
-    );
-  }
+  const next = applyEnvUpdates(content, {
+    [SECRET_KEY]: key,
+    [STUDIO_PASSWORD]: studioPassword,
+    [STUDIO_ADMIN_USER]: studioAdminUser,
+    [SERVICE_KEY]: serviceKey,
+  });
+  await writeFile(envPath, next, "utf-8");
 
-  return { key, studioPassword, studioAdminUser, isNew };
+  const devVarsContent = await readDevVarsFile(cwd);
+  const nextDevVars = applyEnvUpdates(devVarsContent, {
+    [SECRET_KEY]: key,
+    [STUDIO_PASSWORD]: studioPassword,
+    [STUDIO_ADMIN_USER]: studioAdminUser,
+    [SERVICE_KEY]: serviceKey,
+  });
+  await writeFile(devVarsPath, nextDevVars, "utf-8");
+
+  return { key, studioPassword, studioAdminUser, serviceKey, isNew };
 }
 
 export async function ensureSecretKey(
@@ -100,15 +133,17 @@ export async function readStudioSecrets(cwd: string): Promise<{
   key: string;
   studioPassword: string;
   studioAdminUser: string;
+  serviceKey: string;
 } | null> {
   try {
     const envContent = await readEnvFile(cwd);
     const parsed = parseEnv(envContent);
-    const key = parsed[SECRET_KEY];
-    const studioPassword = parsed[STUDIO_PASSWORD];
-    const studioAdminUser = parsed[STUDIO_ADMIN_USER] || "admin";
-    if (!key || !studioPassword) return null;
-    return { key, studioPassword, studioAdminUser };
+    const key = parsed[SECRET_KEY]?.trim();
+    const studioPassword = parsed[STUDIO_PASSWORD]?.trim();
+    const studioAdminUser = parsed[STUDIO_ADMIN_USER]?.trim() || "admin";
+    const serviceKey = parsed[SERVICE_KEY]?.trim();
+    if (!key || !studioPassword || !serviceKey) return null;
+    return { key, studioPassword, studioAdminUser, serviceKey };
   } catch {
     return null;
   }

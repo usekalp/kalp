@@ -46,12 +46,15 @@ export default defineCommand({
           ? `https://${result.customDomains[0]}`
           : result.workerUrl;
 
-      if (result.credentialsChanged) {
+      if (result.credentialsChanged || result.serviceKeyChanged) {
         p.note(
           [
             `${pc.bold("Studio credentials")}`,
             `${pc.dim("Username:")} ${pc.cyan(result.studioAdminUser)}`,
             `${pc.dim("Password:")} ${pc.cyan(result.studioPassword)}`,
+            "",
+            `${pc.bold("Service key")}`,
+            `${pc.dim("Authorization:")} ${pc.cyan(`Bearer ${result.serviceKey}`)}`,
             `${pc.dim("Studio:")} ${pc.cyan(`${preferredStudioBase.replace(/\/$/, "")}/studio/login`)}`,
           ].join("\n"),
           "Admin access",
@@ -59,7 +62,7 @@ export default defineCommand({
       } else {
         p.log.info(
           pc.dim(
-            "Studio credentials unchanged. Check your local .env if you need to recover them.",
+            "Credentials unchanged. Check your local .env if you need to recover them.",
           ),
         );
       }

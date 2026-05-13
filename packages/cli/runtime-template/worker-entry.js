@@ -1,7 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { Hono } from "hono";
 import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import agentsSnapshot from "./agents.snapshot.json";
+import identityConfig from "./identity.config.json";
+import mapIdentity from "./identity.map.mjs";
 
 const SESSION_COOKIE_NAME = "kalp_studio_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 8;
@@ -10,6 +13,71 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
+const JWKS_RESOLVER_CACHE = new Map();
+
+function extractBearerToken(authorization) {
+  if (!authorization) return null;
+  const value = authorization.trim();
+  if (!value) return null;
+  const match = value.match(/^Bearer\s+(.+)$/i);
+  if (!match || !match[1]) return null;
+  const token = match[1].trim();
+  return token || null;
+}
+
+function normalizeHeaderRecord(request) {
+  const headers = {};
+  for (const [key, value] of request.headers.entries()) {
+    headers[key.toLowerCase()] = value;
+  }
+  return headers;
+}
+
+function toMappedIdentity(payload, request) {
+  const rawHeaders = normalizeHeaderRecord(request);
+  try {
+    const mapped = mapIdentity(payload, rawHeaders);
+    if (
+      mapped &&
+      typeof mapped === "object" &&
+      typeof mapped.userId === "string" &&
+      mapped.userId.length > 0
+    ) {
+      return {
+        userId: mapped.userId,
+        email: mapped.email,
+        name: mapped.name,
+        claims:
+          mapped.claims && typeof mapped.claims === "object" ? mapped.claims : {},
+      };
+    }
+  } catch {}
+
+  const sub =
+    payload && typeof payload === "object" && typeof payload.sub === "string"
+      ? payload.sub
+      : "anonymous";
+  return { userId: sub, claims: {} };
+}
+
+function resolveSymmetricSecret(env, secretEnvKey) {
+  const key = secretEnvKey && secretEnvKey.trim() ? secretEnvKey.trim() : "JWT_SIGNING_SECRET";
+  const selected = env[key];
+  if (typeof selected === "string" && selected.trim()) return selected.trim();
+  if (key !== "JWT_SIGNING_SECRET") {
+    const fallback = env.JWT_SIGNING_SECRET;
+    if (typeof fallback === "string" && fallback.trim()) return fallback.trim();
+  }
+  return null;
+}
+
+function getJwksResolver(jwksUrl) {
+  const cached = JWKS_RESOLVER_CACHE.get(jwksUrl);
+  if (cached) return cached;
+  const resolver = createRemoteJWKSet(new URL(jwksUrl));
+  JWKS_RESOLVER_CACHE.set(jwksUrl, resolver);
+  return resolver;
+}
 
 function withCors(response) {
   if (response.status === 101) return response;
@@ -92,6 +160,78 @@ async function requireSession(c, next) {
   return next();
 }
 
+async function verifyGatewayAuth(c) {
+  const enforce = identityConfig?.enforceGlobalAuth !== false;
+  if (!enforce) {
+    return { userId: "anonymous", claims: {}, providerId: "none" };
+  }
+
+  const token = extractBearerToken(c.req.header("Authorization"));
+
+  const serviceKey = c.env.KALP_SERVICE_KEY?.trim();
+  if (serviceKey && token && token === serviceKey) {
+    return {
+      userId: "service-admin",
+      providerId: "service-key",
+      claims: { role: "service_admin", service: true },
+    };
+  }
+
+  const strategy = identityConfig?.strategy;
+  if (!strategy) return null;
+
+  try {
+    if (strategy.type === "jwks") {
+      if (!token) return null;
+      if (!strategy.jwksUrl) return null;
+      const resolver = getJwksResolver(strategy.jwksUrl);
+      const options = {};
+      if (strategy.issuer) options.issuer = strategy.issuer;
+      if (strategy.audience) options.audience = strategy.audience;
+      const { payload } = await jwtVerify(token, resolver, options);
+      return {
+        ...toMappedIdentity(payload, c.req.raw),
+        providerId: identityConfig.identityId ?? "identity",
+      };
+    }
+
+    if (strategy.type === "symmetric") {
+      if (!token) return null;
+      const secret = resolveSymmetricSecret(c.env, strategy.secretEnvKey);
+      if (!secret) return null;
+      const encoded = new TextEncoder().encode(secret);
+      const { payload } = await jwtVerify(token, encoded, {
+        algorithms: ["HS256"],
+      });
+      return {
+        ...toMappedIdentity(payload, c.req.raw),
+        providerId: identityConfig.identityId ?? "identity",
+      };
+    }
+
+    if (strategy.type === "apiKey") {
+      const headerName = (strategy.headerName || "x-api-key").toLowerCase();
+      const envKey = strategy.envKey || "KALP_API_KEY";
+      const expected =
+        typeof c.env[envKey] === "string" ? c.env[envKey].trim() : "";
+      if (!expected) return null;
+      const provided =
+        c.req.header(headerName)?.trim() ??
+        (headerName === "authorization" ? token : null);
+      if (!provided || provided !== expected) return null;
+      return {
+        userId: "api-key-client",
+        providerId: identityConfig.identityId ?? "identity",
+        claims: { role: "api_key" },
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 function mapIndexToStudioAgents(entries) {
   return entries.map((entry) => ({
     name: entry.name,
@@ -122,6 +262,16 @@ async function readLatestManifest(env, agentName) {
   } catch {
     return null;
   }
+}
+
+async function resolveAgentAccess(env, agentName, routeKey) {
+  const manifest = await readLatestManifest(env, agentName);
+  const metadata = manifest?.metadata || {};
+  const routePublic = metadata.routesPublic
+    ? metadata.routesPublic[routeKey]
+    : undefined;
+  const agentPublic = metadata.public ?? false;
+  return { isPublic: routePublic !== undefined ? routePublic : agentPublic };
 }
 
 export class AgentDurableObject extends DurableObject {
@@ -216,9 +366,19 @@ function getAgentRouting(url) {
   };
 }
 
-async function forwardToAgentDO(request, env) {
+async function forwardToAgentDO(c, request, env) {
   const url = new URL(request.url);
   const { agentName, passthroughPath } = getAgentRouting(url);
+  const routeKey = `${request.method.toUpperCase()}:${passthroughPath === "/" ? "/" : passthroughPath}`;
+  const access = await resolveAgentAccess(env, agentName, routeKey);
+  let identity = null;
+  if (!access.isPublic) {
+    identity = await verifyGatewayAuth(c);
+    if (!identity) {
+      return c.json({ ok: false, error: "Unauthorized" }, 401);
+    }
+  }
+
   const id = env.KALP_RUNTIME_CLOUDFLARE.idFromName(agentName);
   const stub = env.KALP_RUNTIME_CLOUDFLARE.get(id);
 
@@ -226,6 +386,12 @@ async function forwardToAgentDO(request, env) {
   proxiedUrl.pathname = passthroughPath === "/" ? "/" : passthroughPath;
   const headers = new Headers(request.headers);
   headers.set("x-kalp-agent-name", agentName);
+  headers.set("x-kalp-route-public", String(access.isPublic));
+  if (identity && identity.userId) {
+    headers.set("x-kalp-auth-user-id", identity.userId);
+    headers.set("x-kalp-auth-provider-id", identity.providerId ?? "identity");
+    headers.set("x-kalp-auth-claims", JSON.stringify(identity.claims ?? {}));
+  }
 
   const proxyRequest = new Request(proxiedUrl.toString(), {
     method: request.method,
@@ -376,11 +542,11 @@ app.get("/api/internal/events/:executionId", (c) => {
 });
 
 app.all("/a/:agentName/*", async (c) => {
-  return forwardToAgentDO(c.req.raw, c.env);
+  return forwardToAgentDO(c, c.req.raw, c.env);
 });
 
 app.all("/a/:agentName", async (c) => {
-  return forwardToAgentDO(c.req.raw, c.env);
+  return forwardToAgentDO(c, c.req.raw, c.env);
 });
 
 app.get("/studio", (c) => c.redirect("/studio/", 308));

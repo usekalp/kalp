@@ -38,6 +38,7 @@ type RuntimeBindings = Env & {
   KALP_SECRET_KEY?: string;
   KALP_STUDIO_PASSWORD?: string;
   KALP_STUDIO_ADMIN_USER?: string;
+  KALP_SERVICE_KEY?: string;
   KALP_ENFORCE_GLOBAL_AUTH?: string;
   KALP_ENV?: "local" | "remote";
   KALP_RUNTIME_MODE?: "local" | "remote";
@@ -167,6 +168,10 @@ async function verifyGatewayAuth(c: any): Promise<{ sub?: string } | null> {
   const authHeader = c.req.header("Authorization");
   const token = authHeader?.replace(/^Bearer\s+/i, "").trim();
   if (!token) return null;
+  const serviceKey = c.env.KALP_SERVICE_KEY?.trim();
+  if (serviceKey && token === serviceKey) {
+    return { sub: "service-admin" };
+  }
   const secret = c.env.KALP_SECRET_KEY;
   if (!secret) return null;
   try {

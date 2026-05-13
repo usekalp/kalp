@@ -109,12 +109,14 @@ export default defineConfig({
   // Generate Studio authentication secrets
   const secretKey = randomBytes(32).toString("hex");
   const studioPassword = randomBytes(24).toString("base64url");
+  const serviceKey = `kalp_sk_live_${randomBytes(32).toString("base64url")}`;
   const customExtra = aiProvider === "custom" ? "CUSTOM_AI_BASE_URL=\n" : "";
   const envContent = `# Kalp Studio Authentication Secret
 # Used to sign and validate Studio sessions
 KALP_SECRET_KEY=${secretKey}
 KALP_STUDIO_PASSWORD=${studioPassword}
 KALP_STUDIO_ADMIN_USER=admin
+KALP_SERVICE_KEY=${serviceKey}
 ${providerSecret}=
 ${customExtra}
 `;
