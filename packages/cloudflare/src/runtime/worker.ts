@@ -339,6 +339,121 @@ function mapIndexToStudioAgents(
   }));
 }
 
+function normalizeIndexEntries(raw: unknown): Array<{
+  name: string;
+  hash?: string;
+  version?: string | null;
+  versionNumber?: number | null;
+  workerUrl?: string | null;
+  updatedAt?: string;
+  label?: string;
+  tags?: string[];
+}> {
+  if (!Array.isArray(raw)) return [];
+  const entries: Array<{
+    name: string;
+    hash?: string;
+    version?: string | null;
+    versionNumber?: number | null;
+    workerUrl?: string | null;
+    updatedAt?: string;
+    label?: string;
+    tags?: string[];
+  }> = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name : "";
+    if (!name) continue;
+    entries.push({
+      name,
+      hash: typeof record.hash === "string" ? record.hash : undefined,
+      version: typeof record.version === "string" ? record.version : null,
+      versionNumber:
+        typeof record.versionNumber === "number" ? record.versionNumber : null,
+      workerUrl:
+        typeof record.workerUrl === "string" ? record.workerUrl : null,
+      updatedAt:
+        typeof record.updatedAt === "string" ? record.updatedAt : undefined,
+      label: typeof record.label === "string" ? record.label : undefined,
+      tags: Array.isArray(record.tags)
+        ? record.tags.filter((value): value is string => typeof value === "string")
+        : [],
+    });
+  }
+  return entries;
+}
+
+async function loadAgentsFromIndexOrPointers(
+  env: RuntimeBindings,
+  requestUrl: string,
+): Promise<StudioAgent[]> {
+  const rawIndex = await env.KALP_MANIFESTS.get("agents:index");
+  if (rawIndex) {
+    try {
+      const parsed = normalizeIndexEntries(JSON.parse(rawIndex));
+      if (parsed.length > 0) {
+        return mapIndexToStudioAgents(parsed);
+      }
+    } catch {
+      // fall through to pointer scan
+    }
+  }
+
+  const pointerKeys: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const listed = await env.KALP_MANIFESTS.list({ cursor, limit: 1000 });
+    pointerKeys.push(
+      ...listed.keys
+        .map((key) => key.name)
+        .filter((name) => name.endsWith(":latest")),
+    );
+    cursor = listed.list_complete ? undefined : listed.cursor;
+  } while (cursor);
+
+  const agentNames = [...new Set(pointerKeys.map((name) => name.slice(0, -7)))].sort(
+    (a, b) => a.localeCompare(b),
+  );
+  if (agentNames.length === 0) return [];
+
+  const origin = new URL(requestUrl).origin.replace(/\/$/, "");
+  const agents: StudioAgent[] = [];
+  for (const agentName of agentNames) {
+    const hash = await env.KALP_MANIFESTS.get(`${agentName}:latest`);
+    if (!hash) continue;
+
+    const manifestRaw = await env.KALP_MANIFESTS.get(`${agentName}:${hash}`);
+    let metadata: ManifestMetadata | null = null;
+    if (manifestRaw) {
+      try {
+        const parsed = JSON.parse(manifestRaw) as RuntimeManifest;
+        metadata = parsed.metadata ?? null;
+      } catch {
+        metadata = null;
+      }
+    }
+
+    agents.push({
+      name: agentName,
+      label: metadata?.label,
+      tags: metadata?.tags ?? [],
+      environment: "remote",
+      status: "online",
+      hash,
+      version: null,
+      versionNumber: null,
+      lastRemoteHash: hash,
+      lastLocalHash: null,
+      workerUrl: `${origin}/a/${agentName}`,
+      localPath: null,
+      updatedAt: null,
+    });
+  }
+
+  return agents;
+}
+
 function createRuntimeApp() {
   const app = new Hono<{
     Bindings: RuntimeBindings;
@@ -404,30 +519,13 @@ function createRuntimeApp() {
   app.get("/api/internal/agents", async (c) => {
     const runtimeMode = inferRuntimeMode(c);
     if (runtimeMode === "remote") {
-      const raw = await c.env.KALP_MANIFESTS.get("agents:index");
-      let parsed: Array<{
-        name: string;
-        hash?: string;
-        version?: string | null;
-        versionNumber?: number | null;
-        workerUrl?: string | null;
-        updatedAt?: string;
-        label?: string;
-        tags?: string[];
-      }> | null = null;
-      if (raw) {
-        try {
-          parsed = JSON.parse(raw);
-        } catch {
-          parsed = null;
-        }
-      }
+      const agents = await loadAgentsFromIndexOrPointers(c.env, c.req.url);
       return c.json({
         generatedAt: new Date().toISOString(),
         projectPath: snapshot.projectPath,
         workerUrl: snapshot.workerUrl,
         mode: "remote",
-        agents: parsed ? mapIndexToStudioAgents(parsed) : snapshot.agents,
+        agents,
       });
     }
     return c.json({
@@ -459,9 +557,7 @@ function createRuntimeApp() {
         versionNumber: null,
         lastRemoteHash: null,
         lastLocalHash: null,
-        workerUrl: snapshot.workerUrl
-          ? `${snapshot.workerUrl.replace(/\/$/, "")}/a/${agentName}`
-          : null,
+        workerUrl: `${new URL(c.req.url).origin.replace(/\/$/, "")}/a/${agentName}`,
         localPath: null,
         updatedAt: null,
         public: metadata.public ?? false,

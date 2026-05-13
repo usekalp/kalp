@@ -250,6 +250,98 @@ function mapIndexToStudioAgents(entries) {
   }));
 }
 
+function normalizeIndexEntries(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => (item && typeof item === "object" ? item : null))
+    .filter(Boolean)
+    .map((entry) => ({
+      name: typeof entry.name === "string" ? entry.name : "",
+      hash: typeof entry.hash === "string" ? entry.hash : undefined,
+      version: typeof entry.version === "string" ? entry.version : null,
+      versionNumber:
+        typeof entry.versionNumber === "number" ? entry.versionNumber : null,
+      updatedAt:
+        typeof entry.updatedAt === "string" ? entry.updatedAt : undefined,
+      workerUrl:
+        typeof entry.workerUrl === "string" ? entry.workerUrl : null,
+      label: typeof entry.label === "string" ? entry.label : undefined,
+      tags: Array.isArray(entry.tags)
+        ? entry.tags.filter((item) => typeof item === "string")
+        : [],
+    }))
+    .filter((entry) => entry.name.length > 0);
+}
+
+async function loadAgentsFromIndexOrPointers(env, requestUrl) {
+  const rawIndex = await env.KALP_MANIFESTS.get("agents:index");
+  if (rawIndex) {
+    try {
+      const parsed = normalizeIndexEntries(JSON.parse(rawIndex));
+      if (parsed.length > 0) return mapIndexToStudioAgents(parsed);
+    } catch {}
+  }
+
+  const pointers = [];
+  let cursor = undefined;
+  do {
+    const listed = await env.KALP_MANIFESTS.list({ cursor, limit: 1000 });
+    pointers.push(
+      ...listed.keys
+        .map((item) => item?.name || "")
+        .filter((name) => name.endsWith(":latest")),
+    );
+    cursor = listed.list_complete ? undefined : listed.cursor;
+  } while (cursor);
+
+  const agentNames = [...new Set(pointers.map((name) => name.slice(0, -7)))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+  if (agentNames.length === 0) return [];
+
+  const origin = new URL(requestUrl).origin.replace(/\/$/, "");
+  const agents = [];
+  for (const agentName of agentNames) {
+    const hash = await env.KALP_MANIFESTS.get(`${agentName}:latest`);
+    if (!hash) continue;
+
+    const manifestRaw = await env.KALP_MANIFESTS.get(`${agentName}:${hash}`);
+    let metadata = null;
+    if (manifestRaw) {
+      try {
+        const manifest = JSON.parse(manifestRaw);
+        metadata =
+          manifest && typeof manifest === "object" ? manifest.metadata : null;
+      } catch {}
+    }
+
+    agents.push({
+      name: agentName,
+      label:
+        metadata && typeof metadata.label === "string"
+          ? metadata.label
+          : undefined,
+      tags:
+        metadata &&
+        Array.isArray(metadata.tags)
+          ? metadata.tags.filter((item) => typeof item === "string")
+          : [],
+      environment: "remote",
+      status: "online",
+      hash,
+      version: null,
+      versionNumber: null,
+      lastRemoteHash: hash,
+      lastLocalHash: null,
+      workerUrl: `${origin}/a/${agentName}`,
+      localPath: null,
+      updatedAt: null,
+    });
+  }
+
+  return agents;
+}
+
 async function readLatestManifest(env, agentName) {
   const latest = await env.KALP_MANIFESTS.get(`${agentName}:latest`);
   if (!latest) return null;
@@ -462,24 +554,13 @@ app.get("/api/internal/agents", (c) => {
   const runtimeMode = inferRuntimeMode(c);
 
   if (runtimeMode === "remote") {
-    return c.env.KALP_MANIFESTS.get("agents:index").then((raw) => {
-      let parsed = null;
-      if (raw) {
-        try {
-          parsed = JSON.parse(raw);
-        } catch {
-          parsed = null;
-        }
-      }
-
+    return loadAgentsFromIndexOrPointers(c.env, c.req.url).then((agents) => {
       return c.json({
         generatedAt: new Date().toISOString(),
         projectPath: agentsSnapshot.projectPath,
         workerUrl: agentsSnapshot.workerUrl,
         mode: "remote",
-        agents: Array.isArray(parsed)
-          ? mapIndexToStudioAgents(parsed)
-          : agentsSnapshot.agents,
+        agents,
       });
     });
   }
@@ -515,9 +596,7 @@ app.get("/api/internal/agents/:agentName", async (c) => {
       versionNumber: null,
       lastRemoteHash: null,
       lastLocalHash: null,
-      workerUrl: agentsSnapshot.workerUrl
-        ? `${agentsSnapshot.workerUrl.replace(/\/$/, "")}/a/${agentName}`
-        : null,
+      workerUrl: `${new URL(c.req.url).origin.replace(/\/$/, "")}/a/${agentName}`,
       localPath: null,
       updatedAt: null,
       public: metadata.public ?? false,

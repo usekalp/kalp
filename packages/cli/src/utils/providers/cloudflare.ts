@@ -20,6 +20,24 @@ function parseNamespaceList(stdout: string): Array<{ id: string; title: string }
   return [];
 }
 
+function parseKvKeyList(stdout: string): Array<{ name: string }> {
+  const trimmed = stdout.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        const record = item as Record<string, unknown>;
+        const name = record.name;
+        return typeof name === "string" && name.length > 0 ? { name } : null;
+      })
+      .filter((item): item is { name: string } => !!item);
+  } catch {
+    return [];
+  }
+}
+
 function parseSecretsList(stdout: string): RemoteSecret[] {
   const trimmed = stdout.trim();
   if (!trimmed) return [];
@@ -319,6 +337,29 @@ export const cloudflareProvider: RuntimeProvider = {
       { cwd },
     );
     return parseNamespaceList(plain.stdout);
+  },
+  async listKeys({ cwd, configPath, prefix }) {
+    const args = [
+      "wrangler",
+      "kv",
+      "key",
+      "list",
+      "--binding",
+      "KALP_MANIFESTS",
+      "--remote",
+      "--config",
+      configPath,
+    ];
+    if (prefix && prefix.trim()) {
+      args.push("--prefix", prefix.trim());
+    }
+    const jsonAttempt = await execa("npx", [...args, "--format", "json"], {
+      cwd,
+    }).catch(() => null);
+    if (jsonAttempt) return parseKvKeyList(jsonAttempt.stdout);
+
+    const fallback = await execa("npx", args, { cwd });
+    return parseKvKeyList(fallback.stdout);
   },
 };
 

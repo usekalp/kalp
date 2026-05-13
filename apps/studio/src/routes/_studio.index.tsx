@@ -20,7 +20,7 @@ function DashboardPage() {
   })
 
   const cards = useMemo(() => agentsQuery.data?.agents ?? [], [agentsQuery.data])
-  const mode = formatRuntimeMode(agentsQuery.data?.mode ?? 'local')
+  const mode = agentsQuery.data?.mode ? formatRuntimeMode(agentsQuery.data.mode) : null
 
   return (
     <main>
@@ -28,7 +28,8 @@ function DashboardPage() {
         <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Dashboard</p>
         <h1 className="studio-metal-text mt-2 text-2xl font-semibold">Agents Command Center</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Runtime mode: <span className="font-medium text-foreground">{mode}</span>
+          Runtime mode:{' '}
+          <span className="font-medium text-foreground">{mode ?? '—'}</span>
         </p>
       </section>
 

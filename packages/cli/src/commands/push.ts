@@ -17,7 +17,10 @@ import { validateCompiledIR } from "@/utils/validate";
 import { materializeRuntime, readLocalAgentNames } from "@/utils/runtime";
 import { resolveProvider } from "@/utils/providers";
 import { exportCompiledIrForDebug } from "@/utils/ir/export";
-import { promptDeployTarget, showKalpCloudWaitlist } from "@/utils/deploy-target";
+import {
+  promptDeployTarget,
+  showKalpCloudWaitlist,
+} from "@/utils/deploy-target";
 
 const LOGO = "🦋";
 
@@ -55,8 +58,9 @@ function ensureAgentState(
     lastRemoteHash: null,
     lastPushedAt: null,
     localPath,
-    workerUrl:
-      state.workerUrl ? `${state.workerUrl.replace(/\/$/, "")}/a/${agentName}` : null,
+    workerUrl: state.workerUrl
+      ? `${state.workerUrl.replace(/\/$/, "")}/a/${agentName}`
+      : null,
   };
   state.agents[agentName] = created;
   return created;
@@ -136,13 +140,18 @@ async function pruneStaleRemoteAgents(params: {
 }): Promise<PruneResult> {
   const { cwd, wranglerConfigPath, remoteEntries, localAgentNames } = params;
   const localSet = new Set(localAgentNames);
-  const staleEntries = remoteEntries.filter((entry) => !localSet.has(entry.name));
+  const staleEntries = remoteEntries.filter(
+    (entry) => !localSet.has(entry.name),
+  );
 
   if (staleEntries.length === 0) {
     return { removedAgents: [], deletedKeys: 0 };
   }
 
-  const preview = staleEntries.slice(0, 3).map((entry) => entry.name).join(", ");
+  const preview = staleEntries
+    .slice(0, 3)
+    .map((entry) => entry.name)
+    .join(", ");
   const suffix =
     staleEntries.length > 3 ? ` and ${staleEntries.length - 3} more` : "";
   const confirmation = await p.confirm({
@@ -199,7 +208,9 @@ async function pruneStaleRemoteAgents(params: {
   await writeRemoteAgentsIndex(cwd, wranglerConfigPath, filtered);
 
   return {
-    removedAgents: staleEntries.map((entry) => entry.name).sort((a, b) => a.localeCompare(b)),
+    removedAgents: staleEntries
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b)),
     deletedKeys,
   };
 }
@@ -253,7 +264,7 @@ async function pushRemoteManifest(params: {
 }
 
 export default defineCommand({
-  meta: { name: "push", description: "Publish agent runtime version" },
+  meta: { name: "push", description: "Upload updated agents" },
   args: {
     agent: {
       type: "string",
@@ -307,7 +318,9 @@ export default defineCommand({
       });
 
       if (!state.workerUrl) {
-        const target = await promptDeployTarget("No remote runtime detected yet. Where do you want to deploy?");
+        const target = await promptDeployTarget(
+          "No remote runtime detected yet. Where do you want to deploy?",
+        );
         if (!target) {
           p.outro("Cancelled");
           return;
@@ -317,8 +330,10 @@ export default defineCommand({
           p.outro(pc.green("Got it — you'll hear from us soon."));
           return;
         }
-        p.log.warn("No .kalp/state.json found. Running initial deploy first...");
+        const s = p.spinner();
+        s.start("Running initial deploy");
         const deploy = await runInitialDeploy(cwd);
+        s.stop("Initial deploy completed");
         state = (await readProjectState(cwd)) ?? createInitialState();
         state.workerUrl = deploy.workerUrl;
         state.accountId = deploy.accountId;
@@ -328,7 +343,10 @@ export default defineCommand({
       runtime = await materializeRuntime(cwd, { mode: "remote" });
 
       if (isBulkPush) {
-        const currentIndex = await readRemoteAgentsIndex(cwd, runtime.wranglerConfigPath);
+        const currentIndex = await readRemoteAgentsIndex(
+          cwd,
+          runtime.wranglerConfigPath,
+        );
         const prune = await pruneStaleRemoteAgents({
           cwd,
           wranglerConfigPath: runtime.wranglerConfigPath,
@@ -358,7 +376,11 @@ export default defineCommand({
         spinner.start(`Compiling ${pc.cyan(agentName)}`);
         const manifest = await readAgentManifest({ cwd, agentName });
         const hash = computePushHash(manifest.ir);
-        const validation = validateCompiledIR({ agentName, ir: manifest.ir, hash });
+        const validation = validateCompiledIR({
+          agentName,
+          ir: manifest.ir,
+          hash,
+        });
         if (!validation.ok) {
           const details = (validation.errors ?? []).join(" | ");
           throw new Error(
@@ -368,7 +390,9 @@ export default defineCommand({
 
         const agentState = ensureAgentState(state, agentName, agentPath);
         const previousHash =
-          target === "local" ? agentState.lastLocalHash : agentState.lastRemoteHash;
+          target === "local"
+            ? agentState.lastLocalHash
+            : agentState.lastRemoteHash;
 
         if (previousHash === hash) {
           result.skipped += 1;
@@ -377,7 +401,7 @@ export default defineCommand({
         }
 
         if (target === "remote") {
-          spinner.message("Publishing runtime version");
+          spinner.message(`Uploading agent ${pc.cyan(agentName)} to remote runtime`);
           await pushRemoteManifest({
             cwd,
             wranglerConfigPath: runtime.wranglerConfigPath,

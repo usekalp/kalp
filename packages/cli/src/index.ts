@@ -8,7 +8,8 @@ const LOGO = "🦋";
 const COMMANDS = [
   ["create", "Add a new agent"],
   ["deploy", "Deploy your agents runtime"],
-  ["push", "Publish agent runtime version"],
+  ["push", "Upload updated agents"],
+  ["agents", "List and manage agents"],
   ["secrets", "Manage secrets"],
   ["login", "Sign in to remote runtime"],
   ["logout", "Sign out from Kalp"],
@@ -46,6 +47,7 @@ const main = defineCommand({
     create: () => import("./commands/create").then((r) => r.default),
     deploy: () => import("./commands/deploy").then((r) => r.default),
     push: () => import("./commands/push").then((r) => r.default),
+    agents: () => import("./commands/agents").then((r) => r.default),
     secrets: () => import("./commands/secrets").then((r) => r.default),
     login: () => import("./commands/login").then((r) => r.default),
     logout: () => import("./commands/logout").then((r) => r.default),

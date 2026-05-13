@@ -62,6 +62,11 @@ export interface RuntimeProvider {
     configPath: string;
     key: string;
   }): Promise<string | null>;
+  listKeys(params: {
+    cwd: string;
+    configPath: string;
+    prefix?: string;
+  }): Promise<Array<{ name: string }>>;
   listNamespaces(params: {
     cwd: string;
     configPath: string;
