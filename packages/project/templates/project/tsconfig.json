@@ -9,6 +9,11 @@
     "outDir": "dist",
     "rootDir": "."
   },
-  "include": ["agents/**/*.ts", "kalp.config.ts", "kalp.d.ts"],
+  "include": [
+    "agents/**/*.ts",
+    "kalp.config.ts",
+    ".kalp/**/*.d.ts",
+    ".kalp/generated/*.d.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

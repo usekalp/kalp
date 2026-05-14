@@ -175,7 +175,7 @@ async function resolveCustomDomains(params: {
 export const cloudflareProvider: RuntimeProvider = {
   name: "cloudflare",
   async login() {
-    await execa("npx", ["wrangler", "login"], { stdio: "inherit" });
+    await execa("npx", ["wrangler", "login"]);
   },
   async whoami() {
     const identity = await getCloudflareIdentity();

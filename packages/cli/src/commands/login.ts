@@ -6,6 +6,7 @@ import {
   type AuthConfig,
 } from "@/utils/auth";
 import { resolveProvider } from "@/utils/providers";
+import { promptDeployTarget, showKalpCloudWaitlist } from "@/utils/deploy-target";
 
 const LOGO = "🦋";
 
@@ -14,15 +15,18 @@ export default defineCommand({
   async run() {
     p.intro(`${LOGO} ${pc.bold("kalp login")}`);
 
-    const provider = resolveProvider();
-    const proceed = await p.confirm({
-      message: "Sign in to remote runtime now?",
-      initialValue: true,
-    });
-    if (p.isCancel(proceed) || !proceed) {
+    const target = await promptDeployTarget("Where do you want to sign in?");
+    if (!target) {
       p.outro("Cancelled");
       return;
     }
+
+    if (target === "kalp-cloud") {
+      showKalpCloudWaitlist();
+      return;
+    }
+
+    const provider = resolveProvider();
 
     const s = p.spinner();
     s.start("Opening sign-in flow");
