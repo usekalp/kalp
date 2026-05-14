@@ -71,20 +71,25 @@ export default defineCommand({
       return;
     }
 
-    let key = args.key?.trim();
+    let key = args._[0]?.trim() || args.key?.trim();
     if (!key) {
-      const selected = await p.select({
-        message: "Select a secret to delete",
-        options: remoteSecrets
-          .map((secret) => secret.name)
-          .sort((a, b) => a.localeCompare(b))
-          .map((name) => ({ value: name, label: name })),
+      const input = await p.text({
+        message: "Enter the name of the secret to delete",
+        placeholder: "STRIPE_SECRET_KEY",
+        validate: (v) => {
+          if (!v) return "Key is required";
+        },
       });
-      if (p.isCancel(selected)) {
+      if (p.isCancel(input)) {
         p.outro("Cancelled");
         return;
       }
-      key = String(selected);
+      key = String(input).trim();
+    }
+
+    if (key.startsWith("KALP_")) {
+      p.log.error("Secrets starting with KALP_ are reserved and cannot be deleted.");
+      process.exit(1);
     }
 
     const existsRemote = remoteSecrets.some((secret) => secret.name === key);

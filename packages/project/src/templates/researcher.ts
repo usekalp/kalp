@@ -19,6 +19,11 @@ async function generateResearcher(opts: {
   const { agentName, cwd } = opts;
   const agentDir = join(cwd, "agents", agentName);
 
+  // Derive contract name from agent name (e.g. "my-agent" -> "MyAgent")
+  const contractName = agentName
+    .replace(/-+(.)/g, (_, char: string) => char.toUpperCase())
+    .replace(/^./, (char: string) => char.toUpperCase());
+
   // Main agent file
   const agentIndex = [
     'import { defineAgent } from "@kalphq/sdk";',
@@ -27,7 +32,7 @@ async function generateResearcher(opts: {
     'import { publishToBlog } from "./steps/publish-to-blog";',
     'import { healthRoute } from "./routes/health";',
     'import { onInit } from "./hooks/onInit";',
-    'import { researchContract } from "./contract/research-contract";',
+    'import { ' + contractName + 'Contract } from "./contract/' + agentName + '-contract";',
     "",
     "/**",
     " * Researcher agent that researches topics and schedules blog posts.",
@@ -35,9 +40,9 @@ async function generateResearcher(opts: {
     "export default defineAgent({",
     '  name: "' + agentName + '",',
     '  label: "' + (opts.label ?? agentName) + '",',
-    '  description: "AI research assistant with scheduled publishing",',
+    "  description: \"AI research assistant with scheduled publishing\",",
     "",
-    "  contract: researchContract,",
+    "  contract: " + contractName + "Contract,",
     "",
     "  systemPrompt: () => {",
     '    return "You are a research assistant. Help users research topics and schedule blog posts.";',
@@ -71,7 +76,10 @@ async function generateResearcher(opts: {
 
   // Step: deep research
   const deepResearchStep = [
-    'import { defineStep, z } from "@kalphq/sdk";',
+    'import { bindContract, z } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineStep } = bindContract(" + contractName + "Contract);",
     "",
     "/**",
     " * Performs deep research on a given topic.",
@@ -104,7 +112,10 @@ async function generateResearcher(opts: {
 
   // Step: write draft
   const writeDraftStep = [
-    'import { defineStep, z } from "@kalphq/sdk";',
+    'import { bindContract, z } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineStep } = bindContract(" + contractName + "Contract);",
     "",
     "/**",
     " * Writes a polished draft from research data.",
@@ -142,7 +153,10 @@ async function generateResearcher(opts: {
 
   // Step: publish to blog
   const publishStep = [
-    'import { defineStep, z } from "@kalphq/sdk";',
+    'import { bindContract, z } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineStep } = bindContract(" + contractName + "Contract);",
     "",
     "/**",
     " * Publishes content to a blog platform.",
@@ -175,7 +189,10 @@ async function generateResearcher(opts: {
 
   // Route: health check
   const healthRoute = [
-    'import { defineRoute } from "@kalphq/sdk";',
+    'import { bindContract } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineRoute } = bindContract(" + contractName + "Contract);",
     "",
     "/**",
     " * Health check endpoint for the agent.",
@@ -184,7 +201,7 @@ async function generateResearcher(opts: {
     '  id: "health",',
     '  method: "GET",',
     '  path: "/health",',
-    "  handler: async (req, res, ctx) => {",
+    "  handler: async ({ res, ctx }) => {",
     "    res.json({",
     '      status: "ok",',
     '      agent: "' + agentName + '",',
@@ -196,13 +213,20 @@ async function generateResearcher(opts: {
 
   // Hook: onInit
   const onInitHook = [
-    'import { HandlerContext } from "@kalphq/sdk";',
+    'import { TypedKalpContext } from "@kalphq/sdk";',
+    "import { " +
+      contractName +
+      'Contract } from "../contract/' +
+      agentName +
+      '-contract";',
     "",
     "/**",
     " * Runs when the agent starts up.",
     " * Initialize any required state here.",
     " */",
-    "export async function onInit(ctx: HandlerContext): Promise<void> {",
+    "export async function onInit(ctx: TypedKalpContext<typeof " +
+      contractName +
+      "Contract>): Promise<void> {",
     "  // TODO: Load research cache, initialize connections, etc.",
     "}",
   ].join("\n");
@@ -214,7 +238,7 @@ async function generateResearcher(opts: {
     "/**",
     " * Contract for external systems to call the researcher agent.",
     " */",
-    'export const researchContract = defineContract("research", {',
+    'export const ' + contractName + 'Contract = defineContract("' + agentName + '", {',
     "  input: z.object({",
     "    topic: z.string(),",
     '    depth: z.enum(["quick", "thorough"]).default("thorough"),',
@@ -247,7 +271,7 @@ async function generateResearcher(opts: {
   await writeTemplateFile(join(agentDir, "hooks"), "onInit.ts", onInitHook);
   await writeTemplateFile(
     join(agentDir, "contract"),
-    "research-contract.ts",
+    agentName + "-contract.ts",
     contractFile,
   );
 }

@@ -43,24 +43,27 @@ export interface EmitOptions {
 
 export type InferEmitPayload<T> = T extends z.ZodTypeAny
   ? z.infer<T>
-  : T extends string
-    ? unknown
-    : unknown;
+  : unknown;
 
-export type TypedEmit<E> = E extends Record<string, unknown>
-  ? <K extends keyof E>(
-      eventName: K,
-      payload: InferEmitPayload<E[K]>,
-      options?: EmitOptions,
-    ) => void
-  : (eventName: string, payload: unknown, options?: EmitOptions) => void;
+
+export type TypedEmit<E extends Record<string, any>> = keyof E extends never
+  ? (eventName: string, payload: any, options?: EmitOptions) => void
+  : string extends keyof E
+    ? (eventName: string, payload: any, options?: EmitOptions) => void
+    : <K extends keyof E>(
+        eventName: K,
+        payload: InferEmitPayload<E[K]>,
+        options?: EmitOptions,
+      ) => void;
+
 
 /**
  * Actions primitive for orchestrating agent behavior.
  * All methods return Promises — actual resolution is handled by the runtime.
  */
-export interface KalpActions<E = undefined> {
+export interface KalpActions<E extends Record<string, any> = {}> {
   /** Execute a step or tool with automatic type inference. */
+
   run: <T extends ExecutableNode>(
     node: T,
     ...args: InputOf<T> extends never ? [] : [input: InputOf<T>]
@@ -117,7 +120,7 @@ export interface KalpActions<E = undefined> {
    * @param input - The input matching the contract's input schema.
    * @returns The output matching the contract's output schema.
    */
-  callAgent: <TContract extends AgentContract<any, any>>(
+  callAgent: <TContract extends AgentContract<any, any, any>>(
     contract: TContract,
     input: z.infer<TContract["inputSchema"]>,
   ) => Promise<z.infer<TContract["outputSchema"]>>;
@@ -157,8 +160,9 @@ export interface KalpActions<E = undefined> {
 /**
  * Type-safe actions parameterized by an agent's registered nodes.
  */
-export interface TypedActions<TNodes, E = undefined> {
+export interface TypedActions<TNodes, E extends Record<string, any> = {}> {
   run: <T extends TNodes>(
+
     node: T,
     ...args: InputOf<T> extends never ? [] : [input: InputOf<T>]
   ) => Promise<OutputOf<T>>;
@@ -175,7 +179,7 @@ export interface TypedActions<TNodes, E = undefined> {
   ) => Promise<z.infer<T>>;
   requestApproval: (reason: string, options?: AskOptions) => Promise<boolean>;
   emit: TypedEmit<E>;
-  callAgent: <TContract extends AgentContract<any, any>>(
+  callAgent: <TContract extends AgentContract<any, any, any>>(
     contract: TContract,
     input: z.infer<TContract["inputSchema"]>,
   ) => Promise<z.infer<TContract["outputSchema"]>>;

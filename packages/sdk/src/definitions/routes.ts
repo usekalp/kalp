@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Route, RouteConfig } from "@/nodes";
+import type { AgentContract } from "@/contracts/types";
 import { captureFilePath } from "@/utils";
 
 /**
@@ -41,7 +42,8 @@ import { captureFilePath } from "@/utils";
 export function defineRoute<
   I extends z.ZodTypeAny | undefined = undefined,
   R = unknown,
->(config: RouteConfig<I, R>): Route<I, R> {
+  TContract extends AgentContract<any, any, any> | undefined = undefined,
+>(config: RouteConfig<I, R, TContract>): Route<I, R, TContract> {
   return {
     ...config,
     kind: "route",

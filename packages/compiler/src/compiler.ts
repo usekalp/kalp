@@ -205,8 +205,8 @@ export async function buildAgent(
           | { type: "schema"; schema: unknown }
           | { type: "description"; description: string }
         >;
-        public?: boolean;
-        routesPublic?: Record<string, boolean | undefined>;
+        skipAuth?: boolean;
+        routesSkipAuth?: Record<string, boolean | undefined>;
         listeners?: Array<{
           sourceAgentId: string;
           event: string;
@@ -241,9 +241,12 @@ export async function buildAgent(
         tags: Array.isArray(agentConfig.tags)
           ? [...agentConfig.tags]
           : undefined,
-        emits: serializeEmits(agentConfig.name, agentConfig.emits),
-        public: typeof agentConfig.public === "boolean" ? agentConfig.public : undefined,
-        routesPublic: {},
+        emits: serializeEmits(agentConfig.name, agentConfig.contract?.emits),
+        skipAuth:
+          typeof agentConfig.skipAuth === "boolean"
+            ? agentConfig.skipAuth
+            : undefined,
+        routesSkipAuth: {},
         listeners: [],
         systemPrompt: agentConfig.systemPrompt
           ? typeof agentConfig.systemPrompt === "function"
@@ -359,9 +362,9 @@ export async function buildAgent(
         }
 
         const routeKey = `${route.method}:${route.path}`;
-        if (typeof route.public === "boolean") {
-          ir.metadata.routesPublic ??= {};
-          ir.metadata.routesPublic[routeKey] = route.public;
+        if (typeof route.skipAuth === "boolean") {
+          ir.metadata.routesSkipAuth ??= {};
+          ir.metadata.routesSkipAuth[routeKey] = route.skipAuth;
         }
 
         const bundleRes = await bundleHandler(
@@ -435,8 +438,11 @@ export async function buildAgent(
       }
     }
 
-    if (ir.metadata.routesPublic && Object.keys(ir.metadata.routesPublic).length === 0) {
-      delete ir.metadata.routesPublic;
+    if (
+      ir.metadata.routesSkipAuth &&
+      Object.keys(ir.metadata.routesSkipAuth).length === 0
+    ) {
+      delete ir.metadata.routesSkipAuth;
     }
     if (ir.metadata.listeners && ir.metadata.listeners.length === 0) {
       delete ir.metadata.listeners;

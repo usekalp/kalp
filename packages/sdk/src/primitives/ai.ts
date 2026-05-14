@@ -16,32 +16,104 @@ export interface KalpHistoryMessage {
   timestamp: number;
 }
 
-export type AIProvider = "openai" | "anthropic" | "openrouter" | "custom";
+export type AIProvider =
+  | "openai"
+  | "anthropic"
+  | "openrouter"
+  | "cloudflare"
+  | "vercel"
+  | "custom";
 
 export type ProviderModelMap = {
-  openai: "gpt-4o" | "gpt-4o-mini" | "o1-preview" | "o1-mini";
-  anthropic: "claude-3-5-sonnet-latest" | "claude-3-haiku-20240307";
+  openai:
+    | "gpt-5.5"
+    | "gpt-5.5-pro"
+    | "gpt-5.4"
+    | "gpt-5.4-pro"
+    | "gpt-5.4-mini"
+    | "gpt-5.4-nano"
+    | "gpt-5-mini"
+    | "gpt-5-nano"
+    | "gpt-5"
+    | "gpt-5.3-codex"
+    | "gpt-5.2-codex"
+    | "gpt-5.2"
+    | "gpt-5.1"
+    | "gpt-5.2-pro"
+    | "gpt-5-pro"
+    | "gpt-4.1"
+    | "gpt-4.1-mini"
+    | "o3-deep-research"
+    | "o3-pro"
+    | "o3"
+    | "o3-mini"
+    | "o4-mini"
+    | "o1-pro"
+    | "o1"
+    | "o1-mini"
+    | "o1-preview"
+    | "gpt-4o"
+    | "gpt-4o-mini"
+    | "gpt-4-turbo"
+    | "gpt-3.5-turbo"
+    | "gpt-4"
+    | "gpt-oss-120b"
+    | "gpt-oss-20b";
+  anthropic:
+    | "claude-opus-4.7"
+    | "claude-opus-4.6"
+    | "claude-opus-4.5"
+    | "claude-opus-4.1"
+    | "claude-opus-4"
+    | "claude-opus-3"
+    | "claude-sonnet-4.6"
+    | "claude-sonnet-4.5"
+    | "claude-sonnet-4"
+    | "claude-sonnet-3.7"
+    | "claude-haiku-4.5"
+    | "claude-haiku-3.5";
   openrouter:
+    | "openai/gpt-4o"
     | "openai/gpt-4o-mini"
     | "anthropic/claude-3.5-sonnet"
+    | "anthropic/claude-3-opus"
     | (string & {});
+  cloudflare: string & {};
+  vercel: string & {};
   custom: string & {};
 };
 
-type ConfiguredProvider = KalpAIEnvironment["provider"] extends AIProvider
-  ? KalpAIEnvironment["provider"]
+type ConfiguredProvider = KalpAIEnvironment extends { provider: infer P }
+  ? P extends AIProvider
+    ? P
+    : AIProvider
   : AIProvider;
 
-type ConfiguredCustomModels = KalpAIEnvironment["customModels"] extends
-  readonly string[]
-  ? KalpAIEnvironment["customModels"][number]
+type ConfiguredCustomModels = KalpAIEnvironment extends {
+  customModels: infer M;
+}
+  ? M extends readonly string[]
+    ? M[number]
+    : never
   : never;
 
 export type ProviderName = AIProvider;
 
-export type ConfiguredModel = ConfiguredProvider extends "custom"
-  ? ConfiguredCustomModels | ProviderModelMap["custom"]
-  : ProviderModelMap[ConfiguredProvider];
+export type ConfiguredModel = ConfiguredProvider extends infer P
+  ? P extends "openai"
+    ? ProviderModelMap["openai"]
+    : P extends "anthropic"
+      ? ProviderModelMap["anthropic"]
+      : P extends "openrouter"
+        ? ProviderModelMap["openrouter"]
+        : P extends "cloudflare"
+          ? string & {}
+          : P extends "vercel"
+            ? string & {}
+            : P extends "custom"
+              ? ConfiguredCustomModels | (string & {})
+              : (string & {})
+  : never;
 
 export type KalpModelId = ConfiguredModel;
 

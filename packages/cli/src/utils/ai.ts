@@ -3,12 +3,20 @@ import { constants } from "node:fs";
 import { join } from "node:path";
 import { createJiti } from "jiti";
 
-export type AIProvider = "openai" | "anthropic" | "openrouter" | "custom";
+export type AIProvider =
+  | "openai"
+  | "anthropic"
+  | "openrouter"
+  | "cloudflare"
+  | "vercel"
+  | "custom";
 
 const PROVIDER_SECRET_MAP: Record<AIProvider, string> = {
   openai: "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
+  cloudflare: "CLOUDFLARE_API_KEY",
+  vercel: "VERCEL_API_KEY",
   custom: "CUSTOM_AI_API_KEY",
 };
 

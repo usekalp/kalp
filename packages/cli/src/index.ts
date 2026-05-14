@@ -11,7 +11,8 @@ const COMMANDS = [
   ["push", "Upload updated agents"],
   ["agents", "List and manage agents"],
   ["secrets", "Manage secrets"],
-  ["mcp", "Generate MCP types"],
+  ["generate", "Sync project state (types, MCP, etc.)"],
+  ["mcp", "Manage MCP tool types"],
   ["login", "Sign in to remote runtime"],
   ["logout", "Sign out from Kalp"],
   ["dev", "Run Worker + Studio locally"],
@@ -51,11 +52,12 @@ const main = defineCommand({
     agents: () => import("./commands/agents").then((r) => r.default),
     secrets: () => import("./commands/secrets").then((r) => r.default),
     mcp: () => import("./commands/mcp").then((r) => r.default),
+    generate: () => import("./commands/generate").then((r) => r.default),
     login: () => import("./commands/login").then((r) => r.default),
     logout: () => import("./commands/logout").then((r) => r.default),
     dev: () => import("./commands/dev").then((r) => r.default),
   },
-  run({ args }) {
+  async run({ args }) {
     const firstArg = process.argv[2];
 
     if (args.help) {
@@ -75,4 +77,25 @@ const main = defineCommand({
   },
 });
 
-runMain(main);
+// Load .env if it exists in the current directory
+async function bootstrap() {
+  try {
+    const { readDotEnv } = await import("./utils/ai");
+    const cwd = process.cwd();
+    const env = await readDotEnv(cwd);
+    if (Object.keys(env).length > 0) {
+      for (const [key, value] of Object.entries(env)) {
+        if (!(key in process.env)) {
+          process.env[key] = value;
+        }
+      }
+    }
+  } catch {
+    // Ignore errors during bootstrap
+  }
+}
+
+// Ensure bootstrap runs before runMain
+bootstrap().then(() => {
+  runMain(main);
+});

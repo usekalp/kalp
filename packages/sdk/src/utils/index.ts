@@ -4,5 +4,5 @@
  * @module
  */
 
-export type { InputOf, OutputOf } from "@/utils/types";
+export type { InputOf, OutputOf, Simplify } from "@/utils/types";
 export { extractFilePath, captureFilePath } from "@/utils/stack";

@@ -51,7 +51,7 @@ export default defineCommand({
       process.exit(1);
     });
 
-    let key = args.key?.trim();
+    let key = args._[0]?.trim() || args.key?.trim();
     let value = args.value;
 
     if (!key) {
@@ -62,6 +62,9 @@ export default defineCommand({
           if (!v) return "Key is required";
           if (!/^[A-Z_][A-Z0-9_]*$/.test(v)) {
             return "Key must be UPPER_SNAKE_CASE";
+          }
+          if (v.startsWith("KALP_")) {
+            return "Secrets starting with KALP_ are reserved";
           }
         },
       });
@@ -74,6 +77,11 @@ export default defineCommand({
 
     if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
       p.log.error("Invalid key. Use UPPER_SNAKE_CASE.");
+      process.exit(1);
+    }
+
+    if (key.startsWith("KALP_")) {
+      p.log.error("Secrets starting with KALP_ are reserved and cannot be added.");
       process.exit(1);
     }
 

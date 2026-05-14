@@ -420,6 +420,8 @@ export const IANA_TIMEZONES = [
   "Pacific/Truk",
   "Pacific/Wake",
   "Pacific/Wallis",
+  "UTC",
+  "GMT",
 ] as const;
 
-export type IanaTimezone = (typeof IANA_TIMEZONES)[number];
+export type IanaTimezone = (typeof IANA_TIMEZONES)[number] | (string & {});

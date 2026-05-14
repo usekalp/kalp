@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { build } from "esbuild";
 import {
   access,
   cp,
@@ -414,6 +415,26 @@ export async function materializeRuntime(
   await cp(template.studioTemplateDir, studioDir, { recursive: true });
   await cp(template.workerEntryPath, workerEntrypointPath);
   await ensureStudioIndex(studioDir);
+
+  // Bundle worker-entry.js to bake in dependencies (hono, jose, etc.)
+  // We mark generated/dynamic files as external so they are resolved at runtime in the same dir.
+  await build({
+    entryPoints: [workerEntrypointPath],
+    bundle: true,
+    outfile: workerEntrypointPath,
+    allowOverwrite: true,
+    platform: "browser",
+    format: "esm",
+    target: "es2022",
+    external: [
+      "cloudflare:workers",
+      "./agents.snapshot.json",
+      "./identity.config.json",
+      "./identity.map.mjs",
+    ],
+    logLevel: "error",
+  });
+
   await writeRuntimeAgentsSnapshot({ cwd, runtimeDir, mode });
   const identity = await materializeRuntimeIdentity({ cwd, runtimeDir });
 

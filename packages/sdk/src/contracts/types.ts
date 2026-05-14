@@ -1,5 +1,6 @@
 import { AgentId } from "@/identity";
 import type { z } from "zod";
+import type { Simplify } from "@/utils/types";
 
 /**
  * Contract types for type-safe RPC between agents.
@@ -14,11 +15,11 @@ import type { z } from "zod";
  * Create contracts with {@link defineContract} in a shared file,
  * then import them in both caller and receiver agents.
  */
-export interface AgentContract<
+export type AgentContract<
   TInput extends z.ZodTypeAny = z.ZodTypeAny,
   TOutput extends z.ZodTypeAny = z.ZodTypeAny,
-  TEmits extends Record<string, z.ZodTypeAny | string> | undefined = undefined,
-> {
+  TEmits extends Record<string, any> = {},
+> = Simplify<{
   readonly kind: "contract";
   readonly agentId: AgentId;
   readonly inputSchema: TInput;
@@ -28,7 +29,12 @@ export interface AgentContract<
     output: TOutput;
   };
   readonly emits?: TEmits;
-}
+}>;
+
+/**
+ * Extracts the emission schemas from an AgentContract.
+ */
+export type EmitsOf<T> = T extends AgentContract<any, any, infer E> ? E : {};
 
 /**
  * Defines a contract for an agent that can be called via RPC.
@@ -48,7 +54,7 @@ export interface AgentContract<
 export function defineContract<
   const TInput extends z.ZodTypeAny,
   const TOutput extends z.ZodTypeAny,
-  const TEmits extends Record<string, z.ZodTypeAny | string> | undefined = undefined,
+  const TEmits extends Record<string, any> = {},
 >(
   agentId: string,
   contract: {

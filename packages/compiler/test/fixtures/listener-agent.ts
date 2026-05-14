@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineAgent, defineContract } from "@kalphq/sdk";
+import { defineAgent, defineContract, defineListener } from "@kalphq/sdk";
 
 const sourceContract = defineContract("source-agent", {
   input: z.object({}),
@@ -11,17 +11,17 @@ const sourceContract = defineContract("source-agent", {
   },
 });
 
-export const onTicketCreated = {
+export const onTicketCreated = defineListener({
   source: sourceContract,
   event: "ticket_created",
   async handler(payload) {
     void payload.ticketId;
   },
-};
+});
 
 export default defineAgent({
   name: "listener-agent",
-  public: true,
+  skipAuth: true,
   listeners: [onTicketCreated],
   async onMessage() {
     return { text: "ok" };

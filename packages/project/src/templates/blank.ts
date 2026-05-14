@@ -18,6 +18,11 @@ async function generateBlank(opts: {
 }): Promise<void> {
   const { agentName, cwd } = opts;
   const agentDir = join(cwd, "agents", agentName);
+ 
+  // Derive contract name from agent name (e.g. "my-agent" -> "MyAgent")
+  const contractName = agentName
+    .replace(/-+(.)/g, (_, char: string) => char.toUpperCase())
+    .replace(/^./, (char: string) => char.toUpperCase());
 
   // Main agent file
   const agentIndex = [
@@ -112,7 +117,7 @@ async function generateBlank(opts: {
     '  id: "health",',
     '  method: "GET",',
     '  path: "/health",',
-    "  handler: async (req, res, ctx) => {",
+    "  handler: async ({ res, ctx }) => {",
     "    res.json({",
     '      status: "ok",',
     '      agent: "' + agentName + '",',
@@ -124,13 +129,14 @@ async function generateBlank(opts: {
 
   // Hook: onInit
   const onInitHook = [
-    'import { HandlerContext } from "@kalphq/sdk";',
+    'import { TypedKalpContext } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
     "",
     "/**",
     " * Runs when the agent starts up.",
     " * Initialize any required state here.",
     " */",
-    "export async function onInit(ctx: HandlerContext): Promise<void> {",
+    'export async function onInit(ctx: TypedKalpContext<typeof ' + contractName + 'Contract>): Promise<void> {',
     "  // TODO: Add initialization logic",
     "  // Example: Load configuration, warm up caches, connect to databases",
     "}",
@@ -138,13 +144,14 @@ async function generateBlank(opts: {
 
   // Hook: onTick
   const onTickHook = [
-    'import { HandlerContext } from "@kalphq/sdk";',
+    'import { TypedKalpContext } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
     "",
     "/**",
     " * Runs periodically to perform background tasks.",
     " * Configure the schedule in kalp.config.ts",
     " */",
-    "export async function onTick(ctx: HandlerContext): Promise<void> {",
+    'export async function onTick(ctx: TypedKalpContext<typeof ' + contractName + 'Contract>): Promise<void> {',
     "  // TODO: Add periodic task logic",
     "}",
   ].join("\n");

@@ -7,6 +7,17 @@
  * @module
  */
 
-export type { KalpProjectConfig, McpServerConfig } from "@/project/types";
+export type {
+  KalpProjectConfig,
+  McpServerInput,
+  McpAuthInput,
+  NormalizedMcpServer,
+} from "@/project/types";
+export { env } from "@/project/types";
 export { defineConfig } from "@/project/config";
 export type { KalpAIEnvironment } from "@/project/ai-env";
+export {
+  normalizeMcpServer,
+  collectMcpSecretRequirements,
+  extractEnvName,
+} from "@/project/normalize";

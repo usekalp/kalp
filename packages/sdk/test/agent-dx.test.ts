@@ -7,7 +7,6 @@ import {
   everyDayAt12Pm,
   cron,
   type CronExpression,
-  type HandlerContext,
 } from "../src";
 
 describe("agent DX typing", () => {
@@ -29,10 +28,6 @@ describe("agent DX typing", () => {
       opportunityId: z.string(),
       success: z.boolean(),
     });
-    type RevenueEmits = NonNullable<typeof RevenueContract.emits> & {
-      handoff_completed: typeof handoffCompletedSchema;
-    };
-
     const agent = defineAgent({
       name: "revenue-agent",
       contract: RevenueContract,
@@ -46,13 +41,10 @@ describe("agent DX typing", () => {
           handler: async () => {},
         },
       ],
-      async onInit(ctx: HandlerContext<RevenueEmits>) {
+      async onInit(ctx) {
         ctx.actions.emit("approval_requested", { opportunityId: "opp_1" });
       },
-      async onCall(
-        input: z.infer<typeof RevenueContract.inputSchema>,
-        ctx: HandlerContext<RevenueEmits>,
-      ) {
+      async onCall(input, ctx) {
         expectTypeOf(input).toEqualTypeOf<{ opportunityId: string }>();
         ctx.actions.emit("approval_requested", {
           opportunityId: input.opportunityId,
@@ -61,7 +53,9 @@ describe("agent DX typing", () => {
           opportunityId: input.opportunityId,
           success: true,
         });
+        // @ts-expect-error unknown event must fail
         ctx.actions.emit("unknown_event", {});
+        // @ts-expect-error payload mismatch must fail
         ctx.actions.emit("approval_requested", { bad: true });
 
         return { accepted: true };

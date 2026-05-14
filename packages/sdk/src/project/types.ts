@@ -6,13 +6,57 @@ import type { AIProvider, ProviderModelMap } from "@/primitives/ai";
  *
  * @module
  */
-export interface McpServerConfig {
-  /** URL of the MCP server. */
+/**
+ * MCP (Model Context Protocol) server configuration.
+ */
+
+/**
+ * Marker for environment variables in config.
+ * Format: {{env:NAME}}
+ */
+export const ENV_MARKER_PREFIX = "{{env:";
+export const ENV_MARKER_SUFFIX = "}}";
+
+/**
+ * Helper to reference environment variables in kalp.config.ts.
+ * Returns a marker string that the CLI can identify to track secret requirements.
+ */
+export const env = (name: string) => `${ENV_MARKER_PREFIX}${name}${ENV_MARKER_SUFFIX}` as unknown as string;
+
+export type McpAuthInput =
+  | string // shorthand for { type: "bearer", token: env(string) }
+  | {
+      type: "bearer";
+      token: string;
+    }
+  | {
+      type: "headers";
+      headers: Record<string, string>;
+    };
+
+export type McpServerInput =
+  | string // shorthand for { url: string, transport: "sse" }
+  | {
+      url: string;
+      transport?: "sse" | "stdio";
+      auth?: McpAuthInput;
+    };
+
+/**
+ * Strict internal shape for a normalized MCP server.
+ */
+export interface NormalizedMcpServer {
   url: string;
-  /** Transport protocol for communication. */
   transport: "sse" | "stdio";
-  /** Authentication configuration. */
-  auth?: { token: string } | { headers: Record<string, string> };
+  auth?: {
+    type: "bearer";
+    token?: string;
+    tokenEnv?: string;
+  } | {
+    type: "headers";
+    headers: Record<string, string>;
+    headersEnv: Record<string, string>; // Maps header name to env var name if applicable
+  };
 }
 
 /**
@@ -102,13 +146,13 @@ export interface KalpProjectConfig<
    * mcp: {
    *   github: {
    *     url: "https://mcp.github.com/sse",
-   *     transport: "sse",
-   *     auth: { token: process.env.GITHUB_TOKEN }
-   *   }
+   *     auth: env("GITHUB_TOKEN")
+   *   },
+   *   wikipedia: "https://mcp.deepwiki.com/mcp"
    * }
    * ```
    */
-  mcp?: Record<string, McpServerConfig>;
+  mcp?: Record<string, McpServerInput>;
 
   /**
    * AI provider configuration used by primitives for model typing and defaults.

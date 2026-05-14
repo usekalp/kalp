@@ -4,5 +4,5 @@
  * @module
  */
 
-export type { AgentContract } from "@/contracts/types";
+export type { AgentContract, EmitsOf } from "@/contracts/types";
 export { defineContract } from "@/contracts/types";

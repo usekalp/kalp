@@ -26,3 +26,11 @@ export type OutputOf<T> =
     : T extends Tool<any, infer R>
       ? R
       : never;
+
+/**
+ * Flattens complex intersections and types into a simple object structure.
+ * This is crucial for IDE performance and readable hover types.
+ */
+export type Simplify<T> = {
+  [K in keyof T]: T[K];
+} & {};

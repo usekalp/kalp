@@ -1,5 +1,6 @@
 import type { z } from "zod";
-import type { HandlerContext } from "@/context/types";
+import type { KalpContext, TypedKalpContext } from "@/context/types";
+import type { AgentContract } from "@/contracts/types";
 
 /**
  * Node types for Steps, Tools, and Routes.
@@ -57,11 +58,15 @@ export type AnyTool = Tool<z.ZodTypeAny, unknown>;
 export interface Route<
   I extends z.ZodTypeAny | undefined = undefined,
   R = unknown,
+  TContract extends AgentContract<any, any, any> | undefined = undefined,
 > extends Node {
   kind: "route";
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
-  public?: boolean;
+  /**
+   * Disables authentication enforcement for this specific route.
+   */
+  skipAuth?: boolean;
   inputSchema?: I;
 }
 
@@ -71,8 +76,14 @@ export interface Route<
 export type StepConfig<
   I extends z.ZodTypeAny = z.ZodTypeAny,
   O extends z.ZodTypeAny = z.ZodTypeAny,
+  TContract extends AgentContract<any, any, any> | undefined = undefined,
 > = Omit<Step<I, O>, "kind"> & {
-  handler: (input: z.infer<I>, context: HandlerContext) => Promise<z.infer<O>>;
+  handler: (
+    input: z.infer<I>,
+    context: TContract extends AgentContract<any, any, any>
+      ? TypedKalpContext<TContract>
+      : KalpContext,
+  ) => Promise<z.infer<O>>;
 };
 
 /**
@@ -81,8 +92,14 @@ export type StepConfig<
 export type ToolConfig<
   I extends z.ZodTypeAny = z.ZodTypeAny,
   R = unknown,
+  TContract extends AgentContract<any, any, any> | undefined = undefined,
 > = Omit<Tool<I, R>, "kind"> & {
-  handler: (input: z.infer<I>, context: HandlerContext) => Promise<R>;
+  handler: (
+    input: z.infer<I>,
+    context: TContract extends AgentContract<any, any, any>
+      ? TypedKalpContext<TContract>
+      : KalpContext,
+  ) => Promise<R>;
 };
 
 /**
@@ -91,15 +108,19 @@ export type ToolConfig<
 export type RouteConfig<
   I extends z.ZodTypeAny | undefined = undefined,
   R = unknown,
-> = Omit<Route<I, R>, "kind"> & {
-  handler: (
-    req: Request,
+  TContract extends AgentContract<any, any, any> | undefined = undefined,
+> = Omit<Route<I, R, TContract>, "kind"> & {
+  handler: (args: {
+    req: Request;
     res: {
       status: (code: number) => { json: (data: R) => void };
       json: (data: R) => void;
-    },
-    context: HandlerContext,
-  ) => Promise<R> | void | Promise<void>;
+    };
+    body: I extends z.ZodTypeAny ? z.infer<I> : undefined;
+    ctx: TContract extends AgentContract<any, any, any>
+      ? TypedKalpContext<TContract>
+      : KalpContext;
+  }) => Promise<R> | void | Promise<void>;
 };
 
 /** Nodes that can be passed to `actions.run()`. */

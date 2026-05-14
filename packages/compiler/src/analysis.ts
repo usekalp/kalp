@@ -127,22 +127,37 @@ export function validateIR(ir: any): { valid: boolean; errors: string[] } {
         }
       }
     }
-    if (ir.metadata.public !== undefined && typeof ir.metadata.public !== "boolean") {
-      errors.push("IR metadata 'public' must be a boolean when provided.");
+    if (
+      ir.metadata.skipAuth !== undefined &&
+      typeof ir.metadata.skipAuth !== "boolean"
+    ) {
+      errors.push("IR metadata 'skipAuth' must be a boolean when provided.");
     }
-    if (ir.metadata.routesPublic !== undefined) {
-      if (!ir.metadata.routesPublic || typeof ir.metadata.routesPublic !== "object") {
-        errors.push("IR metadata 'routesPublic' must be an object when provided.");
+
+    if (ir.metadata.routesSkipAuth !== undefined) {
+      if (
+        !ir.metadata.routesSkipAuth ||
+        typeof ir.metadata.routesSkipAuth !== "object"
+      ) {
+        errors.push(
+          "IR metadata 'routesSkipAuth' must be an object when provided.",
+        );
       } else {
-        for (const [routeKey, routePublic] of Object.entries(ir.metadata.routesPublic)) {
-          if (routePublic !== undefined && typeof routePublic !== "boolean") {
+        for (const [routeKey, routeSkipAuth] of Object.entries(
+          ir.metadata.routesSkipAuth,
+        )) {
+          if (
+            routeSkipAuth !== undefined &&
+            typeof routeSkipAuth !== "boolean"
+          ) {
             errors.push(
-              `IR metadata routesPublic.${routeKey} must be boolean or undefined.`,
+              `IR metadata routesSkipAuth.${routeKey} must be boolean or undefined.`,
             );
           }
         }
       }
     }
+
     if (ir.metadata.listeners !== undefined) {
       if (!Array.isArray(ir.metadata.listeners)) {
         errors.push("IR metadata 'listeners' must be an array when provided.");

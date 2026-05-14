@@ -9,11 +9,16 @@ async function generateOpsRevenue(opts: {
 }): Promise<void> {
   const { agentName, cwd } = opts;
   const agentDir = join(cwd, "agents", agentName);
+ 
+  // Derive contract name from agent name (e.g. "my-agent" -> "MyAgent")
+  const contractName = agentName
+    .replace(/-+(.)/g, (_, char: string) => char.toUpperCase())
+    .replace(/^./, (char: string) => char.toUpperCase());
   const label = opts.label ?? agentName;
 
   const agentIndex = [
-    'import { defineAgent } from "@kalphq/sdk";',
-    'import { revenueContract } from "./contract/revenue-contract";',
+    'import { defineAgent, everySixHours } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "./contract/' + agentName + '-contract";',
     'import { approvalListener } from "./listeners/approval-listener";',
     'import { onInit } from "./hooks/on-init";',
     'import { onTick } from "./hooks/on-tick";',
@@ -31,22 +36,17 @@ async function generateOpsRevenue(opts: {
     '  description: "Revenue operations agent for pipeline qualification and handoff",',
     '  systemPrompt: "You are a revenue operations specialist focused on qualification quality and safe handoff.",',
     '  tags: ["ops", "revenue", "pipeline", "handoff"],',
-    "  public: false,",
-    "  contract: revenueContract,",
+    "  skipAuth: false,",
+    "  contract: " + contractName + "Contract,",
     "  listeners: [approvalListener],",
     "  routes: [intakeRoute, adminRoute],",
     "  cron: [",
     "    {",
-    '      expression: "0 */6 * * *",',
+    "      expression: everySixHours,",
     "      handler: dailyPipelineScan,",
     '      timezone: "UTC",',
     "    },",
     "  ],",
-    "  emits: {",
-    '    opportunity_scored: "Opportunity score payload",',
-    '    approval_requested: "Approval request payload",',
-    '    handoff_completed: "Handoff payload",',
-    "  },",
     "",
     "  onInit,",
     "  onTick,",
@@ -91,7 +91,10 @@ async function generateOpsRevenue(opts: {
   ].join("\n");
 
   const scoreStep = [
-    'import { defineStep, z } from "@kalphq/sdk";',
+    'import { bindContract, z } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineStep } = bindContract(" + contractName + "Contract);",
     "",
     "export const scoreOpportunity = defineStep({",
     '  id: "score_opportunity",',
@@ -122,7 +125,10 @@ async function generateOpsRevenue(opts: {
   ].join("\n");
 
   const riskStep = [
-    'import { defineStep, z } from "@kalphq/sdk";',
+    'import { bindContract, z } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineStep } = bindContract(" + contractName + "Contract);",
     "",
     "export const riskGate = defineStep({",
     '  id: "risk_gate",',
@@ -148,7 +154,10 @@ async function generateOpsRevenue(opts: {
   ].join("\n");
 
   const draftStep = [
-    'import { defineStep, z } from "@kalphq/sdk";',
+    'import { bindContract, z } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineStep } = bindContract(" + contractName + "Contract);",
     "",
     "export const draftProposal = defineStep({",
     '  id: "draft_proposal",',
@@ -179,7 +188,10 @@ async function generateOpsRevenue(opts: {
   ].join("\n");
 
   const lookupTool = [
-    'import { defineTool, z } from "@kalphq/sdk";',
+    'import { bindContract, z } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineTool } = bindContract(" + contractName + "Contract);",
     "",
     "export const lookupAccountSignals = defineTool({",
     '  id: "lookup_account_signals",',
@@ -201,31 +213,37 @@ async function generateOpsRevenue(opts: {
   ].join("\n");
 
   const intakeRoute = [
-    'import { defineRoute } from "@kalphq/sdk";',
+    'import { bindContract, z } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineRoute } = bindContract(" + contractName + "Contract);",
     "",
     "export const intakeRoute = defineRoute({",
     '  id: "ops_intake",',
     '  method: "POST",',
     '  path: "/webhooks/intake",',
-    "  public: true,",
+    "  skipAuth: true,",
+    "  inputSchema: z.any(),",
     "",
-    "  async handler(req, res) {",
-    "    const body = await req.json();",
+    "  async handler({ res, body }) {",
     "    res.json({ ok: true, received: body });",
     "  },",
     "});",
   ].join("\n");
 
   const adminRoute = [
-    'import { defineRoute } from "@kalphq/sdk";',
+    'import { bindContract } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineRoute } = bindContract(" + contractName + "Contract);",
     "",
     "export const adminRoute = defineRoute({",
     '  id: "ops_admin",',
     '  method: "GET",',
     '  path: "/admin/status",',
-    "  public: false,",
+    "  skipAuth: true,",
     "",
-    "  async handler(_req, res, ctx) {",
+    "  async handler({ res, ctx }) {",
     "    if (!ctx.auth) return res.status(401).json({ error: 'Unauthorized' });",
     "    res.json({ ok: true, userId: ctx.auth.userId });",
     "  },",
@@ -233,17 +251,19 @@ async function generateOpsRevenue(opts: {
   ].join("\n");
 
   const onInitHook = [
-    "import { HandlerContext } from '@kalphq/sdk';",
+    'import { TypedKalpContext } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
     "",
-    "export async function onInit(ctx: HandlerContext): Promise<void> {",
+    "export async function onInit(ctx: TypedKalpContext<typeof " + contractName + "Contract>): Promise<void> {",
     "  await ctx.storage.put('ops:initializedAt', ctx.date.toISOString());",
     "}",
   ].join("\n");
 
   const onTickHook = [
-    "import { HandlerContext } from '@kalphq/sdk';",
+    'import { TypedKalpContext } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
     "",
-    "export async function onTick(ctx: HandlerContext): Promise<void> {",
+    "export async function onTick(ctx: TypedKalpContext<typeof " + contractName + "Contract>): Promise<void> {",
     "  const ticks = (await ctx.storage.get('ops:tickCount')) ?? 0;",
     "  await ctx.storage.put('ops:tickCount', Number(ticks) + 1);",
     "}",
@@ -257,8 +277,10 @@ async function generateOpsRevenue(opts: {
   ].join("\n");
 
   const listenerFile = [
-    'import { defineListener } from "@kalphq/sdk";',
-    'import { approvalContract } from "../contract/revenue-contract";',
+    'import { bindContract } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract, approvalContract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineListener } = bindContract(" + contractName + "Contract);",
     "",
     "export const approvalListener = defineListener({",
     "  source: approvalContract,",
@@ -273,7 +295,7 @@ async function generateOpsRevenue(opts: {
   const contract = [
     'import { defineContract, z } from "@kalphq/sdk";',
     "",
-    "export const revenueContract = defineContract('revenue-ops', {",
+    'export const ' + contractName + 'Contract = defineContract("' + agentName + '", {',
     "  input: z.object({",
     "    action: z.string(),",
     "    payload: z.record(z.unknown()).optional(),",
@@ -351,7 +373,7 @@ async function generateOpsRevenue(opts: {
   );
   await writeTemplateFile(
     join(agentDir, "contract"),
-    "revenue-contract.ts",
+    agentName + "-contract.ts",
     contract,
   );
 }

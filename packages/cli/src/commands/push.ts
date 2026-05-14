@@ -22,6 +22,11 @@ import {
   promptDeployTarget,
   showKalpCloudWaitlist,
 } from "@/utils/deploy-target";
+import { loadProjectConfig } from "@/utils/project-config";
+import {
+  collectMcpSecretRequirements,
+  type KalpProjectConfig,
+} from "@kalphq/sdk";
 
 const LOGO = "🦋";
 
@@ -279,6 +284,13 @@ export default defineCommand({
       required: false,
       default: false,
     },
+    strictSecrets: {
+      type: "boolean",
+      description:
+        "Fail if required MCP secrets are missing from remote runtime",
+      required: false,
+      default: false,
+    },
   },
   async run({ args }) {
     const cwd = process.cwd();
@@ -344,6 +356,42 @@ export default defineCommand({
 
       runtime = await materializeRuntime(cwd, { mode: "remote" });
 
+      // Validate MCP Secrets
+      const { raw: config } = await loadProjectConfig(cwd);
+      const requiredMcpSecrets = collectMcpSecretRequirements(
+        config as unknown as KalpProjectConfig,
+      );
+      if (requiredMcpSecrets.length > 0) {
+        const provider = resolveProvider();
+        const remoteSecrets = await provider
+          .listSecrets({ cwd, configPath: runtime.wranglerConfigPath })
+          .catch(() => []);
+        const remoteSecretNames = new Set(remoteSecrets.map((s) => s.name));
+        const missing = requiredMcpSecrets.filter(
+          (s) => !remoteSecretNames.has(s),
+        );
+
+        if (missing.length > 0) {
+          p.log.warn(
+            `${pc.yellow("⚠️  Missing MCP secrets detected in remote runtime:")}\n` +
+              missing.map((m) => `   - ${pc.bold(m)}`).join("\n"),
+          );
+          if (args.strictSecrets) {
+            p.log.error(
+              pc.red(
+                "Push aborted due to missing required secrets (--strict-secrets is enabled).",
+              ),
+            );
+            process.exit(1);
+          }
+          p.log.info(
+            pc.dim(
+              "Deployment will continue. You can add them later with `kalp secrets add`.",
+            ),
+          );
+        }
+      }
+
       if (isBulkPush) {
         const currentIndex = await readRemoteAgentsIndex(
           cwd,
@@ -403,7 +451,9 @@ export default defineCommand({
         }
 
         if (target === "remote") {
-          spinner.message(`Uploading agent ${pc.cyan(agentName)} to remote runtime`);
+          spinner.message(
+            `Uploading agent ${pc.cyan(agentName)} to remote runtime`,
+          );
           await pushRemoteManifest({
             cwd,
             wranglerConfigPath: runtime.wranglerConfigPath,
@@ -474,13 +524,7 @@ export default defineCommand({
       `Successfully pushed ${result.pushed} agents. ${result.skipped} omitted (no changes). ${result.failed} failed.`,
       target === "local" ? "Local push" : "Remote push",
     );
-    if (target === "remote" && result.pushed > 0) {
-      p.log.info(
-        pc.dim(
-          "Changes propagating to remote Studio (eventual consistency, up to ~60s).",
-        ),
-      );
-    }
+
 
     if (failures.length > 0) {
       for (const failure of failures) {

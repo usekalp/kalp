@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import type { AgentContract } from "@/contracts/types";
-import type { HandlerContext } from "@/context/types";
+import type { KalpContext, TypedKalpContext } from "@/context/types";
 import { captureFilePath } from "@/utils";
 
 type SourceEmits<TContract extends AgentContract<any, any, any>> =
@@ -18,12 +18,15 @@ export interface Listener<
   TEvent extends keyof NonNullable<SourceEmits<TContract>> = keyof NonNullable<
     SourceEmits<TContract>
   >,
+  THostContract extends AgentContract<any, any, any> | undefined = undefined,
 > {
   source: TContract;
   event: TEvent;
   handler: (
     payload: InferListenerPayload<TContract, TEvent>,
-    context: HandlerContext,
+    context: THostContract extends AgentContract<any, any, any>
+      ? TypedKalpContext<THostContract>
+      : KalpContext,
   ) => Promise<void> | void;
   __filePath?: string;
   __internalId?: symbol;
@@ -32,7 +35,10 @@ export interface Listener<
 export function defineListener<
   const TContract extends AgentContract<any, any, any>,
   const TEvent extends keyof NonNullable<SourceEmits<TContract>>,
->(config: Listener<TContract, TEvent>): Listener<TContract, TEvent> {
+  const THostContract extends AgentContract<any, any, any> | undefined = undefined,
+>(
+  config: Listener<TContract, TEvent, THostContract>,
+): Listener<TContract, TEvent, THostContract> {
   return {
     ...config,
     __filePath: captureFilePath(),

@@ -1,3 +1,4 @@
+import type { z } from "zod";
 import type {
   KalpAI,
   KalpHistoryMessage,
@@ -10,10 +11,12 @@ import type {
   KalpDate,
   KalpMath,
 } from "@/primitives";
-import type { KalpActions, TypedActions } from "@/actions/types";
+import type { TypedActions } from "@/actions/types";
 import type { ExecutableNode } from "@/nodes";
 import type { AgentContract } from "@/contracts/types";
 import { UserId } from "@/identity";
+
+import type { Simplify } from "@/utils/types";
 
 /**
  * Context types for handler execution.
@@ -55,25 +58,42 @@ export type InferNodes<C> =
   | (C extends { tools: readonly (infer T)[] } ? T : never)
   | ExecutableNode;
 
-type NormalizeEmits<T> = T extends Record<string, unknown> ? T : {};
-type AgentConfigEmits<C> = C extends { emits?: infer E } ? E : undefined;
-type AgentContractEmits<C> =
-  C extends { contract?: AgentContract<any, any, infer E> } ? E : undefined;
+export type InferAgentEmits<C> =
+  // Case 1: C is an AgentContract directly
+  C extends AgentContract<any, any, infer E>
+    ? E extends Record<string, any>
+      ? E
+      : {}
+  // Case 2: C is an agent config with a contract property
+  : C extends { contract?: infer Cont }
+    ? Cont extends AgentContract<any, any, infer E>
+      ? E extends Record<string, any>
+        ? E
+        : {}
+      : {}
+    : {};
 
-export type InferAgentEmits<C> = NormalizeEmits<AgentConfigEmits<C>> &
-  NormalizeEmits<AgentContractEmits<C>>;
 
 /**
- * Context passed to all handlers (steps, tools, routes).
- * Flat structure: `context.ai`, `context.memory`, `context.actions`, etc.
+ * Unified context passed to ALL handlers: steps, tools, routes, listeners,
+ * onMessage, onCall, onInit, onTick, cron.
+ *
+ * Single context type for the entire SDK. Type parameters control
+ * whether `actions.emit` is strictly typed or loosely typed.
+ *
+ * - When `TEmits = {}` (default): `emit` accepts `(string, any)`.
+ * - When `TEmits` is populated from a contract: `emit` is strictly typed.
  */
-export interface HandlerContext<E = undefined> {
+export type KalpContext<
+  TEmits extends Record<string, any> = {},
+  TActions = TypedActions<ExecutableNode, TEmits>,
+> = Simplify<{
   ai: KalpAI;
   memory: KalpMemory;
   vault: KalpVault;
   storage: StoragePrimitive;
   auth?: KalpAuth;
-  actions: KalpActions<E>;
+  actions: TActions;
   log: KalpLog;
   /** MCP (Model Context Protocol) server proxy. */
   mcp: KalpMcp;
@@ -83,10 +103,20 @@ export interface HandlerContext<E = undefined> {
   date: KalpDate;
   /** Deterministic math primitive for Event Sourcing. */
   math: KalpMath;
-}
+  /** Conversation history for the current session. */
+  history: KalpHistoryMessage[];
+  /** Arbitrary key-value state for the current agent/session. */
+  state: Record<string, unknown>;
+}>;
 
-/** Convenience alias for {@link HandlerContext}. */
-export type KalpCtx = HandlerContext;
+/**
+ * Fully typed context inferred from an agent config.
+ * Automatically resolves emits and nodes from the agent's contract.
+ */
+export type TypedKalpContext<C> = KalpContext<
+  InferAgentEmits<C>,
+  TypedActions<InferNodes<C>, InferAgentEmits<C>>
+>;
 
 /**
  * Data payload for an incoming message.
@@ -95,25 +125,6 @@ export interface AgentMessage {
   text: string;
   data?: unknown;
   senderId: UserId;
-}
-
-/**
- * Extended context for conversation handlers with conversation state.
- */
-export interface AgentContext<E = undefined> extends HandlerContext<E> {
-  history: KalpHistoryMessage[];
-  state: Record<string, unknown>;
-}
-
-/**
- * Agent context with type-safe actions bound to the agent's registered nodes.
- */
-export interface TypedAgentContext<C>
-  extends Omit<AgentContext<InferAgentEmits<C>>, "actions"> {
-  actions: TypedActions<
-    InferNodes<C>,
-    InferAgentEmits<C>
-  >;
 }
 
 /** Response from an agent's `onMessage` handler. */

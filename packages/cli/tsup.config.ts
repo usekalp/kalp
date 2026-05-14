@@ -7,5 +7,5 @@ export default defineConfig({
   sourcemap: true,
   banner: { js: "#!/usr/bin/env node" },
   external: ["esbuild"],
-  noExternal: ["@kalphq/sdk"],
+  noExternal: ["@kalphq/sdk", "jose"],
 });

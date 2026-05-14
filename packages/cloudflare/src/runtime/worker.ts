@@ -604,6 +604,12 @@ function createRuntimeApp() {
 
   app.get("/", (c) => c.redirect("/studio/", 308));
 
+  app.get("/favicon.ico", async (c) => serveAsset(c.env, "favicon.ico", c.req.raw));
+  app.get("/logo192.png", async (c) => serveAsset(c.env, "logo192.png", c.req.raw));
+  app.get("/logo512.png", async (c) => serveAsset(c.env, "logo512.png", c.req.raw));
+  app.get("/manifest.json", async (c) => serveAsset(c.env, "manifest.json", c.req.raw));
+  app.get("/robots.txt", async (c) => serveAsset(c.env, "robots.txt", c.req.raw));
+
   app.notFound(async (c) => {
     if (c.req.path.startsWith("/api/internal")) {
       return c.json({ error: "Not found" }, 404);

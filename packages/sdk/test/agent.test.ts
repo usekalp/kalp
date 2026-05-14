@@ -2,37 +2,35 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { defineAgent, defineRoute, defineContract } from "../src";
 import { createMockContext } from "./shared";
-import type { HandlerContext } from "../src";
+import type { KalpContext } from "../src";
 
 describe("defineAgent", () => {
   it("returns config with name", () => {
     const agent = defineAgent({
       name: "Test Agent",
-      async onMessage(ctx: HandlerContext) {
-        return { text: ctx.message.text };
+      async onMessage(message, ctx) {
+        return { text: message.text };
       },
     });
 
     expect(agent.name).toBe("Test Agent");
   });
 
-  it("supports onMessage with flattened context", async () => {
+  it("supports onMessage with unified context", async () => {
     const mockContext = createMockContext();
 
     const agent = defineAgent({
       name: "Test Agent",
-      async onMessage(ctx: any) {
+      async onMessage(message, ctx) {
         const secret = await ctx.vault.get("KEY" as never);
-        return { text: `${ctx.message.text} - ${secret}` };
+        return { text: `${message.text} - ${secret}` };
       },
     });
 
-    const result = await agent.onMessage({
-      message: { text: "hello", senderId: "u-1" as any },
-      history: [],
-      state: {},
-      ...mockContext,
-    });
+    const result = await agent.onMessage?.(
+      { text: "hello", senderId: "u-1" as any },
+      mockContext as any,
+    );
 
     expect(result).toEqual({ text: "hello - secret-value" });
   });
@@ -41,8 +39,8 @@ describe("defineAgent", () => {
     const agent = defineAgent({
       name: "Static Prompt",
       systemPrompt: "You are a helpful assistant.",
-      async onMessage(ctx: any) {
-        return { text: ctx.message.text };
+      async onMessage(message, ctx) {
+        return { text: message.text };
       },
     });
 
@@ -56,17 +54,17 @@ describe("defineAgent", () => {
 
     const agent = defineAgent({
       name: "Dynamic Prompt",
-      async systemPrompt(context: HandlerContext) {
+      async systemPrompt(context: KalpContext) {
         const custom = await context.vault.get("PROMPT" as never);
         return `You are ${custom}`;
       },
-      async onMessage(ctx: any) {
-        return { text: ctx.message.text };
+      async onMessage(message, ctx) {
+        return { text: message.text };
       },
     });
 
     if (typeof agent.systemPrompt === "function") {
-      const prompt = await agent.systemPrompt(mockContext);
+      const prompt = await agent.systemPrompt(mockContext as any);
       expect(prompt).toBe("You are dynamic-prompt");
     }
   });
@@ -76,8 +74,8 @@ describe("defineAgent", () => {
       name: "Lifecycle Agent",
       onInit: async () => {},
       onTick: async () => {},
-      async onMessage(ctx: any) {
-        return { text: ctx.message.text };
+      async onMessage(message, ctx) {
+        return { text: message.text };
       },
     });
 
@@ -97,8 +95,8 @@ describe("defineAgent", () => {
     const agent = defineAgent({
       name: "Agent with Routes",
       routes: [route],
-      async onMessage(ctx: any) {
-        return { text: ctx.message.text };
+      async onMessage(message, ctx) {
+        return { text: message.text };
       },
     });
 
@@ -115,7 +113,7 @@ describe("defineAgent", () => {
     const agent = defineAgent({
       name: "Sales Bot",
       contract: SalesContract,
-      async onCall(input: { leadId: string }, _ctx: HandlerContext) {
+      async onCall(input, ctx) {
         return { score: 95 };
       },
     });
@@ -124,23 +122,27 @@ describe("defineAgent", () => {
     expect(agent.name).toBe("Sales Bot");
   });
 
-  it("supports label, tags and emits metadata", () => {
-    const agent = defineAgent({
-      name: "customer_support",
-      label: "Customer Support",
-      tags: ["support", "tier-1"],
-      emits: {
-        ticket_created: z.object({ id: z.string() }),
-        note: "Human escalation event",
-      },
-      async onMessage(ctx: any) {
-        return { text: ctx.message.text };
-      },
-    });
+  it("context includes history and state", () => {
+    const ctx = createMockContext();
 
-    expect(agent.label).toBe("Customer Support");
-    expect(agent.tags).toEqual(["support", "tier-1"]);
-    expect(agent.emits).toBeDefined();
-    expect(Object.keys(agent.emits ?? {})).toEqual(["ticket_created", "note"]);
+    expect(ctx.history).toBeDefined();
+    expect(Array.isArray(ctx.history)).toBe(true);
+    expect(ctx.state).toBeDefined();
+    expect(typeof ctx.state).toBe("object");
+  });
+
+  it("context includes all primitives", () => {
+    const ctx = createMockContext();
+
+    expect(ctx.ai).toBeDefined();
+    expect(ctx.memory).toBeDefined();
+    expect(ctx.vault).toBeDefined();
+    expect(ctx.storage).toBeDefined();
+    expect(ctx.actions).toBeDefined();
+    expect(ctx.log).toBeDefined();
+    expect(ctx.mcp).toBeDefined();
+    expect(ctx.agent).toBeDefined();
+    expect(ctx.date).toBeDefined();
+    expect(ctx.math).toBeDefined();
   });
 });

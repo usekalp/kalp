@@ -36,7 +36,7 @@ export type {
 // Contracts Module (RPC)
 // ============================================================================
 
-export type { AgentContract } from "@/contracts";
+export type { AgentContract, EmitsOf } from "@/contracts";
 export { defineContract } from "@/contracts";
 
 // ============================================================================
@@ -148,10 +148,8 @@ export type {
   InferNodes,
   InferAgentEmits,
   KalpAuth,
-  HandlerContext,
-  KalpCtx,
-  AgentContext,
-  TypedAgentContext,
+  KalpContext,
+  TypedKalpContext,
   AgentMessage,
   AgentResponse,
 } from "@/context";
@@ -187,10 +185,17 @@ export type { Listener } from "@/listeners";
 
 export { defineStep, defineTool } from "@/definitions";
 export { defineRoute } from "@/definitions";
-export { defineConfig } from "@/project";
+export {
+  defineConfig,
+  normalizeMcpServer,
+  collectMcpSecretRequirements,
+  extractEnvName,
+  env,
+} from "@/project";
 export type {
   KalpProjectConfig,
-  McpServerConfig,
+  McpServerInput,
+  NormalizedMcpServer,
   KalpAIEnvironment,
 } from "@/project";
 
@@ -198,7 +203,7 @@ export type {
 // Registry
 // ============================================================================
 
-export { getRegistry, clearRegistry } from "@/registry";
+export { getRegistry, clearRegistry, bindContract } from "@/registry";
 export type { RegistryEntry } from "@/registry";
 
 // ============================================================================

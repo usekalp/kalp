@@ -9,7 +9,7 @@
  * @module
  */
 
-import type { IRGraph, HandlerContext } from "@kalphq/sdk";
+import type { IRGraph, KalpContext } from "@kalphq/sdk";
 import type {
   PersistenceAdapter,
   SchedulerAdapter,
@@ -23,7 +23,7 @@ import type { IntentEvent } from "@/engine/event-log-buffer";
 import { EventLogBuffer } from "@/engine/event-log-buffer";
 import { SuspensionException } from "@/engine/suspension";
 import {
-  buildHandlerContext,
+  buildKalpContext,
   type RuntimeProviders,
 } from "@/engine/context-builder";
 
@@ -290,28 +290,28 @@ export class KalpRuntime {
   }
 
   /**
-   * Builds the HandlerContext with intercepted proxies.
+   * Builds the KalpContext with intercepted proxies.
    *
-   * Uses the context-builder to create a full HandlerContext with all primitives.
+   * Uses the context-builder to create a full KalpContext with all primitives.
    *
    * @param log - The event log buffer for cache lookup.
    * @param execCtx - The execution context for event identity.
    * @param handlerHash - The hash of the handler bundle.
-   * @returns A HandlerContext matching the SDK interface.
+   * @returns A KalpContext matching the SDK interface.
    */
   private buildContext(
     log: EventLogBuffer,
     execCtx: ExecutionContext,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _handlerHash: string,
-  ): HandlerContext {
+  ): KalpContext {
     // Persist event helper
     const persistEvent = async (event: IntentEvent): Promise<void> => {
       log.append(event);
       await this.persistence.events.append(event);
     };
 
-    let runtimeContext: HandlerContext | null = null;
+    let runtimeContext: KalpContext | null = null;
 
     const executeBundle = async (
       targetHandlerHash: string,
@@ -340,7 +340,7 @@ export class KalpRuntime {
         ? "" // Dynamic prompts resolved at runtime by the handler
         : (systemPrompt ?? "");
 
-    const context = buildHandlerContext(
+    const context = buildKalpContext(
       this.persistence.state,
       this.persistence.events,
       this.scheduler,

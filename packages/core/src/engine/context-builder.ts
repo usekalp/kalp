@@ -1,14 +1,14 @@
 /**
  * Handler context builder for the Kalp Proxy-Listener Runtime.
  *
- * Assembles the {@link HandlerContext} that is passed to every handler function.
- * The context shape matches the SDK's `HandlerContext` interface exactly.
+ * Assembles the {@link KalpContext} that is passed to every handler function.
+ * The context shape matches the SDK's `KalpContext` interface exactly.
  *
  * @module
  */
 
 import type {
-  HandlerContext,
+  KalpContext,
   KalpAuth,
   KalpMemory,
   KalpVault,
@@ -55,7 +55,7 @@ export interface RuntimeProviders {
 // ────────────────────────────────────────────────────────────────────────────
 
 /**
- * Builds a {@link HandlerContext} with intercepted primitives.
+ * Builds a {@link KalpContext} with intercepted primitives.
  *
  * @param stateStore - The state sub-store for KV operations.
  * @param eventStore - The event store for event emission.
@@ -67,9 +67,9 @@ export interface RuntimeProviders {
  * @param providers - External providers (ai, auth, memory, vault).
  * @param execCtx - Optional execution context for event identity.
  * @param agentConfig - Optional agent configuration for metadata.
- * @returns A complete {@link HandlerContext} matching the SDK interface.
+ * @returns A complete {@link KalpContext} matching the SDK interface.
  */
-export function buildHandlerContext(
+export function buildKalpContext(
   stateStore: StateStore,
   eventStore: EventStore,
   scheduler: SchedulerAdapter,
@@ -89,7 +89,7 @@ export function buildHandlerContext(
     sourceAgentId?: string;
     onEmitDispatch?: (envelope: EventDispatchEnvelope) => Promise<void> | void;
   },
-): HandlerContext {
+): KalpContext {
   const ids = {
     executionId: execCtx.executionId,
     traceId: execCtx.traceId,
@@ -172,5 +172,7 @@ export function buildHandlerContext(
         });
       },
     },
-  } as unknown as HandlerContext;
+    history: [],
+    state: {},
+  } as unknown as KalpContext;
 }

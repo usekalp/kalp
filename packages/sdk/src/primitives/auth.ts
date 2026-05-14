@@ -7,15 +7,16 @@
  * @module
  */
 
-/**
- * Secret registry for type-safe secret access.
- */
 export interface SecretsRegistry {
-  keys: readonly string[];
+  // Augment this in your kalp.d.ts
 }
 
 /** Inferred secret keys from the global registry */
-export type RegisteredSecrets = SecretsRegistry["keys"];
+export type RegisteredSecrets = SecretsRegistry extends { keys: infer K }
+  ? K extends readonly string[]
+    ? K
+    : readonly string[]
+  : readonly string[];
 
 // Helper to detect if TSecrets has specific literal keys (from codegen) or is generic string[]
 type IsGenericStringArray<T> = T extends readonly string[]

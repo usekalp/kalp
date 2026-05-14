@@ -32,7 +32,7 @@
     "@kalphq/core": "workspace:*",
     "@kalphq/sdk": "workspace:*",
     "hono": "^4.12.18",
-    "jose": "^5.9.6"
+    "jose": "^5.10.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260510.1",

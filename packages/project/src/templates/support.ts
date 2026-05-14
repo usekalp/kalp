@@ -18,6 +18,11 @@ async function generateSupport(opts: {
 }): Promise<void> {
   const { agentName, cwd } = opts;
   const agentDir = join(cwd, "agents", agentName);
+ 
+  // Derive contract name from agent name (e.g. "my-agent" -> "MyAgent")
+  const contractName = agentName
+    .replace(/-+(.)/g, (_, char: string) => char.toUpperCase())
+    .replace(/^./, (char: string) => char.toUpperCase());
 
   // Main agent file with waitForEvent magic
   const agentIndex = [
@@ -29,7 +34,7 @@ async function generateSupport(opts: {
     'import { ticketWebhookRoute } from "./routes/ticket-webhook";',
     'import { onInit } from "./hooks/onInit";',
     'import { onTick } from "./hooks/onTick";',
-    'import { supportContract } from "./contract/support-contract";',
+    'import { ' + contractName + 'Contract } from "./contract/' + agentName + '-contract";',
     "",
     "/**",
     " * Support agent that escalates frustrated customers to human agents.",
@@ -44,7 +49,7 @@ async function generateSupport(opts: {
     '  label: "' + (opts.label ?? agentName) + '",',
     '  description: "Customer support with true Human-in-the-loop escalation",',
     "",
-    "  contract: supportContract,",
+    "  contract: " + contractName + "Contract,",
     "",
     "  systemPrompt: () => {",
     '    return "You are a customer support agent. Help customers with their issues and escalate to human agents when necessary.";',
@@ -67,7 +72,7 @@ async function generateSupport(opts: {
     '        reason: "Negative sentiment detected",',
     "        userText: message.text,",
     '        priority: "high",',
-    "        userId: ctx.auth.userId,",
+    "        userId: ctx.auth?.userId || '',",
     "      });",
     "      // Pause until human resolves the ticket",
     "      const wakeReason = await ctx.actions.waitForEvent(",
@@ -97,7 +102,10 @@ async function generateSupport(opts: {
 
   // Step: create ticket
   const createTicketStep = [
-    'import { defineStep, z } from "@kalphq/sdk";',
+    'import { bindContract, z } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineStep } = bindContract(" + contractName + "Contract);",
     "",
     "/**",
     " * Creates a support ticket in the external ticketing system.",
@@ -141,7 +149,10 @@ async function generateSupport(opts: {
 
   // Step: search FAQ
   const searchFaqStep = [
-    'import { defineStep, z } from "@kalphq/sdk";',
+    'import { bindContract, z } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineStep } = bindContract(" + contractName + "Contract);",
     "",
     "/**",
     " * Searches the FAQ database for answers.",
@@ -190,7 +201,10 @@ async function generateSupport(opts: {
 
   // Step: draft response
   const draftResponseStep = [
-    'import { defineStep, z } from "@kalphq/sdk";',
+    'import { bindContract, z } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineStep } = bindContract(" + contractName + "Contract);",
     "",
     "/**",
     " * Drafts a response for human approval.",
@@ -220,7 +234,10 @@ async function generateSupport(opts: {
 
   // Route: health check
   const healthRoute = [
-    'import { defineRoute } from "@kalphq/sdk";',
+    'import { bindContract } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineRoute } = bindContract(" + contractName + "Contract);",
     "",
     "/**",
     " * Health check endpoint.",
@@ -229,7 +246,7 @@ async function generateSupport(opts: {
     '  id: "health",',
     '  method: "GET",',
     '  path: "/health",',
-    "  handler: async (req, res, ctx) => {",
+    "  handler: async ({ res, ctx }) => {",
     "    res.json({",
     '      status: "ok",',
     '      agent: "' + agentName + '",',
@@ -241,7 +258,10 @@ async function generateSupport(opts: {
 
   // Route: ticket webhook
   const ticketWebhookRoute = [
-    'import { defineRoute } from "@kalphq/sdk";',
+    'import { bindContract, z } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
+    "",
+    "const { defineRoute } = bindContract(" + contractName + "Contract);",
     "",
     "/**",
     " * Webhook endpoint for ticket resolution events.",
@@ -253,18 +273,16 @@ async function generateSupport(opts: {
     '  id: "ticket_webhook",',
     '  method: "POST",',
     '  path: "/webhooks/ticket-resolved",',
-    "  handler: async (req, res, ctx) => {",
-    "    // Parse webhook payload",
-    "    const body = await req.json();",
-    "    const ticketId = body.ticketId;",
-    "    const resolution = body.resolution;",
+    '  inputSchema: z.object({',
+    '    ticketId: z.string(),',
+    '    resolution: z.string().optional(),',
+    '    agentName: z.string().optional(),',
+    '  }),',
     "",
-    "    if (!ticketId) {",
-    '      return res.status(400).json({ error: "Missing ticketId" });',
-    "    }",
+    "  handler: async ({ res, body, ctx }) => {",
     "    // Emit event to notify the agent",
-    '    ctx.actions.emit("ticket_resolved_" + ticketId, {',
-    '      resolution: resolution || "Issue resolved by support team",',
+    '    ctx.actions.emit("ticket_resolved_" + body.ticketId, {',
+    '      resolution: body.resolution || "Issue resolved by support team",',
     "      resolvedAt: ctx.date.toISOString(),",
     '      resolvedBy: body.agentName || "support-agent",',
     "    });",
@@ -276,26 +294,28 @@ async function generateSupport(opts: {
 
   // Hook: onInit
   const onInitHook = [
-    'import { HandlerContext } from "@kalphq/sdk";',
+    'import { TypedKalpContext } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
     "",
     "/**",
     " * Runs when the agent starts up.",
     " * Load FAQ index and initialize connections.",
     " */",
-    "export async function onInit(ctx: HandlerContext): Promise<void> {",
+    "export async function onInit(ctx: TypedKalpContext<typeof " + contractName + "Contract>): Promise<void> {",
     "  // TODO: Load FAQ embeddings, connect to Zendesk API, etc.",
     "}",
   ].join("\n");
 
   // Hook: onTick
   const onTickHook = [
-    'import { HandlerContext } from "@kalphq/sdk";',
+    'import { TypedKalpContext } from "@kalphq/sdk";',
+    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
     "",
     "/**",
     " * Runs periodically to check for SLA breaches or stale tickets.",
     " * Configure the schedule in kalp.config.ts",
     " */",
-    "export async function onTick(ctx: HandlerContext): Promise<void> {",
+    "export async function onTick(ctx: TypedKalpContext<typeof " + contractName + "Contract>): Promise<void> {",
     "  // TODO: Check for tickets nearing SLA breach",
     "}",
   ].join("\n");
@@ -307,7 +327,7 @@ async function generateSupport(opts: {
     "/**",
     " * Contract for external ticket systems to interact with the support agent.",
     " */",
-    'export const supportContract = defineContract("support", {',
+    'export const ' + contractName + 'Contract = defineContract("' + agentName + '", {',
     "  input: z.object({",
     "    query: z.string(),",
     "    userId: z.string(),",
@@ -348,7 +368,7 @@ async function generateSupport(opts: {
   await writeTemplateFile(join(agentDir, "hooks"), "onTick.ts", onTickHook);
   await writeTemplateFile(
     join(agentDir, "contract"),
-    "support-contract.ts",
+    agentName + "-contract.ts",
     contractFile,
   );
 }

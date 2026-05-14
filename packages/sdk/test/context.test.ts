@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMockContext } from "./shared";
 
-describe("HandlerContext", () => {
+describe("KalpContext", () => {
   it("exposes all required primitives", () => {
     const ctx = createMockContext();
 

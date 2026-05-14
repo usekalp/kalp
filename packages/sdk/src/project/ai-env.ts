@@ -5,6 +5,5 @@
  * the configured provider and custom model suggestions.
  */
 export interface KalpAIEnvironment {
-  provider?: "openai" | "anthropic" | "openrouter" | "custom";
-  customModels?: readonly string[];
+  // Augment this in your kalp.d.ts
 }

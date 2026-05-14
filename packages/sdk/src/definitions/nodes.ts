@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Step, Tool, StepConfig, ToolConfig } from "@/nodes";
+import type { AgentContract } from "@/contracts/types";
 import { registerNode } from "@/registry";
 
 /**
@@ -34,7 +35,8 @@ import { registerNode } from "@/registry";
 export function defineStep<
   I extends z.ZodTypeAny = z.ZodTypeAny,
   O extends z.ZodTypeAny = z.ZodTypeAny,
->(config: StepConfig<I, O>): Step<I, O> {
+  TContract extends AgentContract<any, any, any> | undefined = undefined,
+>(config: StepConfig<I, O, TContract>): Step<I, O> {
   const node: Step<I, O> = { ...config, kind: "step" };
   registerNode("step", config.id, node);
   return node;
@@ -62,9 +64,11 @@ export function defineStep<
  * });
  * ```
  */
-export function defineTool<I extends z.ZodTypeAny = z.ZodTypeAny, R = unknown>(
-  config: ToolConfig<I, R>,
-): Tool<I, R> {
+export function defineTool<
+  I extends z.ZodTypeAny = z.ZodTypeAny,
+  R = unknown,
+  TContract extends AgentContract<any, any, any> | undefined = undefined,
+>(config: ToolConfig<I, R, TContract>): Tool<I, R> {
   const node: Tool<I, R> = { ...config, kind: "tool" };
   registerNode("tool", config.id, node);
   return node;

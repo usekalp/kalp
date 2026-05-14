@@ -1,22 +1,26 @@
 import { vi } from "vitest";
 import type {
-  HandlerContext,
+  KalpContext,
   KalpAI,
   KalpMemory,
   KalpVault,
   KalpAuth,
-  KalpActions,
   KalpLog,
   StoragePrimitive,
   asUserId,
   WakeReason,
+  KalpMcp,
+  AgentIntrospection,
+  KalpDate,
+  KalpMath,
+  KalpHistoryMessage,
 } from "../src";
 
 /**
- * Creates a fully typed mock HandlerContext for testing.
+ * Creates a fully typed mock KalpContext for testing.
  * All primitives are mocked with vitest.fn() for easy spying.
  */
-export const createMockContext = (): HandlerContext => ({
+export const createMockContext = (): KalpContext => ({
   ai: {
     generate: vi.fn(),
     stream: vi.fn(),
@@ -64,7 +68,10 @@ export const createMockContext = (): HandlerContext => ({
     requestApproval: vi.fn(),
     emit: vi.fn(),
     callAgent: vi.fn(),
-  } as unknown as KalpActions,
+    waitForEvent: vi.fn(),
+    waitUntil: vi.fn(),
+    schedule: vi.fn(),
+  } as any,
 
   log: {
     info: vi.fn(),
@@ -72,14 +79,33 @@ export const createMockContext = (): HandlerContext => ({
     error: vi.fn(),
     debug: vi.fn(),
   } as unknown as KalpLog,
+
+  mcp: {} as unknown as KalpMcp,
+
+  agent: {
+    id: "test-agent",
+    name: "Test Agent",
+  } as unknown as AgentIntrospection,
+
+  date: {
+    now: vi.fn().mockReturnValue(Date.now()),
+    toISOString: vi.fn().mockReturnValue(new Date().toISOString()),
+  } as unknown as KalpDate,
+
+  math: {
+    random: vi.fn().mockReturnValue(0.5),
+  } as unknown as KalpMath,
+
+  history: [] as KalpHistoryMessage[],
+  state: {},
 });
 
 /**
  * Helper to create a mock context with custom overrides.
  */
 export const createMockContextWith = (
-  overrides: Partial<HandlerContext>,
-): HandlerContext => ({
+  overrides: Partial<KalpContext>,
+): KalpContext => ({
   ...createMockContext(),
   ...overrides,
 });

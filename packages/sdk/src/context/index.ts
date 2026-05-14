@@ -8,10 +8,8 @@ export type {
   InferNodes,
   InferAgentEmits,
   KalpAuth,
-  HandlerContext,
-  KalpCtx,
-  AgentContext,
-  TypedAgentContext,
+  KalpContext,
+  TypedKalpContext,
   AgentMessage,
   AgentResponse,
 } from "@/context/types";

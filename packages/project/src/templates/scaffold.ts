@@ -42,8 +42,8 @@ export async function scaffoldAgent(opts: ScaffoldAgentOptions): Promise<void> {
 
   // Compute contract names
   const contractName = agentName
-    .replace(/-([a-z])/g, (_, char: string) => char.toUpperCase())
-    .replace(/^[a-z]/, (char: string) => char.toUpperCase());
+    .replace(/-+(.)/g, (_, char: string) => char.toUpperCase())
+    .replace(/^./, (char: string) => char.toUpperCase());
 
   await mkdir(join(agentDir, "steps"), { recursive: true });
   await mkdir(join(agentDir, "tools"), { recursive: true });
@@ -52,7 +52,10 @@ export async function scaffoldAgent(opts: ScaffoldAgentOptions): Promise<void> {
   await mkdir(join(agentDir, "contract"), { recursive: true });
 
   // Step: example
-  const exampleStep = `import { defineStep, z } from "@kalphq/sdk";
+  const exampleStep = `import { bindContract, z } from "@kalphq/sdk";
+import { ${contractName}Contract } from "../contract/${agentName}-contract";
+
+const { defineStep } = bindContract(${contractName}Contract);
 
 /**
  * An example step that processes text.
@@ -70,7 +73,10 @@ export const exampleStep = defineStep({
 `;
 
   // Tool: example
-  const exampleTool = `import { defineTool, z } from "@kalphq/sdk";
+  const exampleTool = `import { bindContract, z } from "@kalphq/sdk";
+import { ${contractName}Contract } from "../contract/${agentName}-contract";
+
+const { defineTool } = bindContract(${contractName}Contract);
 
 /**
  * An example tool that searches for documentation.
@@ -89,7 +95,10 @@ export const exampleTool = defineTool({
 `;
 
   // Route: health check
-  const healthRoute = `import { defineRoute } from "@kalphq/sdk";
+  const healthRoute = `import { bindContract } from "@kalphq/sdk";
+import { ${contractName}Contract } from "../contract/${agentName}-contract";
+
+const { defineRoute } = bindContract(${contractName}Contract);
 
 /**
  * Health check endpoint.
@@ -98,7 +107,7 @@ export const healthRoute = defineRoute({
   id: "health",
   method: "GET",
   path: "/health",
-  handler: async (req, res, ctx) => {
+  handler: async ({ res, ctx }) => {
     res.json({
       status: "ok",
       agent: "${agentName}",
@@ -109,25 +118,27 @@ export const healthRoute = defineRoute({
 `;
 
   // Hook: onInit
-  const onInitHook = `import { HandlerContext } from "@kalphq/sdk";
+  const onInitHook = `import { TypedKalpContext } from "@kalphq/sdk";
+import { ${contractName}Contract } from "../contract/${agentName}-contract";
 
 /**
  * Runs when the agent starts up.
  * Initialize any required state here.
  */
-export async function onInit(ctx: HandlerContext): Promise<void> {
+export async function onInit(ctx: TypedKalpContext<typeof ${contractName}Contract>): Promise<void> {
   // TODO: Add initialization logic
 }
 `;
 
   // Hook: onTick
-  const onTickHook = `import { HandlerContext } from "@kalphq/sdk";
+  const onTickHook = `import { TypedKalpContext } from "@kalphq/sdk";
+import { ${contractName}Contract } from "../contract/${agentName}-contract";
 
 /**
  * Runs periodically to perform background tasks.
  * Configure the schedule in kalp.config.ts
  */
-export async function onTick(ctx: HandlerContext): Promise<void> {
+export async function onTick(ctx: TypedKalpContext<typeof ${contractName}Contract>): Promise<void> {
   // TODO: Add periodic task logic
 }
 `;
@@ -138,7 +149,7 @@ export async function onTick(ctx: HandlerContext): Promise<void> {
 /**
  * Contract for external systems to call this agent.
  */
-export const ${agentName.replace(/-([a-z])/g, (_, char) => char.toUpperCase()).replace(/^[a-z]/, (char) => char.toUpperCase())}Contract = defineContract("${agentName}", {
+export const ${agentName.replace(/-+(.)/g, (_, char) => char.toUpperCase()).replace(/^./, (char) => char.toUpperCase())}Contract = defineContract("${agentName}", {
   input: z.object({
     action: z.string(),
     data: z.record(z.unknown()),
@@ -147,6 +158,14 @@ export const ${agentName.replace(/-([a-z])/g, (_, char) => char.toUpperCase()).r
     success: z.boolean(),
     result: z.unknown(),
   }),
+ 
+  /**
+   * Events emitted by this agent.
+   * Other agents or frontend apps can listen to these.
+   */
+  emits: {
+    // Example: status_updated: z.object({ status: z.string() }),
+  },
 });
 `;
 
