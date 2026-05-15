@@ -47,7 +47,7 @@ describe("schedule-manager", () => {
       expect(alarms.length).toBe(1);
 
       // The alarm should be for schedule-1 (every minute = sooner)
-      expect(alarms[0].at).toBeLessThan(Date.now() + 2 * 60 * 1000); // Less than 2 minutes
+      expect(alarms[0]!.at).toBeLessThan(Date.now() + 2 * 60 * 1000); // Less than 2 minutes
     });
 
     it("should reschedule to next alarm after one fires", async () => {
@@ -165,7 +165,7 @@ describe("schedule-manager", () => {
       expect(remainingAlarms.length).toBe(1);
 
       // The alarm should be later than the original
-      expect(remainingAlarms[0].at).toBeGreaterThanOrEqual(firstAlarm!);
+      expect(remainingAlarms[0]!.at).toBeGreaterThanOrEqual(firstAlarm!);
     });
   });
 

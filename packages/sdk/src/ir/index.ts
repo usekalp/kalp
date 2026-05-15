@@ -5,8 +5,7 @@
  */
 
 export type {
-  AgentMetadata,
-  HandlerBundle,
-  ScheduleEntry,
+  NodeDescriptor,
+  TriggerDescriptor,
   IRGraph,
 } from "@/ir/types";

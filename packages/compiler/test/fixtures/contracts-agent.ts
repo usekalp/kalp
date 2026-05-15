@@ -27,7 +27,7 @@ export const contractStep = defineStep({
   id: "contract_step",
   inputSchema: z.object({ payload: z.string() }),
   outputSchema: z.object({ validated: z.boolean() }),
-  async handler(input, ctx) {
+  async handler(input, _ctx) {
     // Validate input using contract logic
     const validated = input.payload.length > 0;
     return { validated };
@@ -39,7 +39,7 @@ export const agentCallerStep = defineStep({
   id: "agent_caller",
   inputSchema: z.object({ query: z.string() }),
   outputSchema: z.object({ response: z.string() }),
-  async handler(input, ctx) {
+  async handler(input, _ctx) {
     // This would use ctx.actions.callAgent in real implementation
     // For now, just simulate the contract-based communication
     const mockResponse = `Processed: ${input.query}`;
@@ -51,7 +51,7 @@ export const agentCallerStep = defineStep({
 export const contractTool = defineTool({
   id: "contract_tool",
   inputSchema: z.object({ raw: z.string() }),
-  async handler(input, ctx) {
+  async handler(input, _ctx) {
     // Validate and transform input
     const valid = input.raw.length > 0;
     return { valid, transformed: valid ? input.raw.toUpperCase() : null };
@@ -63,7 +63,7 @@ export const contractRoute = defineRoute({
   id: "POST:/api/contract",
   method: "POST",
   path: "/api/contract",
-  async handler(req, res, ctx) {
+  async handler({ req: _req, res: _res, ctx: _ctx }) {
     // Simulate contract-based request/response
     return { processed: true, contract: "external-agent" };
   },
@@ -75,10 +75,10 @@ export default defineAgent({
   description: "An agent that tests contract definitions",
   contract: externalAgentContract,
   routes: [contractRoute],
-  async onMessage(message, ctx) {
+  async onMessage(_message, _ctx) {
     return { text: "contract agent ready" };
   },
-  async onCall(input, ctx) {
+  async onCall(_input, _ctx) {
     // Simulate RPC handling with contract types
     return { result: "contract call handled", confidence: 0.95 };
   },

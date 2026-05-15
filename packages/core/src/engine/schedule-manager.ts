@@ -1,261 +1,11 @@
-/**
- * Schedule manager for the Kalp Proxy-Listener Runtime.
- *
- * Manages multiple concurrent schedules in Core. The adapter only
- * sets a single physical timer via scheduleAlarm. Core handles
- * the logical schedule queue, scheduling the next due alarm.
- *
- * @module
- */
-
 import type { StateStore, SchedulerAdapter } from "@/adapters/interfaces";
-
-const MINUTE_MS = 60_000;
-const MAX_LOOKAHEAD_MINUTES = 5 * 366 * 24 * 60;
-
-interface CronField {
-  any: boolean;
-  values: Set<number>;
-}
-
-interface ParsedCronExpression {
-  minute: CronField;
-  hour: CronField;
-  dayOfMonth: CronField;
-  month: CronField;
-  dayOfWeek: CronField;
-}
-
-interface TimeParts {
-  minute: number;
-  hour: number;
-  dayOfMonth: number;
-  month: number;
-  dayOfWeek: number;
-}
-
-const WEEKDAY_TO_INDEX: Record<string, number> = {
-  Sun: 0,
-  Mon: 1,
-  Tue: 2,
-  Wed: 3,
-  Thu: 4,
-  Fri: 5,
-  Sat: 6,
-};
-
-const formatterCache = new Map<string, Intl.DateTimeFormat>();
-const cronCache = new Map<string, ParsedCronExpression>();
-
-function parseCronField(
-  rawField: string,
-  min: number,
-  max: number,
-  fieldName: string,
-): CronField {
-  const field = rawField.trim();
-
-  if (!field) {
-    throw new Error(`Invalid cron: empty ${fieldName} field`);
-  }
-
-  if (field === "*") {
-    return { any: true, values: new Set<number>() };
-  }
-
-  const values = new Set<number>();
-  const segments = field.split(",");
-
-  for (const segment of segments) {
-    const token = segment.trim();
-    if (!token) {
-      throw new Error(
-        `Invalid cron: malformed ${fieldName} field "${rawField}"`,
-      );
-    }
-
-    const [basePart, stepPart] = token.split("/");
-    if (!basePart) {
-      throw new Error(`Invalid cron: malformed ${fieldName} token "${token}"`);
-    }
-
-    const step =
-      stepPart !== undefined ? Number.parseInt(stepPart, 10) : undefined;
-
-    if (
-      stepPart !== undefined &&
-      (step === undefined || !Number.isInteger(step) || step <= 0)
-    ) {
-      throw new Error(
-        `Invalid cron: invalid step "${stepPart}" in ${fieldName}`,
-      );
-    }
-
-    let rangeStart: number;
-    let rangeEnd: number;
-
-    if (basePart === "*") {
-      rangeStart = min;
-      rangeEnd = max;
-    } else if (basePart.includes("-")) {
-      const [rawStart, rawEnd] = basePart.split("-");
-      const start = Number.parseInt(rawStart ?? "", 10);
-      const end = Number.parseInt(rawEnd ?? "", 10);
-      if (!Number.isInteger(start) || !Number.isInteger(end)) {
-        throw new Error(
-          `Invalid cron: malformed range "${basePart}" in ${fieldName}`,
-        );
-      }
-      rangeStart = Math.min(start, end);
-      rangeEnd = Math.max(start, end);
-    } else {
-      const value = Number.parseInt(basePart, 10);
-      if (!Number.isInteger(value)) {
-        throw new Error(
-          `Invalid cron: invalid value "${basePart}" in ${fieldName}`,
-        );
-      }
-      rangeStart = value;
-      rangeEnd = value;
-    }
-
-    if (rangeStart < min || rangeEnd > max) {
-      throw new Error(
-        `Invalid cron: ${fieldName} value out of range (${min}-${max}) in "${token}"`,
-      );
-    }
-
-    const increment = step ?? 1;
-    for (let value = rangeStart; value <= rangeEnd; value += increment) {
-      values.add(value);
-    }
-  }
-
-  return {
-    any: false,
-    values,
-  };
-}
-
-function parseCronExpression(cron: string): ParsedCronExpression {
-  const cached = cronCache.get(cron);
-  if (cached) {
-    return cached;
-  }
-
-  const parts = cron.trim().split(/\s+/);
-  if (parts.length !== 5) {
-    throw new Error(
-      `Invalid cron: expected 5 fields, received ${parts.length}`,
-    );
-  }
-
-  const parsed: ParsedCronExpression = {
-    minute: parseCronField(parts[0]!, 0, 59, "minute"),
-    hour: parseCronField(parts[1]!, 0, 23, "hour"),
-    dayOfMonth: parseCronField(parts[2]!, 1, 31, "day-of-month"),
-    month: parseCronField(parts[3]!, 1, 12, "month"),
-    dayOfWeek: parseCronField(parts[4]!, 0, 7, "day-of-week"),
-  };
-
-  // Normalize Sunday aliases (0 and 7)
-  if (!parsed.dayOfWeek.any && parsed.dayOfWeek.values.has(7)) {
-    parsed.dayOfWeek.values.delete(7);
-    parsed.dayOfWeek.values.add(0);
-  }
-
-  cronCache.set(cron, parsed);
-  return parsed;
-}
-
-function getFormatter(timezone: string): Intl.DateTimeFormat {
-  const cached = formatterCache.get(timezone);
-  if (cached) {
-    return cached;
-  }
-
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    hourCycle: "h23",
-    minute: "2-digit",
-    hour: "2-digit",
-    day: "2-digit",
-    month: "2-digit",
-    weekday: "short",
-  });
-
-  formatterCache.set(timezone, formatter);
-  return formatter;
-}
-
-function getTimeParts(timestamp: number, timezone?: string): TimeParts {
-  if (!timezone) {
-    const date = new Date(timestamp);
-    return {
-      minute: date.getUTCMinutes(),
-      hour: date.getUTCHours(),
-      dayOfMonth: date.getUTCDate(),
-      month: date.getUTCMonth() + 1,
-      dayOfWeek: date.getUTCDay(),
-    };
-  }
-
-  const formatter = getFormatter(timezone);
-  const parts = formatter.formatToParts(new Date(timestamp));
-  const values = new Map<string, string>();
-  for (const part of parts) {
-    values.set(part.type, part.value);
-  }
-
-  const weekday = values.get("weekday");
-  const dayOfWeek = weekday ? WEEKDAY_TO_INDEX[weekday] : undefined;
-
-  if (dayOfWeek === undefined) {
-    throw new Error(`Unable to resolve weekday for timezone "${timezone}"`);
-  }
-
-  return {
-    minute: Number.parseInt(values.get("minute") ?? "", 10),
-    hour: Number.parseInt(values.get("hour") ?? "", 10),
-    dayOfMonth: Number.parseInt(values.get("day") ?? "", 10),
-    month: Number.parseInt(values.get("month") ?? "", 10),
-    dayOfWeek,
-  };
-}
-
-function matchesCron(
-  cron: ParsedCronExpression,
-  timeParts: TimeParts,
-): boolean {
-  if (!cron.minute.any && !cron.minute.values.has(timeParts.minute)) {
-    return false;
-  }
-
-  if (!cron.hour.any && !cron.hour.values.has(timeParts.hour)) {
-    return false;
-  }
-
-  if (!cron.month.any && !cron.month.values.has(timeParts.month)) {
-    return false;
-  }
-
-  const dayOfMonthMatch =
-    cron.dayOfMonth.any || cron.dayOfMonth.values.has(timeParts.dayOfMonth);
-  const dayOfWeekMatch =
-    cron.dayOfWeek.any || cron.dayOfWeek.values.has(timeParts.dayOfWeek);
-
-  // POSIX/Vixie cron semantics:
-  // - if both DOM and DOW are explicit, either match is enough
-  // - otherwise, the non-wildcard field drives the constraint
-  if (!cron.dayOfMonth.any && !cron.dayOfWeek.any) {
-    return dayOfMonthMatch || dayOfWeekMatch;
-  }
-
-  return dayOfMonthMatch && dayOfWeekMatch;
-}
+import { calculateNextOccurrence } from "./cron-utils";
 
 /**
- * Schedule state stored in StateStore.
+ * Schedule state persisted in the State Store.
+ * 
+ * Each schedule entry contains the cron expression, target handler, 
+ * and the pre-calculated next run time for O(1) lookup.
  */
 interface ScheduleState {
   schedules: Record<
@@ -271,25 +21,44 @@ interface ScheduleState {
 }
 
 /**
- * Schedule manager for handling multiple concurrent schedules.
+ * The Schedule Manager for the Kalp Runtime.
+ *
+ * It orchestrates multiple concurrent cron schedules within a single agent thread.
+ * 
+ * Key Architecture:
+ * 1. The Core manages the logical queue of all schedules in the `StateStore`.
+ * 2. The Host Adapter only manages a single "physical" alarm (via `scheduleAlarm`).
+ * 3. On wake-up, the Core processes all due schedules and calculates the next alarm time.
+ *
+ * @module
  */
 export class ScheduleManager {
+  /** Internal key used to persist the schedule state in KV. */
   private readonly stateKey = "__kalp_schedules__";
 
+  /**
+   * Initializes the schedule manager.
+   * 
+   * @param state - The KV state store for persistence.
+   * @param scheduler - The host adapter for setting physical timers/alarms.
+   */
   constructor(
-    private state: StateStore,
-    private scheduler: SchedulerAdapter,
+    private readonly state: StateStore,
+    private readonly scheduler: SchedulerAdapter,
   ) {}
 
   /**
-   * Registers a new schedule.
+   * Registers a new cron schedule.
+   * 
+   * If a schedule with the same ID already exists, it is overwritten.
+   * The manager automatically updates the physical alarm if this new schedule is the next due.
    *
-   * @param scheduleId - Unique identifier for this schedule.
-   * @param cron - Cron expression defining the schedule.
-   * @param handlerHash - Hash of the handler to execute.
-   * @param input - Optional input payload for the handler.
-   * @param timezone - Optional timezone for cron evaluation.
-   * @returns The next scheduled run timestamp.
+   * @param scheduleId - A unique identifier for the schedule.
+   * @param cron - A standard 5-field cron expression.
+   * @param handlerHash - The hash of the handler bundle to execute.
+   * @param input - Optional payload to pass to the handler.
+   * @param timezone - Optional timezone for cron evaluation (defaults to UTC).
+   * @returns The timestamp of the first scheduled run.
    */
   async registerSchedule(
     scheduleId: string,
@@ -299,7 +68,9 @@ export class ScheduleManager {
     timezone?: string,
   ): Promise<number> {
     const state = await this.loadState();
-    const nextRunAt = this.calculateNextRun(cron, timezone);
+    
+    // Calculate the first run time starting from now
+    const nextRunAt = calculateNextOccurrence(cron, Date.now(), timezone);
 
     state.schedules[scheduleId] = {
       cron,
@@ -310,189 +81,114 @@ export class ScheduleManager {
     };
 
     await this.saveState(state);
-    await this.scheduleNextAlarm(state);
+    await this.updatePhysicalAlarm(state);
 
     return nextRunAt;
   }
 
   /**
-   * Cancels a registered schedule.
-   *
-   * @param scheduleId - The schedule identifier to cancel.
-   * @returns True if a schedule was cancelled, false if not found.
+   * Cancels an existing schedule.
+   * 
+   * @param scheduleId - The identifier of the schedule to remove.
+   * @returns True if the schedule was found and removed, false otherwise.
    */
   async cancelSchedule(scheduleId: string): Promise<boolean> {
     const state = await this.loadState();
-
-    if (!state.schedules[scheduleId]) {
-      return false;
-    }
+    if (!state.schedules[scheduleId]) return false;
 
     delete state.schedules[scheduleId];
     await this.saveState(state);
-    await this.scheduleNextAlarm(state);
+    await this.updatePhysicalAlarm(state);
 
     return true;
   }
 
   /**
-   * Gets all registered schedules.
+   * Identifies and returns all schedules that are due (or overdue) at the given time.
+   * 
+   * For each due schedule:
+   * 1. It is returned in the list.
+   * 2. Its `nextRunAt` is automatically rescheduled to the next occurrence.
+   * 
+   * After processing, the physical alarm is updated for the next future event.
    *
-   * @returns Map of scheduleId to schedule configuration.
+   * @param now - The current reference timestamp (defaults to Date.now()).
+   * @returns A list of due schedules ready for execution.
    */
-  async getSchedules(): Promise<
-    Record<
-      string,
-      {
-        cron: string;
-        timezone?: string;
-        nextRunAt: number;
-        handlerHash: string;
-        input?: unknown;
-      }
-    >
-  > {
+  async popDueSchedules(now: number = Date.now()): Promise<Array<{
+    scheduleId: string;
+    handlerHash: string;
+    input?: unknown;
+  }>> {
     const state = await this.loadState();
-    return { ...state.schedules };
-  }
+    const due: Array<{ scheduleId: string; handlerHash: string; input?: unknown }> = [];
+    let stateChanged = false;
 
-  /**
-   * Returns due schedules and recalculates their next run.
-   * Called by the runtime when an alarm fires.
-   *
-   * @returns Array of due schedule configurations.
-   */
-  async popDueSchedules(now?: number): Promise<
-    Array<{
-      scheduleId: string;
-      handlerHash: string;
-      input?: unknown;
-    }>
-  > {
-    const state = await this.loadState();
-    const currentTime = now ?? Date.now();
-    const due: Array<{
-      scheduleId: string;
-      handlerHash: string;
-      input?: unknown;
-    }> = [];
-
-    // Find and process due schedules
-    for (const [scheduleId, schedule] of Object.entries(state.schedules)) {
-      if (schedule.nextRunAt <= currentTime) {
+    for (const [id, schedule] of Object.entries(state.schedules)) {
+      if (schedule.nextRunAt <= now) {
         due.push({
-          scheduleId,
+          scheduleId: id,
           handlerHash: schedule.handlerHash,
           input: schedule.input,
         });
 
-        // Recalculate next run
-        schedule.nextRunAt = this.calculateNextRun(
-          schedule.cron,
-          schedule.timezone,
-          currentTime,
-        );
+        // Reschedule to next occurrence
+        schedule.nextRunAt = calculateNextOccurrence(schedule.cron, now, schedule.timezone);
+        stateChanged = true;
       }
     }
 
-    // Sort by nextRunAt (deterministic ordering)
-    const sortedSchedules = Object.entries(state.schedules).sort(
-      (a, b) => a[1].nextRunAt - b[1].nextRunAt,
-    );
+    if (stateChanged) {
+      await this.saveState(state);
+    }
 
-    // Rebuild schedules object in sorted order
-    state.schedules = Object.fromEntries(sortedSchedules);
-
-    await this.saveState(state);
-    await this.scheduleNextAlarm(state);
+    // Always ensure the physical alarm matches the next logical due date
+    await this.updatePhysicalAlarm(state);
 
     return due;
   }
 
   /**
-   * Processes alarm payloads from the adapter.
-   * Maps schedule alarms to their respective handlers.
-   *
-   * @returns Array of schedule executions to perform.
+   * Returns a read-only snapshot of all registered schedules.
    */
-  async processAlarms(): Promise<
-    Array<{
-      executionId: string;
-      traceId: string;
-      wakeReason: string;
-      scheduleId?: string;
-    }>
-  > {
-    const alarms = await this.scheduler.popDueAlarms();
-    const executions: Array<{
-      executionId: string;
-      traceId: string;
-      wakeReason: string;
-      scheduleId?: string;
-    }> = [];
+  async getSchedules(): Promise<ScheduleState["schedules"]> {
+    const state = await this.loadState();
+    return { ...state.schedules };
+  }
 
-    for (const alarm of alarms) {
-      if (alarm.wakeReason === "scheduled" && alarm.scheduleId) {
-        executions.push(alarm);
+  /**
+   * Internal: Syncs the host's physical alarm with the next logical due date in the queue.
+   */
+  private async updatePhysicalAlarm(state: ScheduleState): Promise<void> {
+    const schedules = Object.values(state.schedules);
+    if (schedules.length === 0) {
+      // Clear host alarms if no schedules left
+      if (this.scheduler.cancelAlarm) {
+          await this.scheduler.cancelAlarm();
       }
+      return;
     }
 
-    return executions;
+    // Find the nearest future run time
+    const nextDue = Math.min(...schedules.map((s) => s.nextRunAt));
+
+    // Schedule the alarm in the host (Cloudflare, etc.)
+    await this.scheduler.scheduleAlarm(nextDue, {
+      executionId: crypto.randomUUID(),
+      traceId: "system-timer",
+      wakeReason: "cron-wake",
+    });
   }
 
   private async loadState(): Promise<ScheduleState> {
     const raw = await this.state.get(this.stateKey);
-    return (raw as ScheduleState) ?? { schedules: {} };
+    if (!raw || typeof raw !== "object") {
+      return { schedules: {} };
+    }
+    return raw as ScheduleState;
   }
 
   private async saveState(state: ScheduleState): Promise<void> {
     await this.state.set(this.stateKey, state);
-  }
-
-  private async scheduleNextAlarm(state: ScheduleState): Promise<void> {
-    // Always cancel any existing alarm first
-    await this.scheduler.cancelAlarm();
-
-    const nextRun = Math.min(
-      ...Object.values(state.schedules).map((s) => s.nextRunAt),
-      Infinity,
-    );
-
-    if (nextRun !== Infinity) {
-      // Find the schedule with earliest nextRunAt
-      const [scheduleId] = Object.entries(state.schedules).find(
-        ([, s]) => s.nextRunAt === nextRun,
-      ) ?? [undefined];
-
-      await this.scheduler.scheduleAlarm(nextRun, {
-        executionId: crypto.randomUUID(),
-        traceId: crypto.randomUUID(),
-        wakeReason: "scheduled",
-        scheduleId,
-      });
-    }
-  }
-
-  private calculateNextRun(
-    cron: string,
-    timezone?: string,
-    baseTime?: number,
-  ): number {
-    const parsedCron = parseCronExpression(cron);
-    const startFrom = baseTime ?? Date.now();
-    const nextMinuteStart =
-      Math.floor(startFrom / MINUTE_MS) * MINUTE_MS + MINUTE_MS;
-
-    for (let i = 0; i < MAX_LOOKAHEAD_MINUTES; i++) {
-      const candidate = nextMinuteStart + i * MINUTE_MS;
-      const timeParts = getTimeParts(candidate, timezone);
-      if (matchesCron(parsedCron, timeParts)) {
-        return candidate;
-      }
-    }
-
-    throw new Error(
-      `Unable to compute next run for cron "${cron}" within ${MAX_LOOKAHEAD_MINUTES} minutes`,
-    );
   }
 }

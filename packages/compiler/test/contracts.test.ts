@@ -27,24 +27,25 @@ describe("Contracts Fixture", () => {
     );
 
     // Verify IR structure
-    expect(ir.metadata).toBeDefined();
-    expect(ir.metadata.name).toBe("contracts-test-agent");
-    expect(ir.entries).toBeDefined();
+    expect(ir.agent).toBeDefined();
+    expect(ir.agent.name).toBe("contracts-test-agent");
+    expect(ir.nodes).toBeDefined();
+    expect(ir.bundles).toBeDefined();
 
     // Verify contract steps and tools exist
-    expect(ir.entries?.["steps.contract_step"]).toBeDefined();
-    expect(ir.entries?.["steps.agent_caller"]).toBeDefined();
-    expect(ir.entries?.["tools.contract_tool"]).toBeDefined();
+    expect(ir.nodes?.["step:contract_step"]).toBeDefined();
+    expect(ir.nodes?.["step:agent_caller"]).toBeDefined();
+    expect(ir.nodes?.["tool:contract_tool"]).toBeDefined();
 
     // Verify contract route
-    expect(ir.entries?.["POST:/api/contract"]).toBeDefined();
+    expect(ir.nodes?.["route:POST:/api/contract"]).toBeDefined();
 
     // Verify hooks
-    expect(ir.entries?.["onMessage"]).toBeDefined();
-    expect(ir.entries?.["onCall"]).toBeDefined();
+    expect(ir.nodes?.["hook:message"]).toBeDefined();
+    expect(ir.nodes?.["hook:call"]).toBeDefined();
 
     // Verify bundles exist for all handlers
-    const stepHash = ir.entries["steps.contract_step"];
+    const stepHash = ir.nodes["step:contract_step"]?.bundle;
     expect(ir.bundles?.[stepHash]).toBeDefined();
   });
 
@@ -58,17 +59,20 @@ describe("Contracts Fixture", () => {
     );
 
     // Verify entries exist before executing
-    expect(ir.entries).toBeDefined();
-    const contractStepHash = ir.entries?.["steps.contract_step"];
-    const onCallHash = ir.entries?.["onCall"];
+    expect(ir.nodes).toBeDefined();
+    const contractStepHash = ir.nodes?.["step:contract_step"]?.bundle;
+    const onCallHash = ir.nodes?.["hook:call"]?.bundle;
 
-    // Skip execution test if entries don't exist (SDK type compatibility)
+    // Skip execution test if entries don't exist (jiti module cache issue across tests)
     if (!contractStepHash || !onCallHash) {
       console.log("Contract entries not found - skipping execution test");
       return;
     }
 
-    // Execute contract step
+    expect(contractStepHash).toBeDefined();
+    expect(onCallHash).toBeDefined();
+
+    // 1. Test step execution using imported types
     expect(ir.bundles?.[contractStepHash]).toBeDefined();
     const contractHandler = executeBundleFromCode(
       ir.bundles[contractStepHash].code,
@@ -76,7 +80,7 @@ describe("Contracts Fixture", () => {
     const result = await contractHandler({ payload: "test" }, {});
     expect(result.validated).toBe(true);
 
-    // Execute onCall hook
+    // 2. Test entry handler (onCall) using contract models
     expect(ir.bundles?.[onCallHash]).toBeDefined();
     const onCallHandler = executeBundleFromCode(ir.bundles[onCallHash].code);
     const callResult = await onCallHandler({ query: "test", context: {} }, {});

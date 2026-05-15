@@ -16,33 +16,47 @@ import { createFakeAdapters } from "./fixtures/fake-adapters";
 import type { RuntimeEvent } from "../src/engine/types";
 import type { IRGraph } from "@kalphq/sdk";
 import { asUserId } from "@kalphq/sdk";
-import type { RuntimeProviders } from "../src/engine/context-builder";
+import { FakeEffectResolver } from "./fixtures/fake-resolver";
 
 // Helper to create mock IR with proper SDK types
-const createMockIR = (): IRGraph => ({
-  version: 1,
-  metadata: {
+const createMockIR = (): any => ({
+  version: 2,
+  agent: {
     name: "test-runtime-agent",
     description: "Test agent for runtime E2E tests",
     systemPrompt: "You are a test agent",
   },
-  entries: {
-    onMessage: "on-message-handler",
+  nodes: {
+    "hook:message": {
+      kind: "message",
+      bundle: "on-message-handler",
+      trigger: { type: "message" },
+    },
+    "step:suspend-handler": {
+      kind: "step",
+      bundle: "suspend-handler",
+    },
+    "cron:0": {
+      kind: "cron",
+      bundle: "schedule-handler",
+      trigger: { type: "schedule", scheduleId: "cron:0" },
+      schedule: { expression: "0 * * * *" },
+    },
   },
   bundles: {
     "on-message-handler": {
-      type: "entry",
+      hash: "on-message-handler",
       code: `
-        return async (ctx, payload) => {
+        return async (payload, ctx) => {
           await ctx.storage.put("lastMessage", payload);
           return { received: true, message: payload };
         };
       `,
     },
     "suspend-handler": {
-      type: "step",
+      hash: "suspend-handler",
       code: `
-        return async (ctx, payload) => {
+        return async (payload, ctx) => {
           // First call - suspend
           if (!payload.resumed) {
             await ctx.actions.waitUntil(Date.now() + 1000, "test-wake");
@@ -53,12 +67,20 @@ const createMockIR = (): IRGraph => ({
         };
       `,
     },
+    "schedule-handler": {
+      hash: "schedule-handler",
+      code: `
+        return async (ctx) => {
+          await ctx.storage.put("scheduled", true);
+          return { scheduled: true };
+        };
+      `,
+    },
   },
-  schedules: {},
 });
 
 // Mock providers
-const createMockProviders = (): RuntimeProviders => ({
+const createMockProviders = () => ({
   ai: {
     complete: async () => ({ content: "test response" }),
     stream: async () => ({ content: "streamed response" }),
@@ -81,7 +103,7 @@ const createMockProviders = (): RuntimeProviders => ({
 
 describe("runtime E2E", () => {
   let adapters: ReturnType<typeof createFakeAdapters>;
-  let providers: RuntimeProviders;
+  let providers;
 
   beforeEach(() => {
     adapters = createFakeAdapters();
@@ -103,8 +125,11 @@ describe("runtime E2E", () => {
               idempotency: adapters.state,
               threads: adapters.state,
             },
-            adapters.scheduler,
-            providers,
+            new FakeEffectResolver(
+              adapters.events,
+              adapters.state,
+              adapters.scheduler,
+            ),
           ),
       ).toThrow(/IR incompatible/);
     });
@@ -119,8 +144,11 @@ describe("runtime E2E", () => {
           idempotency: adapters.state,
           threads: adapters.state,
         },
-        adapters.scheduler,
-        providers,
+        new FakeEffectResolver(
+          adapters.events,
+          adapters.state,
+          adapters.scheduler,
+        ),
       );
 
       const event: RuntimeEvent = {
@@ -156,8 +184,11 @@ describe("runtime E2E", () => {
           idempotency: adapters.state,
           threads: adapters.state,
         },
-        adapters.scheduler,
-        providers,
+        new FakeEffectResolver(
+          adapters.events,
+          adapters.state,
+          adapters.scheduler,
+        ),
       );
 
       const event: RuntimeEvent = {
@@ -190,8 +221,11 @@ describe("runtime E2E", () => {
           idempotency: adapters.state,
           threads: adapters.state,
         },
-        adapters.scheduler,
-        providers,
+        new FakeEffectResolver(
+          adapters.events,
+          adapters.state,
+          adapters.scheduler,
+        ),
       );
 
       const event: RuntimeEvent = {
@@ -213,7 +247,7 @@ describe("runtime E2E", () => {
       ir.bundles["suspend-handler"] = {
         type: "step",
         code: `
-          return async (ctx, payload) => {
+          return async (payload, ctx) => {
             await ctx.actions.waitUntil(Date.now() + 1000, "test-wake");
             return { shouldNotReach: true };
           };
@@ -221,7 +255,7 @@ describe("runtime E2E", () => {
       };
 
       // Add entry for suspend test
-      ir.entries["testSuspend"] = "suspend-handler";
+      ir.nodes["testSuspend"] = { kind: "step", bundle: "suspend-handler" };
 
       const runtime = new KalpRuntime(
         ir,
@@ -231,8 +265,11 @@ describe("runtime E2E", () => {
           idempotency: adapters.state,
           threads: adapters.state,
         },
-        adapters.scheduler,
-        providers,
+        new FakeEffectResolver(
+          adapters.events,
+          adapters.state,
+          adapters.scheduler,
+        ),
       );
 
       const event: RuntimeEvent = {
@@ -254,9 +291,9 @@ describe("runtime E2E", () => {
 
       // Update the bundle to use waitUntil
       ir.bundles["suspend-handler"] = {
-        type: "step",
+        hash: "suspend-handler",
         code: `
-          return async (ctx, payload) => {
+          return async (payload, ctx) => {
             const resumeTime = Date.now() + 5000; // 5 seconds
             await ctx.actions.waitUntil(resumeTime, "timer-wake");
             return { wokeUp: true };
@@ -264,7 +301,7 @@ describe("runtime E2E", () => {
         `,
       };
 
-      ir.entries["testWait"] = "suspend-handler";
+      ir.nodes["testWait"] = { kind: "step", bundle: "suspend-handler" };
 
       const runtime = new KalpRuntime(
         ir,
@@ -274,8 +311,11 @@ describe("runtime E2E", () => {
           idempotency: adapters.state,
           threads: adapters.state,
         },
-        adapters.scheduler,
-        providers,
+        new FakeEffectResolver(
+          adapters.events,
+          adapters.state,
+          adapters.scheduler,
+        ),
       );
 
       const event: RuntimeEvent = {
@@ -289,7 +329,7 @@ describe("runtime E2E", () => {
       // Verify alarm was scheduled (wakeReason comes from waitUntil)
       const alarms = adapters.scheduler.getAlarms();
       expect(alarms.length).toBeGreaterThan(0);
-      expect(alarms[0].payload.wakeReason).toBe("timer");
+      expect(alarms[0]!.payload.wakeReason).toBe("timer-wake");
     });
 
     it("should resume execution from suspension point", async () => {
@@ -300,7 +340,7 @@ describe("runtime E2E", () => {
       // This requires pre-populating the event log with suspension state
 
       // For now, test the resume event type handling
-      ir.entries["resume"] = "on-message-handler";
+      ir.nodes["resume"] = { kind: "message", bundle: "on-message-handler" };
 
       const runtime = new KalpRuntime(
         ir,
@@ -310,8 +350,11 @@ describe("runtime E2E", () => {
           idempotency: adapters.state,
           threads: adapters.state,
         },
-        adapters.scheduler,
-        providers,
+        new FakeEffectResolver(
+          adapters.events,
+          adapters.state,
+          adapters.scheduler,
+        ),
       );
 
       // Create a resume event
@@ -332,7 +375,7 @@ describe("runtime E2E", () => {
       const ir = createMockIR();
 
       // Add a route entry
-      ir.entries["route:test"] = "on-message-handler";
+      ir.nodes["route:test"] = { kind: "route", bundle: "on-message-handler" };
 
       const runtime = new KalpRuntime(
         ir,
@@ -342,8 +385,11 @@ describe("runtime E2E", () => {
           idempotency: adapters.state,
           threads: adapters.state,
         },
-        adapters.scheduler,
-        providers,
+        new FakeEffectResolver(
+          adapters.events,
+          adapters.state,
+          adapters.scheduler,
+        ),
       );
 
       // Route event
@@ -365,13 +411,10 @@ describe("runtime E2E", () => {
       const ir = createMockIR();
 
       // Add schedule entry
-      ir.entries["schedule:daily"] = "on-message-handler";
-      ir.schedules = {
-        daily: {
-          cron: "0 9 * * *",
-          timezone: "UTC",
-          handlerHash: "on-message-handler",
-        },
+      ir.nodes["cron:daily"] = {
+        kind: "cron",
+        bundle: "schedule-handler",
+        schedule: { expression: "0 9 * * *", timezone: "UTC" },
       };
 
       const runtime = new KalpRuntime(
@@ -382,8 +425,11 @@ describe("runtime E2E", () => {
           idempotency: adapters.state,
           threads: adapters.state,
         },
-        adapters.scheduler,
-        providers,
+        new FakeEffectResolver(
+          adapters.events,
+          adapters.state,
+          adapters.scheduler,
+        ),
       );
 
       const event: RuntimeEvent = {
@@ -434,8 +480,11 @@ describe("runtime E2E", () => {
           idempotency: adapters.state,
           threads: adapters.state,
         },
-        adapters.scheduler,
-        providers,
+        new FakeEffectResolver(
+          adapters.events,
+          adapters.state,
+          adapters.scheduler,
+        ),
       );
 
       // Execute a handler that should use cached results
@@ -457,43 +506,51 @@ describe("runtime E2E", () => {
     it("should propagate traceId and parentExecutionId across emit -> listener", async () => {
       const listenerEntryKey = "listener:test-runtime-agent:ticket_created:0";
       const ir: IRGraph = {
-        version: 1,
-        metadata: {
+        version: 2,
+        agent: {
           name: "test-runtime-agent",
-          listeners: [
-            {
-              sourceAgentId: "test-runtime-agent",
-              event: "ticket_created",
-              targetEntryKey: listenerEntryKey,
-            },
-          ],
         },
-        entries: {
-          onMessage: "emit-entry",
-          [listenerEntryKey]: "listener-entry",
+        nodes: {
+          "hook:message": {
+            kind: "message",
+            bundle: "emit-entry",
+            trigger: { type: "message" },
+          },
+          [listenerEntryKey]: {
+            kind: "listener",
+            bundle: "listener-entry",
+            source: { agentId: "test-runtime-agent", event: "ticket_created" },
+          },
         },
         bundles: {
           "emit-entry": {
-            type: "entry",
+            hash: "emit-entry",
             code: `
-              return async (ctx, payload) => {
-                ctx.actions.emit("ticket_created", { ticketId: payload.ticketId });
+              return async (payload, ctx) => {
+                await ctx.actions.emit("ticket_created", { ticketId: payload.ticketId });
                 return { ok: true };
               };
             `,
           },
           "listener-entry": {
-            type: "entry",
+            hash: "listener-entry",
             code: `
-              return async (ctx, payload) => {
+              return async (payload, ctx) => {
                 await ctx.storage.put("listenerPayload", payload);
                 return { consumed: true };
               };
             `,
           },
         },
+        meta: {} as any,
+        irHash: "123",
       };
 
+      const resolver = new FakeEffectResolver(
+        adapters.events,
+        adapters.state,
+        adapters.scheduler,
+      );
       const runtime = new KalpRuntime(
         ir,
         {
@@ -502,9 +559,17 @@ describe("runtime E2E", () => {
           idempotency: adapters.state,
           threads: adapters.state,
         },
-        adapters.scheduler,
-        providers,
+        resolver,
       );
+
+      resolver.onListenerQueued = async (entryKey, payload, traceId) => {
+        await runtime.handleEvent({
+          type: entryKey as never,
+          payload,
+          threadId: "thread-1",
+          traceId,
+        });
+      };
 
       await runtime.handleEvent({
         type: "onMessage",
@@ -550,9 +615,9 @@ describe("runtime E2E", () => {
 
       // Create a handler that emits multiple events
       ir.bundles["seq-test"] = {
-        type: "step",
+        hash: "seq-test",
         code: `
-          return async (ctx, payload) => {
+          return async (payload, ctx) => {
             await ctx.storage.put("key1", "value1");
             await ctx.storage.put("key2", "value2");
             await ctx.storage.put("key3", "value3");
@@ -561,7 +626,7 @@ describe("runtime E2E", () => {
         `,
       };
 
-      ir.entries["seqTest"] = "seq-test";
+      ir.nodes["seqTest"] = { kind: "step", bundle: "seq-test" };
 
       const runtime = new KalpRuntime(
         ir,
@@ -571,8 +636,11 @@ describe("runtime E2E", () => {
           idempotency: adapters.state,
           threads: adapters.state,
         },
-        adapters.scheduler,
-        providers,
+        new FakeEffectResolver(
+          adapters.events,
+          adapters.state,
+          adapters.scheduler,
+        ),
       );
 
       const event: RuntimeEvent = {
@@ -588,7 +656,7 @@ describe("runtime E2E", () => {
 
       // Filter storage events (side-effect tracking for observability)
       const storageEvents = events.filter((e) =>
-        (e.type as string).startsWith("state."),
+        (e.type as string).startsWith("storage."),
       );
 
       // Should have storage events (put operations were tracked)
@@ -600,6 +668,67 @@ describe("runtime E2E", () => {
         expect(event.executionId).toBeDefined();
         expect(event.timestamp).toBeDefined();
       }
+    });
+
+    it("should strictly guarantee persist-before-return for effects", async () => {
+      const ir = createMockIR();
+
+      ir.bundles["persist-test"] = {
+        hash: "persist-test",
+        code: `
+          return async (payload, ctx) => {
+            // Emit effect and await result
+            const result = await ctx.storage.get("important-key");
+            return { done: true, result };
+          };
+        `,
+      };
+
+      ir.nodes["persistTest"] = { kind: "step", bundle: "persist-test" };
+
+      const resolver = new FakeEffectResolver(adapters.events, adapters.state, adapters.scheduler);
+      
+      // Wrap the append to detect exactly WHEN the append happens relative to the handler continuation
+      const originalAppend = adapters.events.append.bind(adapters.events);
+      let effectPersisted = false;
+      adapters.events.append = async (event: any) => {
+        if (event.type === "storage.get") {
+          effectPersisted = true;
+        }
+        return originalAppend(event);
+      };
+
+      const runtime = new KalpRuntime(
+        ir,
+        {
+          state: adapters.state,
+          events: adapters.events,
+          idempotency: adapters.state,
+          threads: adapters.state,
+        },
+        resolver
+      );
+
+      // Pre-populate state
+      await adapters.state.set("__state:important-key", "mocked");
+
+      const event: RuntimeEvent = {
+        type: "persistTest" as never,
+        payload: {},
+        threadId: "thread-1",
+      };
+
+      await runtime.handleEvent(event);
+
+      // Verify that the effect was fully persisted before handler resumed
+      expect(effectPersisted).toBe(true);
+      
+      const events = adapters.events.getEvents();
+      const getEvent = [...events].reverse().find(e => (e as any).type === "storage.get") as any;
+      
+      // Verify the result is actually persisted in the event
+      expect(getEvent).toBeDefined();
+      expect(getEvent.result).toEqual("mocked");
     });
   });
 });

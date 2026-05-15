@@ -9,121 +9,125 @@
  * @module
  */
 
-import type { IRGraph, KalpContext } from "@kalphq/sdk";
-import type {
-  PersistenceAdapter,
-  SchedulerAdapter,
-} from "@/adapters/interfaces";
-import type {
-  RuntimeEvent,
-  EventDispatchEnvelope,
-  ExecutionContext,
-} from "@/engine/types";
-import type { IntentEvent } from "@/engine/event-log-buffer";
-import { EventLogBuffer } from "@/engine/event-log-buffer";
+import type { IRGraph, KalpContext, KalpHistoryMessage } from "@kalphq/sdk";
+import type { RuntimeEvent, EventDispatchEnvelope } from "@/engine/types";
+import type { PersistenceAdapter } from "@/adapters/interfaces";
+import { ReplayLog } from "../state/replay-log";
 import { SuspensionException } from "@/engine/suspension";
-import {
-  buildKalpContext,
-  type RuntimeProviders,
-} from "@/engine/context-builder";
+import { createProxyContext } from "../effects/context";
+import type { EffectResolver } from "../effects/types";
+import { createRootFrame, type ExecutionContext, type ExecutionFrame } from "../execution/frame";
+import { isDispatchEnvelope, resolveHandlerHash, calculateStartingSeq } from "./runtime-utils";
 
 /**
  * The Kalp Proxy-Listener Runtime.
  *
- * Processes external events by:
- * 1. Loading persisted events from EventStore
- * 2. Creating context proxies with EventLogBuffer
- * 3. Executing the handler from line 1
- * 4. Catching SuspensionException for deferred wake-up
+ * This is the core engine responsible for executing agent handlers in a durable
+ * and deterministic manner. It uses a "Proxy-Listener" architecture where:
+ * 1. SDK primitives are injected via proxies.
+ * 2. Side effects are intercepted and recorded as "events".
+ * 3. Execution can be suspended and resumed from the exact same point by replaying the log.
+ *
+ * @module
  */
 export class KalpRuntime {
-  private static readonly SUPPORTED_IR_VERSION = 1;
-
+  /**
+   * Initializes the Kalp runtime with an IR graph and host adapters.
+   * 
+   * @param ir - The Intermediate Representation (IR) graph containing agent logic and bundles.
+   * @param persistence - Host adapters for state, events, and scheduling.
+   * @param resolver - The effect resolver that executes external side effects (AI, storage, etc.).
+   */
   constructor(
-    private ir: IRGraph,
-    private persistence: PersistenceAdapter,
-    private scheduler: SchedulerAdapter,
-    private providers: RuntimeProviders,
+    private readonly ir: IRGraph,
+    private readonly persistence: PersistenceAdapter,
+    private readonly resolver: EffectResolver,
   ) {
-    if (Number(ir.version) !== KalpRuntime.SUPPORTED_IR_VERSION) {
+    // Ensure IR version compatibility
+    if (Number(ir.version) !== 2) {
       throw new Error(
-        `IR incompatible (received v${String(ir.version)}, expected v${KalpRuntime.SUPPORTED_IR_VERSION}). Recompile with the current SDK/Compiler.`,
+        `IR incompatible (received v${String(ir.version)}). Please recompile the agent with the current SDK/Compiler.`,
       );
     }
   }
 
   /**
-   * Handles an external event by executing the corresponding handler.
+   * Processes an incoming event by triggering the appropriate handler.
+   * 
+   * This method handles both initial triggers and resume-from-suspension events.
+   * It performs the following steps:
+   * 1. Resolves execution and trace identifiers.
+   * 2. Hydrates the Replay Log from the persistent store.
+   * 3. Locates the correct handler bundle in the IR graph.
+   * 4. Initializes a new execution frame and counter.
+   * 5. Starts deterministic execution.
    *
-   * On resume events, the executionId from the payload is used to load
-   * the correct event history. The handler re-executes from line 1,
-   * with proxies returning cached results for already-completed operations.
-   *
-   * @param event - The external runtime event.
-   * @returns The result of the handler execution, or suspension info.
-   * @throws If no entry exists for the event type.
+   * @param event - The incoming event (hook, route, listener, or resume).
+   * @returns The handler's result or suspension details.
    */
   async handleEvent(event: RuntimeEvent): Promise<unknown> {
     const { threadId, payload } = event;
 
-    // Preserve executionId on resume to load correct EventLog
-    const executionId =
-      event.type === "resume" && payload && typeof payload === "object"
-        ? (payload as { executionId: string }).executionId
-        : crypto.randomUUID();
+    // 1. Resolve Execution & Trace Context
+    // On 'resume', we must use the original executionId to re-link to the correct log.
+    const executionId = (event.type === "resume" && payload && typeof payload === "object")
+      ? (payload as { executionId: string }).executionId
+      : crypto.randomUUID();
 
-    // Preserve incoming trace for causal chains (emit -> listener fan-out)
-    const traceId =
-      event.traceId ??
-      (this.isDispatchEnvelope(payload) ? payload.traceId : crypto.randomUUID());
+    // Preserve the traceId for causality tracking (e.g., cross-agent event fan-out).
+    const traceId = event.traceId ?? 
+      (isDispatchEnvelope(payload) ? payload.traceId : crypto.randomUUID());
 
-    // Load event log from SQLite into memory
-    const log = new EventLogBuffer();
+    // 2. Initialize Replay Engine
+    // The ReplayLog acts as a local cache of already-executed effects.
+    const log = new ReplayLog();
     await log.loadFromSQLite(this.persistence.events, { threadId, traceId });
 
-    // O(1) lookup in entries
-    const handlerHash = this.resolveHandlerHash(event.type);
+    // 3. Resolve Handler
+    const handlerHash = resolveHandlerHash(event.type, this.ir);
     if (!handlerHash) {
-      throw new Error(`No handler for event: ${event.type}`);
+      throw new Error(`No handler found for event type: ${event.type}`);
     }
 
-    // Calculate starting sequence number from existing events
+    // 4. Bootstrap Execution Frame
     const execCtx: ExecutionContext = {
-      executionId,
       traceId,
-      threadId: threadId ?? "",
+      threadId: threadId ?? "system",
       untrackedIOCount: 0,
       untrackedIOByType: { network: 0, timer: 0, fs: 0, unknown: 0 },
       hasUntrustedPlugins: false,
-      seqCounter: this.calculateStartingSeq(log, executionId),
     };
+    
+    const startingSeq = calculateStartingSeq(log, executionId);
+    const frame = createRootFrame(execCtx, executionId, startingSeq);
 
-    // Execute handler with drift protection
-    return this.executeHandler(handlerHash, event, execCtx, log);
+    // 5. Execute Handler
+    return this.executeHandler(handlerHash, event, frame, log);
   }
 
-  private isDispatchEnvelope(payload: unknown): payload is EventDispatchEnvelope {
-    if (!payload || typeof payload !== "object") return false;
-    const value = payload as Record<string, unknown>;
-    return (
-      typeof value.eventName === "string" &&
-      typeof value.traceId === "string" &&
-      typeof value.parentExecutionId === "string"
-    );
-  }
-
+  /**
+   * Internal method to dispatch listeners triggered by an 'emit' action.
+   * This implements the cross-agent event sourcing logic.
+   * 
+   * @param envelope - The event metadata and payload.
+   * @param threadId - The target thread ID for the listeners.
+   */
   private async dispatchListenersFromEmit(
     envelope: EventDispatchEnvelope,
     threadId: string,
   ): Promise<void> {
-    const listeners =
-      this.ir.metadata.listeners?.filter((listener) => {
-        if (listener.event !== envelope.eventName) return false;
+    // Find all listener nodes in the IR graph that match the event name
+    const listeners = Object.entries(this.ir.nodes || {})
+      .filter(([_, node]) => {
+        if (node.kind !== "listener" || !node.source) return false;
+        if (node.source.event !== envelope.eventName) return false;
         if (!envelope.sourceAgentId) return true;
-        return listener.sourceAgentId === envelope.sourceAgentId;
-      }) ?? [];
+        return node.source.agentId === envelope.sourceAgentId;
+      })
+      .map(([key]) => ({ targetEntryKey: key }));
 
     for (const listener of listeners) {
+      // 1. Record the queueing of the listener
       await this.persistence.events.append({
         type: "listener.queued",
         listenerEntryKey: listener.targetEntryKey,
@@ -134,8 +138,10 @@ export class KalpRuntime {
         timestamp: Date.now(),
       });
 
+      // 2. Start asynchronous execution (fire-and-forget for the current emitter)
       void (async () => {
         const listenerExecutionId = crypto.randomUUID();
+        
         await this.persistence.events.append({
           type: "listener.started",
           listenerEntryKey: listener.targetEntryKey,
@@ -153,6 +159,7 @@ export class KalpRuntime {
             threadId,
             traceId: envelope.traceId,
           });
+
           await this.persistence.events.append({
             type: "listener.completed",
             listenerEntryKey: listener.targetEntryKey,
@@ -179,103 +186,61 @@ export class KalpRuntime {
   }
 
   /**
-   * Resolves the handler hash for an event type via entries (O(1)).
-   *
-   * @param eventType - The runtime event type.
-   * @returns The handler hash, or null if not found.
-   */
-  private resolveHandlerHash(eventType: string): string | null {
-    // Direct entry lookup (O(1))
-    const direct = this.ir.entries[eventType];
-    if (direct) return direct;
-
-    // Route matching with prefix
-    if (eventType.startsWith("route:")) {
-      const routeKey = eventType.replace("route:", "");
-      return this.ir.entries[routeKey] ?? null;
-    }
-
-    return null;
-  }
-
-  /**
-   * Calculate starting sequence number from existing events.
-   * Ensures new calls get seq = max(existing seq) + 1.
-   *
-   * @param log - The event log buffer.
-   * @param executionId - The execution identifier.
-   * @returns The starting sequence number.
-   */
-  private calculateStartingSeq(
-    log: EventLogBuffer,
-    executionId: string,
-  ): number {
-    const events = log.getAll(executionId);
-    if (!events) return 0;
-
-    let maxSeq = 0;
-    for (let i = 0; i < events.length; i++) {
-      const event = events[i];
-      if (event && event.seq !== undefined) {
-        maxSeq = Math.max(maxSeq, event.seq);
-      }
-    }
-    return maxSeq;
-  }
-
-  /**
-   * Executes a handler with Sequence Key Drift protection.
-   *
-   * @param handlerHash - The hash of the handler bundle.
-   * @param event - The runtime event.
-   * @param execCtx - The execution context.
-   * @param log - The event log buffer.
-   * @returns The result of the handler execution.
-   * @throws SuspensionException if the handler suspends.
+   * Orchestrates the actual JavaScript execution of a handler.
+   * 
+   * It wraps the bundled code into a dynamic function, injects the Proxy context,
+   * and handles potential suspensions or failures.
+   * 
+   * @param handlerHash - The hash of the code bundle to execute.
+   * @param event - The event that triggered the execution.
+   * @param frame - The current execution frame.
+   * @param log - The replay log buffer.
    */
   private async executeHandler(
     handlerHash: string,
     event: RuntimeEvent,
-    execCtx: ExecutionContext,
-    log: EventLogBuffer,
+    frame: ExecutionFrame,
+    log: ReplayLog,
   ): Promise<unknown> {
     const bundle = this.ir.bundles[handlerHash];
     if (!bundle) {
-      throw new Error(`Bundle not found: ${handlerHash}`);
+      throw new Error(`Execution failed: Bundle ${handlerHash} not found in IR.`);
     }
 
-    // Sequence Key Drift protection: verify bundle type is valid
-    if (
-      bundle.type !== "entry" &&
-      bundle.type !== "step" &&
-      bundle.type !== "tool" &&
-      bundle.type !== "route"
-    ) {
-      throw new Error(`Invalid bundle type: ${bundle.type}`);
-    }
+    // 1. Rehydrate conversation history if available
+    const historyEntries = await this.loadHistory(frame.ctx.threadId);
 
-    // Create context proxies
-    const ctx = this.buildContext(log, execCtx, handlerHash);
+    // 2. Build the context with proxies
+    const ctx = this.buildContext(log, frame, historyEntries);
 
-    // Create and execute the handler function
+    // 3. Compile and execute the handler
+    // We use 'new Function' to isolate the handler code and return its default export.
     const fn = new Function(`
       ${bundle.code}
       return __handler.default;
     `)();
 
+    // 4. Handle calling convention differences
+    // Lifecycle hooks usually don't receive the payload as the first argument.
+    const isContextOnly =
+      event.type === "onInit" ||
+      event.type === "onTick" ||
+      event.type.startsWith("schedule:");
+
     try {
-      const result = await fn(ctx, event.payload);
-      return result;
+      return isContextOnly
+        ? await fn(ctx)
+        : await fn(event.payload, ctx);
     } catch (err) {
+      // 5. Handle Suspension (Durable Execution)
       if (err instanceof SuspensionException) {
-        // Persist suspension state
         await this.persistence.events.append({
           type: "execution.suspended",
           nodeId: event.type,
           resumeAt: err.resumeAt,
-          executionId: execCtx.executionId,
-          traceId: execCtx.traceId,
-          threadId: execCtx.threadId,
+          executionId: frame.executionId,
+          traceId: frame.ctx.traceId,
+          threadId: frame.ctx.threadId,
           timestamp: Date.now(),
         });
 
@@ -290,88 +255,79 @@ export class KalpRuntime {
   }
 
   /**
-   * Builds the KalpContext with intercepted proxies.
-   *
-   * Uses the context-builder to create a full KalpContext with all primitives.
-   *
-   * @param log - The event log buffer for cache lookup.
-   * @param execCtx - The execution context for event identity.
-   * @param handlerHash - The hash of the handler bundle.
-   * @returns A KalpContext matching the SDK interface.
+   * Loads the conversation history from the event store.
+   * Filters for completed nodes to build the semantic history of the thread.
+   */
+  private async loadHistory(threadId: string): Promise<KalpHistoryMessage[]> {
+    if (!threadId) return [];
+
+    try {
+      const rawEvents = await this.persistence.events.loadByThread(threadId);
+      return rawEvents
+        .filter((e) => e.type === "node.completed" || e.type === "action.run.completed")
+        .map((e) => ({
+          role: "assistant" as const,
+          content: JSON.stringify({
+            type: e.type,
+            result: (e as { result?: unknown }).result,
+          }),
+          timestamp: e.timestamp,
+        }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Constructs the Proxy Context for the handler.
+   * Delegates to createProxyContext while injecting host-specific metadata.
    */
   private buildContext(
-    log: EventLogBuffer,
-    execCtx: ExecutionContext,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _handlerHash: string,
+    log: ReplayLog,
+    frame: ExecutionFrame,
+    history: KalpHistoryMessage[],
   ): KalpContext {
-    // Persist event helper
-    const persistEvent = async (event: IntentEvent): Promise<void> => {
-      log.append(event);
-      await this.persistence.events.append(event);
-    };
+    const systemPrompt = this.ir.agent?.systemPrompt;
+    
+    // Resolve static system prompt (dynamic ones are handled inside the AI primitive)
+    const resolvedSystemPrompt = (typeof systemPrompt === "object" && systemPrompt !== null && "dynamic" in systemPrompt)
+      ? ""
+      : (systemPrompt ?? "");
 
-    let runtimeContext: KalpContext | null = null;
-
-    const executeBundle = async (
-      targetHandlerHash: string,
-      input: unknown,
-    ): Promise<unknown> => {
-      const bundle = this.ir.bundles[targetHandlerHash];
-
-      if (!bundle) {
-        throw new Error(`Bundle not found: ${targetHandlerHash}`);
-      }
-
-      const fn = new Function(`
-        ${bundle.code}
-        return __handler.default;
-      `)();
-
-      return fn(input, runtimeContext);
-    };
-
-    // Resolve system prompt (support both static string and dynamic function)
-    const systemPrompt = this.ir.metadata.systemPrompt;
-    const resolvedSystemPrompt =
-      typeof systemPrompt === "object" &&
-      systemPrompt !== null &&
-      "dynamic" in systemPrompt
-        ? "" // Dynamic prompts resolved at runtime by the handler
-        : (systemPrompt ?? "");
-
-    const context = buildKalpContext(
-      this.persistence.state,
-      this.persistence.events,
-      this.scheduler,
+    return createProxyContext(
+      this.resolver,
       log,
-      executeBundle,
-      persistEvent,
-      this.ir,
-      this.providers,
-      execCtx,
+      frame,
+      async (effect) => {
+        // 1. Persist the effect
+        await this.persistence.events.append(effect);
+
+        // 2. Handle cross-agent emissions (fan-out)
+        if (effect.type === "action.emit") {
+          const { event: emitEvent, data, options } = effect.payload;
+          const envelope: EventDispatchEnvelope = {
+            eventName: emitEvent,
+            payload: data,
+            traceId: effect.traceId,
+            parentExecutionId: effect.executionId,
+            sourceAgentId: options?.sourceAgentId ?? this.ir.agent?.name ?? "unknown",
+          };
+          await this.dispatchListenersFromEmit(envelope, effect.threadId);
+        }
+      },
       {
-        name: this.ir.metadata.name,
+        agentId: this.ir.agent?.name ?? frame.ctx.threadId ?? "unknown",
+        runId: frame.executionId,
+        name: this.ir.agent?.name ?? "unknown",
         systemPrompt: resolvedSystemPrompt,
         metadata: {
-          ...this.ir.metadata.metadata,
-          label: this.ir.metadata.label,
-          tags: this.ir.metadata.tags,
-          emits: this.ir.metadata.emits,
-          public: this.ir.metadata.public,
-          routesPublic: this.ir.metadata.routesPublic,
-          listeners: this.ir.metadata.listeners,
+          label: this.ir.agent?.label,
+          tags: this.ir.agent?.tags,
+          skipAuth: this.ir.agent?.skipAuth,
         },
       },
-      undefined,
-      {
-        sourceAgentId: this.ir.metadata.name,
-        onEmitDispatch: (envelope) =>
-          this.dispatchListenersFromEmit(envelope, execCtx.threadId),
-      },
+      history
     );
-
-    runtimeContext = context;
-    return context;
   }
 }
+

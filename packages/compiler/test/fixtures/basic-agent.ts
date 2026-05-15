@@ -18,7 +18,7 @@ export const step1 = defineStep({
   id: "step_1",
   inputSchema: z.object({ text: z.string() }),
   outputSchema: z.object({ text: z.string() }),
-  async handler(input, ctx) {
+  async handler(input, _ctx) {
     return { text: mockUtil(input.text) };
   },
 });
@@ -30,7 +30,7 @@ export const format_response = defineStep({
     sources: z.array(z.string()).optional(),
   }),
   outputSchema: z.object({ formatted: z.string() }),
-  async handler(input, ctx) {
+  async handler(input, _ctx) {
     return { formatted: input.text };
   },
 });
@@ -39,7 +39,7 @@ export const step_no_input = defineStep({
   id: "step_no_input",
   inputSchema: z.object({}).optional(),
   outputSchema: z.object({ ok: z.boolean() }),
-  async handler(input, ctx) {
+  async handler(_input, _ctx) {
     return { ok: true };
   },
 });
@@ -48,7 +48,7 @@ export const step_with_utils = defineStep({
   id: "step_with_utils",
   inputSchema: z.object({ text: z.string() }),
   outputSchema: z.object({ formatted: z.string() }),
-  async handler(input, ctx) {
+  async handler(input, _ctx) {
     return { formatted: mockUtil(input.text) };
   },
 });
@@ -56,7 +56,7 @@ export const step_with_utils = defineStep({
 export const search_tool = defineTool({
   id: "search_tool",
   inputSchema: z.object({ q: z.string() }),
-  async handler(input, ctx) {
+  async handler(_input, _ctx) {
     return ["result"];
   },
 });
@@ -65,7 +65,7 @@ export const healthRoute = defineRoute({
   id: "GET:/health",
   method: "GET",
   path: "/health",
-  async handler(req, res, ctx) {
+  async handler({ req: _req, res: _res, ctx: _ctx }) {
     return { status: "ok" };
   },
 });
@@ -76,10 +76,10 @@ export default defineAgent({
   contract: testContract,
   systemPrompt: () => "dynamic prompt",
   routes: [healthRoute],
-  async onMessage(ctx) {
+  async onMessage(_ctx) {
     return { text: "hello from hook" };
   },
-  async onCall(input, ctx) {
+  async onCall(_input, _ctx) {
     return { result: "call resolved" };
   },
 });

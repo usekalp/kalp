@@ -159,9 +159,8 @@ export type {
 // ============================================================================
 
 export type {
-  AgentMetadata,
-  HandlerBundle,
-  ScheduleEntry,
+  NodeDescriptor,
+  TriggerDescriptor,
   IRGraph,
 } from "@/ir";
 
@@ -176,6 +175,7 @@ export type { InputOf, OutputOf } from "@/utils";
 // ============================================================================
 
 export { defineAgent } from "@/agent";
+export type { AgentConfigBase } from "@/agent";
 export { defineListener } from "@/listeners";
 export type { Listener } from "@/listeners";
 

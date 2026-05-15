@@ -415,3 +415,47 @@ export interface HandlerModule {
   /** The handler's entry function. */
   default: (context: unknown, input?: unknown) => Promise<unknown>;
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Effect System (IR v2)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Represents a side-effect intent emitted by an intercepted SDK primitive.
+ */
+export interface Effect {
+  /** The effect type, e.g., "ai.generate", "storage.get", "action.wait" */
+  type: string;
+  /** Synchronous sequence number for deterministic replay */
+  seq: number;
+  /** Effect-specific payload/arguments */
+  payload: unknown;
+  /** Execution identity */
+  executionId: string;
+  /** Trace identity */
+  traceId: string;
+  /** Thread (agent instance) identity */
+  threadId: string;
+  /** When the effect was intercepted */
+  timestamp: number;
+}
+
+/**
+ * Result of an effect resolution, to be logged and returned to the handler.
+ */
+export interface EffectResult {
+  /** The sequence number of the corresponding effect */
+  seq: number;
+  /** The successful result (if any) */
+  result?: unknown;
+  /** The serialized error (if any) */
+  error?: { message: string; name: string; stack?: string };
+}
+
+/**
+ * Platform-provided resolver that executes effects.
+ * Core only intercepts and logs; the platform adapter (e.g. Cloudflare) resolves.
+ */
+export interface EffectResolver {
+  resolve(effect: Effect): Promise<unknown>;
+}

@@ -27,25 +27,25 @@ describe("Primitives Fixture", () => {
     );
 
     // Verify IR structure
-    expect(ir.metadata).toBeDefined();
-    expect(ir.metadata.name).toBe("primitives-test-agent");
-    expect(ir.entries).toBeDefined();
+    expect(ir.agent).toBeDefined();
+    expect(ir.agent.name).toBe("primitives-test-agent");
+    expect(ir.nodes).toBeDefined();
     expect(ir.bundles).toBeDefined();
 
     // Verify primitive steps exist
-    expect(ir.entries?.["steps.date_step"]).toBeDefined();
-    expect(ir.entries?.["steps.math_step"]).toBeDefined();
-    expect(ir.entries?.["steps.math_advanced"]).toBeDefined();
+    expect(ir.nodes?.["step:date_step"]).toBeDefined();
+    expect(ir.nodes?.["step:math_step"]).toBeDefined();
+    expect(ir.nodes?.["step:math_advanced"]).toBeDefined();
 
     // Verify primitive tools exist
-    expect(ir.entries?.["tools.analytics_tool"]).toBeDefined();
-    expect(ir.entries?.["tools.mcp_tool"]).toBeDefined();
+    expect(ir.nodes?.["tool:analytics_tool"]).toBeDefined();
+    expect(ir.nodes?.["tool:mcp_tool"]).toBeDefined();
 
     // Verify primitives route
-    expect(ir.entries?.["GET:/api/primitives"]).toBeDefined();
+    expect(ir.nodes?.["route:GET:/api/primitives"]).toBeDefined();
 
     // Verify bundles are referenced by entry hashes
-    const dateHash = ir.entries["steps.date_step"];
+    const dateHash = ir.nodes["step:date_step"]?.bundle;
     expect(ir.bundles?.[dateHash]).toBeDefined();
   });
 
@@ -59,9 +59,9 @@ describe("Primitives Fixture", () => {
     );
 
     // Verify entries exist before executing
-    expect(ir.entries).toBeDefined();
-    const mathHash = ir.entries?.["steps.math_step"];
-    const advancedHash = ir.entries?.["steps.math_advanced"];
+    expect(ir.nodes).toBeDefined();
+    const mathHash = ir.nodes?.["step:math_step"]?.bundle;
+    const advancedHash = ir.nodes?.["step:math_advanced"]?.bundle;
 
     // Skip execution test if entries don't exist (SDK type compatibility)
     if (!mathHash || !advancedHash) {

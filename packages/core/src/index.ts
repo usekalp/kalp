@@ -19,18 +19,13 @@
 
 export { KalpRuntime } from "@/engine/runtime";
 export {
-  EventLogBuffer,
+  ReplayLog,
   serializeError,
-  deserializeError,
-  type IntentEvent,
+  type PersistedEffect,
   type SerializedError,
-} from "@/engine/event-log-buffer";
-export {
-  createActionProxy,
-  type BundleExecutor,
-  type EventPersister,
-} from "@/engine/proxy-factory";
+} from "./state/replay-log";
 export { SuspensionException, type SuspensionState } from "@/engine/suspension";
+export { createProxyContext } from "./effects/context";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
@@ -45,6 +40,9 @@ export type {
   ExecutionTask,
   HandlerModule,
   ContractValidation,
+  Effect,
+  EffectResult,
+  EffectResolver,
 } from "@/engine/types";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -62,23 +60,6 @@ export type {
   ThreadStore,
   AlarmPayload,
 } from "@/adapters/interfaces";
-
-import type { RuntimeProviders } from "@/engine/context-builder";
-export type { RuntimeProviders };
-
-// ────────────────────────────────────────────────────────────────────────────
-// Primitives (for building custom proxies)
-// ────────────────────────────────────────────────────────────────────────────
-
-export { createAIPrimitive } from "@/engine/primitives/ai";
-export type { AIProvider } from "@/engine/primitives/ai";
-export { createStoragePrimitive } from "@/engine/primitives/storage";
-export { createHttpPrimitive } from "@/engine/primitives/http";
-export { createDatePrimitive } from "@/engine/primitives/date";
-export { createMathPrimitive } from "@/engine/primitives/math";
-export { createMcpPrimitive } from "@/engine/primitives/mcp";
-export { createMemoryPrimitive } from "@/engine/primitives/memory";
-export { createVaultPrimitive } from "@/engine/primitives/vault";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Schedule Manager

@@ -14,7 +14,6 @@ import type {
   AlarmPayload,
 } from "../../src/adapters/interfaces";
 import type { ExecutionEvent } from "../../src/engine/types";
-import type { IntentEvent } from "../../src/engine/event-log-buffer";
 
 /**
  * Fake StateStore implementation using in-memory Map.
@@ -49,8 +48,36 @@ export class FakeStateStore implements StateStore {
     return newValue;
   }
 
-  async transaction<T>(fn: (tx: StateStore) => Promise<T>): Promise<T> {
-    return fn(this);
+  async batch(operations: Array<
+    | { op: "put"; key: string; value: unknown }
+    | { op: "delete"; key: string }
+    | { op: "increment"; key: string; amount: number }
+    | { op: "cas"; key: string; expected: unknown; next: unknown }
+  >): Promise<void> {
+    for (const op of operations) {
+      switch (op.op) {
+        case "put":
+          this.store.set(op.key, op.value);
+          break;
+        case "delete":
+          this.store.delete(op.key);
+          break;
+        case "increment":
+          {
+            const current = (this.store.get(op.key) as number) ?? 0;
+            this.store.set(op.key, current + op.amount);
+          }
+          break;
+        case "cas":
+          {
+            const current = this.store.get(op.key);
+            if (JSON.stringify(current) === JSON.stringify(op.expected)) {
+              this.store.set(op.key, op.next);
+            }
+          }
+          break;
+      }
+    }
   }
 
   // ThreadStore methods
@@ -97,7 +124,7 @@ export class FakeEventStore implements EventStore {
 
   async loadByExecutionId(executionId: string): Promise<ExecutionEvent[]> {
     return this.events.filter((e) => {
-      const intentEvent = e as IntentEvent;
+      const intentEvent = e;
       return intentEvent.executionId === executionId;
     });
   }
@@ -119,14 +146,12 @@ export class FakeScheduler implements SchedulerAdapter {
   private currentTime = Date.now();
 
   async scheduleAlarm(at: number, payload: AlarmPayload): Promise<void> {
-    this.alarms.push({ at, payload });
-    // Sort by timestamp (ascending)
-    this.alarms.sort((a, b) => a.at - b.at);
+    // Contract: replace any existing alarm
+    this.alarms = [{ at, payload }];
   }
 
   async cancelAlarm(): Promise<void> {
-    // Remove the first alarm (next scheduled)
-    this.alarms.shift();
+    this.alarms = [];
   }
 
   async popDueAlarms(): Promise<AlarmPayload[]> {
@@ -134,7 +159,7 @@ export class FakeScheduler implements SchedulerAdapter {
     const now = this.currentTime;
 
     // Find all alarms that are due
-    while (this.alarms.length > 0 && this.alarms[0].at <= now) {
+    while (this.alarms.length > 0 && this.alarms[0]!.at <= now) {
       due.push(this.alarms.shift()!.payload);
     }
 

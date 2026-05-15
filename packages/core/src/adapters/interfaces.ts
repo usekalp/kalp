@@ -13,7 +13,7 @@
  */
 
 import type { ExecutionEvent } from "../engine/types";
-import type { IntentEvent } from "../engine/event-log-buffer";
+import type { PersistedEffect } from "../state/replay-log";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Sub-stores (decomposed persistence)
@@ -59,12 +59,24 @@ export interface StateStore {
   increment(key: string, amount: number): Promise<number>;
 
   /**
-   * Executes a function within an atomic transaction.
+   * Lists keys with an optional prefix.
    *
-   * @param fn - The transactional function receiving a scoped store.
-   * @returns The transaction's return value.
+   * @param prefix - Optional prefix to filter keys.
+   * @returns An array of matching keys.
    */
-  transaction<T>(fn: (tx: StateStore) => Promise<T>): Promise<T>;
+  list(prefix?: string): Promise<string[]>;
+
+  /**
+   * Executes a batch of atomic operations.
+   *
+   * @param operations - The operations to perform atomically.
+   */
+  batch(operations: Array<
+    | { op: "put"; key: string; value: unknown }
+    | { op: "delete"; key: string }
+    | { op: "increment"; key: string; amount: number }
+    | { op: "cas"; key: string; expected: unknown; next: unknown }
+  >): Promise<void>;
 }
 
 /**
@@ -80,7 +92,7 @@ export interface EventStore {
    *
    * @param event - The execution event to persist.
    */
-  append(event: ExecutionEvent | IntentEvent): Promise<void>;
+  append(event: ExecutionEvent | PersistedEffect): Promise<void>;
 
   /**
    * Loads all events from the execution log, ordered by insertion.
@@ -188,6 +200,7 @@ export interface AlarmPayload {
   traceId: string;
   wakeReason: string;
   scheduleId?: string;
+  threadId?: string;
 }
 
 /**

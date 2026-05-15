@@ -16,14 +16,14 @@ import {
   replayAndValidate,
   type ReplayResult,
 } from "../src/engine/replay-engine";
-import { EventLogBuffer } from "../src/engine/event-log-buffer";
-import type { IntentEvent } from "../src/engine/event-log-buffer";
+import { ReplayLog } from "../src/state/replay-log";
+import type { PersistedEffect } from "../src/state/replay-log";
 
 describe("replay-engine", () => {
-  let log: EventLogBuffer;
+  let log: ReplayLog;
 
   beforeEach(() => {
-    log = new EventLogBuffer();
+    log = new ReplayLog();
   });
 
   describe("drift detection", () => {
@@ -31,7 +31,7 @@ describe("replay-engine", () => {
       const executionId = "test-exec-1";
 
       // Populate log with historical events
-      const historicalEvents: IntentEvent[] = [
+      const historicalEvents: PersistedEffect[] = [
         {
           seq: 1,
           type: "intent.fetch",
@@ -59,7 +59,7 @@ describe("replay-engine", () => {
       }
 
       // Create matching new intents (same types)
-      const newIntents: IntentEvent[] = [
+      const newIntents: PersistedEffect[] = [
         {
           seq: 1,
           type: "intent.fetch",
@@ -91,7 +91,7 @@ describe("replay-engine", () => {
       const executionId = "drift-exec-1";
 
       // Historical log has "intent.action_fetch"
-      const historicalEvents: IntentEvent[] = [
+      const historicalEvents: PersistedEffect[] = [
         {
           seq: 1,
           type: "intent.action_fetch",
@@ -109,7 +109,7 @@ describe("replay-engine", () => {
       }
 
       // Current execution emits "intent.action_run" instead
-      const newIntents: IntentEvent[] = [
+      const newIntents: PersistedEffect[] = [
         {
           seq: 1,
           type: "intent.action_run",
@@ -134,7 +134,7 @@ describe("replay-engine", () => {
       const executionId = "count-exec-1";
 
       // Historical log has 2 events
-      const historicalEvents: IntentEvent[] = [
+      const historicalEvents: PersistedEffect[] = [
         {
           seq: 1,
           type: "intent.fetch",
@@ -160,7 +160,7 @@ describe("replay-engine", () => {
       }
 
       // Current execution only emits 1 event
-      const newIntents: IntentEvent[] = [
+      const newIntents: PersistedEffect[] = [
         {
           seq: 1,
           type: "intent.fetch",
@@ -182,7 +182,7 @@ describe("replay-engine", () => {
       const executionId = "extra-exec-1";
 
       // Historical log has 1 event
-      const historicalEvents: IntentEvent[] = [
+      const historicalEvents: PersistedEffect[] = [
         {
           seq: 1,
           type: "intent.fetch",
@@ -199,7 +199,7 @@ describe("replay-engine", () => {
       }
 
       // Current execution emits 2 events (extra)
-      const newIntents: IntentEvent[] = [
+      const newIntents: PersistedEffect[] = [
         {
           seq: 1,
           type: "intent.fetch",
@@ -231,7 +231,7 @@ describe("replay-engine", () => {
 
       // No historical events in log
 
-      const newIntents: IntentEvent[] = [
+      const newIntents: PersistedEffect[] = [
         {
           seq: 1,
           type: "intent.fetch",
@@ -273,7 +273,7 @@ describe("replay-engine", () => {
       const executionId = "integration-exec-1";
 
       // Setup historical log
-      const historicalEvents: IntentEvent[] = [
+      const historicalEvents: PersistedEffect[] = [
         {
           seq: 1,
           type: "intent.emit",
@@ -290,7 +290,7 @@ describe("replay-engine", () => {
       }
 
       // Replay function that produces matching intents
-      const replayFn = async (): Promise<IntentEvent[]> => {
+      const replayFn = async (): Promise<PersistedEffect[]> => {
         return [
           {
             seq: 1,
@@ -313,7 +313,7 @@ describe("replay-engine", () => {
       const executionId = "async-exec-1";
 
       // Setup historical log with fetch
-      const historicalEvents: IntentEvent[] = [
+      const historicalEvents: PersistedEffect[] = [
         {
           seq: 1,
           type: "intent.action_fetch",
@@ -330,7 +330,7 @@ describe("replay-engine", () => {
       }
 
       // Replay function that produces different action type
-      const replayFn = async (): Promise<IntentEvent[]> => {
+      const replayFn = async (): Promise<PersistedEffect[]> => {
         return [
           {
             seq: 1,
@@ -356,7 +356,7 @@ describe("replay-engine", () => {
       const executionId = "v1-exec-1";
 
       // Historical event with specific payload
-      const historicalEvents: IntentEvent[] = [
+      const historicalEvents: PersistedEffect[] = [
         {
           seq: 1,
           type: "intent.fetch",
@@ -375,7 +375,7 @@ describe("replay-engine", () => {
 
       // New intent with same type but different payload structure
       // V1 should NOT flag this as drift (only type matters)
-      const newIntents: IntentEvent[] = [
+      const newIntents: PersistedEffect[] = [
         {
           seq: 1,
           type: "intent.fetch",

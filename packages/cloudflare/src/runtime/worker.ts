@@ -64,7 +64,11 @@ type ManifestMetadata = {
   label?: string;
   tags?: string[];
   public?: boolean;
+  /** Compiler-emitted auth skip flag (maps to 'public' in API response) */
+  skipAuth?: boolean;
   routesPublic?: Record<string, boolean | undefined>;
+  /** Compiler-emitted per-route auth skip (maps to 'routesPublic' in API response) */
+  routesSkipAuth?: Record<string, boolean | undefined>;
   listeners?: Array<{
     sourceAgentId: string;
     event: string;
@@ -560,8 +564,8 @@ function createRuntimeApp() {
         workerUrl: `${new URL(c.req.url).origin.replace(/\/$/, "")}/a/${agentName}`,
         localPath: null,
         updatedAt: null,
-        public: metadata.public ?? false,
-        routesPublic: metadata.routesPublic ?? {},
+        public: metadata.skipAuth ?? metadata.public ?? false,
+        routesPublic: metadata.routesSkipAuth ?? metadata.routesPublic ?? {},
         listeners: metadata.listeners ?? [],
       });
     }

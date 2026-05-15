@@ -6,7 +6,7 @@ export const dateStep = defineStep({
   id: "date_step",
   inputSchema: z.object({ timezone: z.string().optional() }),
   outputSchema: z.object({ timestamp: z.number(), iso: z.string() }),
-  async handler(input, ctx) {
+  async handler(_input, ctx) {
     // Use deterministic date primitive
     const timestamp = ctx.date.now();
     const iso = ctx.date.toISOString();
@@ -89,7 +89,7 @@ export const primitivesRoute = defineRoute({
   id: "GET:/api/primitives",
   method: "GET",
   path: "/api/primitives",
-  async handler(req, res, ctx) {
+  async handler({ req: _req, res: _res, ctx }) {
     const timestamp = ctx.date.now();
     const random = ctx.math.random();
     return { timestamp, random, message: "primitives working" };
@@ -101,7 +101,7 @@ export default defineAgent({
   name: "primitives-test-agent",
   description: "An agent that tests date, math, and MCP primitives",
   routes: [primitivesRoute],
-  async onMessage(message, ctx) {
+  async onMessage(_message, ctx) {
     // Demonstrate all primitives in onMessage
     const timestamp = ctx.date.now();
     const iso = ctx.date.toISOString();

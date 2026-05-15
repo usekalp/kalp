@@ -15,11 +15,8 @@
 
 import type { IRGraph } from "@kalphq/sdk";
 import { KalpRuntime } from "@/engine/runtime";
-import type {
-  PersistenceAdapter,
-  SchedulerAdapter,
-} from "@/adapters/interfaces";
-import type { RuntimeProviders } from "@/engine/context-builder";
+import type { PersistenceAdapter } from "@/adapters/interfaces";
+import type { EffectResolver } from "@/engine/types";
 
 export { KalpRuntime };
 
@@ -34,10 +31,8 @@ export interface RuntimeConfig {
   ir: IRGraph;
   /** Composite persistence adapter (state, events, idempotency, threads). */
   persistence: PersistenceAdapter;
-  /** Scheduler adapter for deferred wake-ups. */
-  scheduler: SchedulerAdapter;
-  /** External providers for ai, auth, memory, vault. */
-  providers: RuntimeProviders;
+  /** Platform-provided resolver that executes effects. */
+  resolver: EffectResolver;
 }
 
 /**
@@ -64,7 +59,6 @@ export function createRuntime(config: RuntimeConfig): KalpRuntime {
   return new KalpRuntime(
     config.ir,
     config.persistence,
-    config.scheduler,
-    config.providers,
+    config.resolver,
   );
 }

@@ -1,68 +1,72 @@
 /**
- * Replay engine for the Kalp Proxy-Listener Runtime.
+ * Replay Engine for the Kalp Proxy-Listener Runtime.
  *
- * Validates that re-execution produces identical sequence of intents.
- * Detects Sequence Key Drift when handler code changes while suspended.
+ * This engine ensures execution determinism by validating that a re-execution (replay)
+ * produces the exact same sequence of side-effect intents as the original execution.
  *
- * CRITICAL: In V1, we do NOT compare full payloads to avoid false positives
- * due to non-deterministic JSON key ordering in JavaScript.
+ * It is critical for detecting "Sequence Key Drift", which happens when the agent's 
+ * code is changed while an execution is suspended, causing the sequence of proxy
+ * calls to diverge.
  *
  * @module
  */
 
-import type { EventLogBuffer, IntentEvent } from "@/engine/event-log-buffer";
+import type { ReplayLog, PersistedEffect } from "../state/replay-log";
 
 /**
- * Result of a replay validation.
+ * Result of a replay validation attempt.
  */
 export interface ReplayResult {
   /** Whether the replay succeeded without divergence. */
   success: boolean;
-  /** Sequence number where replay diverged, if any. */
+  /** The sequence number where the replay diverged from history, if any. */
   divergenceAt?: number;
-  /** Expected event at divergence point. */
-  expected?: IntentEvent;
-  /** Actual event at divergence point. */
-  actual?: IntentEvent;
-  /** Handler hash mismatch indicates code drift. */
+  /** The expected effect found in history at the divergence point. */
+  expected?: PersistedEffect;
+  /** The actual effect generated during replay at the divergence point. */
+  actual?: PersistedEffect;
+  /** If true, the divergence is likely caused by code changes (drift). */
   driftDetected?: boolean;
 }
 
 /**
- * Validates that the replay produces the expected sequence of intents.
+ * Validates that a new set of intents matches the historical event log.
  *
  * This function compares the newly generated intents against the historical
- * event log to detect any divergence. In V1, we only compare event types,
- * not full payloads, to avoid false positives from non-deterministic JSON
- * key ordering.
+ * event log to detect any divergence. 
+ * 
+ * DESIGN NOTE: We currently prioritize 'type' comparison to avoid false positives 
+ * caused by non-deterministic JSON key ordering in complex payloads.
  *
- * @param log - The event log buffer with historical events.
- * @param executionId - The execution identifier.
- * @param newIntents - Array of newly generated intents during replay.
- * @returns ReplayResult indicating success or divergence details.
+ * @param log - The replay log buffer with historical events.
+ * @param executionId - The unique execution identifier.
+ * @param newIntents - The array of effects generated during the current replay attempt.
+ * @returns A ReplayResult indicating success or detailed divergence info.
  */
 export function validateReplay(
-  log: EventLogBuffer,
+  log: ReplayLog,
   executionId: string,
-  newIntents: IntentEvent[],
+  newIntents: PersistedEffect[],
 ): ReplayResult {
   const historical = log.getAll(executionId);
 
-  // No history means fresh execution - always valid
+  // If there's no history, this is a fresh execution, so it's always valid.
   if (!historical || historical.length === 0) {
     return { success: true };
   }
 
-  // Get non-null historical events (sparse array)
+  // Filter out any potential gaps in the sparse historical event array.
   const historicalEvents = historical.filter(
-    (e): e is IntentEvent => e !== undefined,
+    (e): e is PersistedEffect => e !== undefined,
   );
 
-  // Check sequence count match
+  // 1. Validate sequence length
+  // If the number of effects differs, it's an immediate divergence.
   if (newIntents.length !== historicalEvents.length) {
     const divergenceAt = Math.min(newIntents.length, historicalEvents.length);
     const expected = historicalEvents[divergenceAt];
     const actual = newIntents[divergenceAt - 1];
+    
     return {
       success: false,
       divergenceAt,
@@ -72,23 +76,14 @@ export function validateReplay(
     };
   }
 
-  // Compare each intent
+  // 2. Deep comparison of each effect intent
   for (let i = 0; i < newIntents.length; i++) {
-    const historicalEvent = historicalEvents[i];
-    const newIntent = newIntents[i];
+    const historicalEvent = historicalEvents[i]!;
+    const newIntent = newIntents[i]!;
 
-    // Skip if either event is undefined
-    if (!historicalEvent || !newIntent) continue;
-
-    // Skip if historical event has no seq (shouldn't happen)
-    if (historicalEvent.seq === undefined) continue;
-
-    // V1: Only compare types, NOT full payloads
-    // This avoids false positives from JSON key ordering
-    const historicalType = historicalEvent.type;
-    const newType = newIntent.type;
-
-    if (historicalType !== newType) {
+    // We primarily compare the effect 'type'.
+    // A mismatch in type is a definitive sign of execution drift.
+    if (historicalEvent.type !== newIntent.type) {
       return {
         success: false,
         divergenceAt: historicalEvent.seq,
@@ -97,22 +92,19 @@ export function validateReplay(
       };
     }
 
-    // V2+ (future): Add payload comparison with deterministic stringify
-    // For now, type mismatch is sufficient to detect drift
+    // FUTURE: Add deep payload comparison using a deterministic JSON stringifier
+    // to detect subtle data-level drift.
   }
 
   return { success: true };
 }
 
 /**
- * Detects if handler code has changed during suspension.
- *
- * Compares the handler hash stored in suspension state with the current
- * handler hash. If they differ, the code has drifted.
- *
- * @param suspendedHandlerHash - Hash stored in suspension state.
- * @param currentHandlerHash - Current handler hash from IR.
- * @returns True if drift is detected.
+ * Simple utility to detect if two handler hashes differ.
+ * 
+ * @param suspendedHandlerHash - The code hash recorded during suspension.
+ * @param currentHandlerHash - The current code hash from the IR graph.
+ * @returns True if the code has changed (drifted).
  */
 export function detectSequenceKeyDrift(
   suspendedHandlerHash: string,
@@ -122,24 +114,19 @@ export function detectSequenceKeyDrift(
 }
 
 /**
- * Replays an execution and validates determinism.
+ * High-level helper to replay an execution and validate its determinism in one go.
  *
- * This is the main entry point for replay validation. It executes
- * the handler with the event log buffer and validates the result.
- *
- * @param log - The event log buffer.
- * @param executionId - The execution identifier.
- * @param replayFn - Function that performs the replay and returns new intents.
- * @returns ReplayResult indicating success or divergence.
+ * @param log - The replay log buffer.
+ * @param executionId - The unique execution identifier.
+ * @param replayFn - The async function that performs the re-execution and returns the new effects.
+ * @returns The validation result.
  */
 export async function replayAndValidate(
-  log: EventLogBuffer,
+  log: ReplayLog,
   executionId: string,
-  replayFn: () => Promise<IntentEvent[]>,
+  replayFn: () => Promise<PersistedEffect[]>,
 ): Promise<ReplayResult> {
-  // Execute replay
   const newIntents = await replayFn();
-
-  // Validate
   return validateReplay(log, executionId, newIntents);
 }
+

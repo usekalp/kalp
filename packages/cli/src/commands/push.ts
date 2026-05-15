@@ -484,8 +484,8 @@ export default defineCommand({
             versionNumber: agentState.currentVersion,
             updatedAt: agentState.lastPushedAt,
             workerUrl: agentState.workerUrl,
-            label: manifest.ir.metadata?.label,
-            tags: manifest.ir.metadata?.tags,
+            label: manifest.ir.agent?.label,
+            tags: manifest.ir.agent?.tags,
           };
           await mergeRemoteAgentIndexEntry({
             cwd,

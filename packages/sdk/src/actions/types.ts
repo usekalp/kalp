@@ -47,14 +47,14 @@ export type InferEmitPayload<T> = T extends z.ZodTypeAny
 
 
 export type TypedEmit<E extends Record<string, any>> = keyof E extends never
-  ? (eventName: string, payload: any, options?: EmitOptions) => void
+  ? (eventName: string, payload: any, options?: EmitOptions) => Promise<void>
   : string extends keyof E
-    ? (eventName: string, payload: any, options?: EmitOptions) => void
+    ? (eventName: string, payload: any, options?: EmitOptions) => Promise<void>
     : <K extends keyof E>(
         eventName: K,
         payload: InferEmitPayload<E[K]>,
         options?: EmitOptions,
-      ) => void;
+      ) => Promise<void>;
 
 
 /**
