@@ -1,16 +1,3 @@
-/**
- * Replay Engine for the Kalp Proxy-Listener Runtime.
- *
- * This engine ensures execution determinism by validating that a re-execution (replay)
- * produces the exact same sequence of side-effect intents as the original execution.
- *
- * It is critical for detecting "Sequence Key Drift", which happens when the agent's 
- * code is changed while an execution is suspended, causing the sequence of proxy
- * calls to diverge.
- *
- * @module
- */
-
 import type { ReplayLog, PersistedEffect } from "../state/replay-log";
 
 /**
@@ -33,9 +20,9 @@ export interface ReplayResult {
  * Validates that a new set of intents matches the historical event log.
  *
  * This function compares the newly generated intents against the historical
- * event log to detect any divergence. 
- * 
- * DESIGN NOTE: We currently prioritize 'type' comparison to avoid false positives 
+ * event log to detect any divergence.
+ *
+ * DESIGN NOTE: We currently prioritize 'type' comparison to avoid false positives
  * caused by non-deterministic JSON key ordering in complex payloads.
  *
  * @param log - The replay log buffer with historical events.
@@ -66,7 +53,7 @@ export function validateReplay(
     const divergenceAt = Math.min(newIntents.length, historicalEvents.length);
     const expected = historicalEvents[divergenceAt];
     const actual = newIntents[divergenceAt - 1];
-    
+
     return {
       success: false,
       divergenceAt,
@@ -101,7 +88,7 @@ export function validateReplay(
 
 /**
  * Simple utility to detect if two handler hashes differ.
- * 
+ *
  * @param suspendedHandlerHash - The code hash recorded during suspension.
  * @param currentHandlerHash - The current code hash from the IR graph.
  * @returns True if the code has changed (drifted).
@@ -129,4 +116,3 @@ export async function replayAndValidate(
   const newIntents = await replayFn();
   return validateReplay(log, executionId, newIntents);
 }
-

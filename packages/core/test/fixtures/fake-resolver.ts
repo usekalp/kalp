@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable no-case-declarations */
-import type { EffectResolver, Effect } from "../../src/engine/types";
+import type {
+  EffectResolver,
+  Effect,
+  EffectType,
+  EffectMap,
+} from "../../src/effects/types";
 import type {
   EventStore,
   StateStore,
@@ -21,10 +26,12 @@ export class FakeEffectResolver implements EffectResolver {
     private scheduler: SchedulerAdapter,
   ) {}
 
-  async resolve(effect: Effect): Promise<unknown> {
+  async resolve<T extends EffectType>(
+    effect: Effect<T>,
+  ): Promise<EffectMap[T]["result"]> {
     let result: unknown = undefined;
 
-    switch (effect.type) {
+    switch (effect.type as string) {
       case "storage.put":
         const { key: putKey, value: putValue } = effect.payload as any;
         await this.state.set(`__state:${putKey}`, putValue);
@@ -79,12 +86,12 @@ export class FakeEffectResolver implements EffectResolver {
         // Log emit.dispatched for causality tests
         await this.events.append({
           type: "emit.dispatched",
-          payload: envelope,
+          payload: envelope as any,
           executionId: effect.executionId,
           traceId: effect.traceId,
           threadId: effect.threadId,
           timestamp: Date.now(),
-        });
+        } as any);
         // Also log listener.queued as in old tests
         await this.events.append({
           type: "listener.queued",
@@ -113,13 +120,13 @@ export class FakeEffectResolver implements EffectResolver {
 
     // Persist the effect to event store just like the old proxy did
     await this.events.append({
-      type: effect.type as any, // Map generic effect type to ExecutionEvent type for testing
+      type: effect.type as any,
       ...(effect.payload as any),
       executionId: effect.executionId,
       traceId: effect.traceId,
       threadId: effect.threadId,
       timestamp: effect.timestamp,
-    });
+    } as any);
 
     return result;
   }

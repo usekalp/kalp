@@ -85,7 +85,7 @@ export class AgentDurableObject extends DurableObject {
           manifestHash: hash,
           eventType,
           payload,
-          entries: Object.keys(manifest.entries || {}),
+          entries: Object.keys(manifest.nodes || {}),
         },
       });
     } catch (err) {

@@ -89,7 +89,7 @@ export interface InstructionEffectMap {
     result: void;
   };
   "action.emit": {
-    payload: { event: string; data: unknown };
+    payload: { event: string; data: unknown; options?: unknown };
     result: void;
   };
   "action.schedule": {
@@ -97,11 +97,11 @@ export interface InstructionEffectMap {
     result: void;
   };
   "action.ask": {
-    payload: { prompt: string; schema?: unknown };
+    payload: { prompt: string; schema?: unknown; options?: unknown };
     result: unknown;
   };
   "action.approval": {
-    payload: { reason: string; data?: unknown };
+    payload: { reason: string; data?: unknown; options?: unknown };
     result: { approved: boolean; data?: unknown };
   };
   "action.call": {
@@ -143,5 +143,5 @@ export interface EffectResult<T extends EffectType = EffectType> {
  * Platform-provided resolver that executes External Effects.
  */
 export interface EffectResolver {
-  resolve<T extends ExternalEffectType>(effect: Effect<T>): Promise<EffectMap[T]["result"]>;
+  resolve<T extends EffectType>(effect: Effect<T>): Promise<EffectMap[T]["result"]>;
 }

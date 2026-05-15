@@ -57,10 +57,12 @@ export class ReplayLog {
 
     // Filter only effect-related events (those with a sequence number)
     // In our architecture, effects have `seq` assigned.
-    const effectEvents = events.filter((e): e is PersistedEffect => (e as any).seq !== undefined);
+    const effectEvents = (events as PersistedEffect[]).filter(
+      (e): e is PersistedEffect => (e as PersistedEffect).seq !== undefined,
+    );
 
     // CRITICAL: Sort by seq to ensure deterministic ordering.
-    effectEvents.sort((a, b) => a.seq - b.seq);
+    effectEvents.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
 
     // Group by executionId
     for (const event of effectEvents) {

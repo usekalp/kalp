@@ -1,14 +1,5 @@
-/**
- * End-to-end tests for KalpRuntime using in-memory adapters.
- *
- * These tests verify the full execution flow:
- * 1. Runtime receives a RuntimeEvent
- * 2. Handler executes with context
- * 3. Actions emit events and can suspend
- * 4. Resume continues from suspension point
- *
- * @module
- */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { KalpRuntime } from "../src/engine/runtime";
@@ -19,6 +10,7 @@ import { asUserId } from "@kalphq/sdk";
 import { FakeEffectResolver } from "./fixtures/fake-resolver";
 
 // Helper to create mock IR with proper SDK types
+
 const createMockIR = (): any => ({
   version: 2,
   agent: {
@@ -470,7 +462,7 @@ describe("runtime E2E", () => {
         traceId: "trace-1",
         threadId: "thread-1",
         timestamp: Date.now(),
-      });
+      } as any);
 
       const runtime = new KalpRuntime(
         ir,
@@ -686,8 +678,12 @@ describe("runtime E2E", () => {
 
       ir.nodes["persistTest"] = { kind: "step", bundle: "persist-test" };
 
-      const resolver = new FakeEffectResolver(adapters.events, adapters.state, adapters.scheduler);
-      
+      const resolver = new FakeEffectResolver(
+        adapters.events,
+        adapters.state,
+        adapters.scheduler,
+      );
+
       // Wrap the append to detect exactly WHEN the append happens relative to the handler continuation
       const originalAppend = adapters.events.append.bind(adapters.events);
       let effectPersisted = false;
@@ -706,7 +702,7 @@ describe("runtime E2E", () => {
           idempotency: adapters.state,
           threads: adapters.state,
         },
-        resolver
+        resolver,
       );
 
       // Pre-populate state
@@ -722,10 +718,12 @@ describe("runtime E2E", () => {
 
       // Verify that the effect was fully persisted before handler resumed
       expect(effectPersisted).toBe(true);
-      
+
       const events = adapters.events.getEvents();
-      const getEvent = [...events].reverse().find(e => (e as any).type === "storage.get") as any;
-      
+      const getEvent = [...events]
+        .reverse()
+        .find((e) => (e as any).type === "storage.get") as any;
+
       // Verify the result is actually persisted in the event
       expect(getEvent).toBeDefined();
       expect(getEvent.result).toEqual("mocked");

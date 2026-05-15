@@ -1,14 +1,3 @@
-/**
- * Tests for schedule-manager time queues.
- *
- * These tests verify that:
- * 1. ScheduleManager correctly queues multiple cron schedules
- * 2. Only the next alarm is scheduled with the adapter
- * 3. On alarm, the engine fires and reschedules
- *
- * @module
- */
-
 import { describe, it, expect, beforeEach } from "vitest";
 import { ScheduleManager } from "../src/engine/schedule-manager";
 import { createFakeAdapters } from "./fixtures/fake-adapters";

@@ -1,14 +1,3 @@
-/**
- * Tests for replay-engine drift protection.
- *
- * These tests verify that:
- * 1. Replay engine detects divergence between historical and current actions
- * 2. Drift detection returns success: false with divergence details
- * 3. Sequence key drift is properly identified
- *
- * @module
- */
-
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   validateReplay,

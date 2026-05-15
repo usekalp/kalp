@@ -1,21 +1,3 @@
-/**
- * In-memory adapter implementations for local dev and testing.
- *
- * These adapters store everything in memory — no persistence, no real alarms.
- * Ideal for unit tests, local dev, and integration testing without infrastructure.
- *
- * HARD RULES (R4 — test-utils boundaries):
- * - Deterministic fakes only (no randomness)
- * - No real timing (setTimeout, setInterval, real delays)
- * - No DurableObject behavior emulation (alarm queuing, hibernation, eviction)
- * - No cross-thread transport logic (HTTP routing, fetch)
- * - No event ordering guarantees beyond insertion order
- * - No retry/backoff logic
- * - No Cloudflare-specific types or imports
- *
- * @module
- */
-
 import type {
   PersistenceAdapter,
   SchedulerAdapter,
@@ -59,6 +41,48 @@ export class InMemoryStateStore implements StateStore {
     const next = current + amount;
     this.data.set(key, next);
     return next;
+  }
+
+  /** @inheritdoc */
+  async list(prefix?: string): Promise<string[]> {
+    const keys: string[] = [];
+    for (const key of this.data.keys()) {
+      if (prefix === undefined || key.startsWith(prefix)) {
+        keys.push(key);
+      }
+    }
+    return keys;
+  }
+
+  /** @inheritdoc */
+  async batch(
+    operations: Array<
+      | { op: "put"; key: string; value: unknown }
+      | { op: "delete"; key: string }
+      | { op: "increment"; key: string; amount: number }
+      | { op: "cas"; key: string; expected: unknown; next: unknown }
+    >,
+  ): Promise<void> {
+    for (const op of operations) {
+      switch (op.op) {
+        case "put":
+          this.data.set(op.key, op.value);
+          break;
+        case "delete":
+          this.data.delete(op.key);
+          break;
+        case "increment":
+          await this.increment(op.key, op.amount);
+          break;
+        case "cas": {
+          const current = this.data.get(op.key);
+          if (current === op.expected) {
+            this.data.set(op.key, op.next);
+          }
+          break;
+        }
+      }
+    }
   }
 
   /** @inheritdoc */

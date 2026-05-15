@@ -43,6 +43,10 @@ export type {
   Effect,
   EffectResult,
   EffectResolver,
+  ExternalEffectType,
+  ExternalEffectMap,
+  EffectType,
+  EffectMap,
 } from "@/engine/types";
 
 // ────────────────────────────────────────────────────────────────────────────
