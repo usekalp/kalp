@@ -7,6 +7,7 @@ import {
   defineHook,
   defineCron,
   everySixHours,
+  TypedKalpContext,
 } from "../src";
 import { createMockContext } from "./shared";
 
@@ -23,7 +24,7 @@ describe("defineAgent", () => {
       hooks: [
         defineHook({
           type: "message",
-          async handler(message) {
+          async handler(message: { text: string }) {
             return { text: message.text };
           },
         }),
@@ -70,7 +71,7 @@ describe("defineAgent", () => {
         defineHook({ type: "tick", async handler() {} }),
         defineHook({
           type: "message",
-          async handler(message) {
+          async handler(message: { text: string }) {
             return { text: message.text };
           },
         }),
@@ -88,14 +89,14 @@ describe("defineAgent", () => {
     const agent = defineAgent({
       name: "dynamic-prompt-agent",
       state: stateSchema,
-      async systemPrompt(context) {
+      async systemPrompt(context: TypedKalpContext) {
         const custom = await context.vault.get("PROMPT" as never);
         return `You are ${custom}`;
       },
       hooks: [
         defineHook({
           type: "message",
-          async handler(message) {
+          async handler(message: { text: string }) {
             return { text: message.text };
           },
         }),

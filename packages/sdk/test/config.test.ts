@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defineConfig } from "../src";
+import { defineConfig, type UserId } from "../src";
 import type { JwtPayload } from "../src";
 
 describe("defineConfig", () => {
@@ -25,7 +25,7 @@ describe("defineConfig", () => {
           jwksUrl: "https://example.com/.well-known/jwks.json",
         },
         mapIdentity: (payload: JwtPayload) => ({
-          userId: payload.sub,
+          userId: payload.sub as UserId,
           claims: {},
         }),
       },
