@@ -37,7 +37,9 @@ export default defineCommand({
       const bootSpinner = p.spinner();
       bootSpinner.start("Starting development server...");
       await delay(1800);
-      bootSpinner.stop("Development server is running at http://localhost:8787");
+      bootSpinner.stop(
+        "Development server is running at http://localhost:8787",
+      );
 
       const studioUrl = `${STUDIO_ORIGIN}/studio/login`;
       await open(studioUrl);
@@ -45,9 +47,23 @@ export default defineCommand({
 
       // Start file watcher and wait for shutdown
       await runtime.startWatcher();
+
+      // Fix: @clack/prompts doesn't restore raw mode on Windows after spinners/log calls.
+      // When stdin is in raw mode, Ctrl+C sends byte 0x03 instead of generating SIGINT.
+      // This must be done AFTER all clack UI calls, since p.log can also set raw mode.
+      if (process.stdin.isTTY) {
+        try {
+          process.stdin.setRawMode(false);
+        } catch {
+          /* ignore */
+        }
+      }
+
       await runtime.waitForShutdown();
     } catch (err) {
-      p.log.error(`Failed to start: ${err instanceof Error ? err.message : String(err)}`);
+      p.log.error(
+        `Failed to start: ${err instanceof Error ? err.message : String(err)}`,
+      );
       process.exit(1);
     }
   },

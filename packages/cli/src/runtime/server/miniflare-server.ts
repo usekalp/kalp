@@ -93,7 +93,12 @@ export class MiniflareServer {
 
   async stop(): Promise<void> {
     if (this.mf) {
-      await this.mf.dispose();
+      // Timeout dispose — workerd can hang on socket close on Windows
+      const disposePromise = this.mf.dispose();
+      const timeoutPromise = new Promise<void>((resolve) => {
+        setTimeout(resolve, 5000);
+      });
+      await Promise.race([disposePromise, timeoutPromise]);
       this.mf = null;
     }
   }

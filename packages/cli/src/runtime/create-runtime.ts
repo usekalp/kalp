@@ -1,6 +1,6 @@
 import type { RestartReason, RuntimeFileEvent } from "./types";
 import { RuntimeLifecycle } from "./lifecycle/runtime-lifecycle";
-import { RuntimeShutdown } from "./lifecycle/runtime-shutdown";
+import { setupShutdown } from "./lifecycle/runtime-shutdown";
 import { RuntimeWatcher } from "./watcher/runtime-watcher";
 import { HotReloadCoordinator } from "./hot-reload/hot-reload-coordinator";
 import { RuntimeReloader } from "./hot-reload/runtime-reloader";
@@ -61,12 +61,10 @@ export async function createRuntime(options: CreateRuntimeOptions): Promise<Runt
   let reloader: RuntimeReloader;
   let watcher: RuntimeWatcher | null = null;
 
-  let shutdownResolve: () => void;
+  let shutdownTrigger: (() => void) | null = null;
   const shutdownPromise = new Promise<void>((resolve) => {
-    shutdownResolve = resolve;
+    shutdownTrigger = resolve;
   });
-
-  const shutdown = new RuntimeShutdown(() => void instance.stop());
 
   const instance: RuntimeInstance = {
     async start() {
@@ -119,10 +117,14 @@ export async function createRuntime(options: CreateRuntimeOptions): Promise<Runt
 
       lifecycle.transition("running");
 
-      shutdown.installSignalHandlers();
-      shutdown.register(async () => {
-        await watcher?.close().catch(() => undefined);
-      });
+      // Setup shutdown: kill workerd, close watcher, dispose Miniflare
+      setupShutdown(
+        async () => {
+          await watcher?.close().catch(() => undefined);
+          await instance.stop();
+        },
+        (msg) => ui?.logInfo(pc.dim(`[shutdown] ${msg}`)),
+      );
     },
 
     async startWatcher() {
@@ -161,11 +163,19 @@ export async function createRuntime(options: CreateRuntimeOptions): Promise<Runt
         debounceTimer = null;
       }
 
-      await shutdown.dispose();
-      await mfServer.stop();
+      // Timeout mfServer.stop — Miniflare dispose can hang on Windows
+      const stopPromise = mfServer.stop();
+      const timeoutPromise = new Promise<void>((resolve) => {
+        setTimeout(() => {
+          ui?.logError("Miniflare shutdown timed out after 5s, forcing exit");
+          resolve();
+        }, 5000);
+      });
+
+      await Promise.race([stopPromise, timeoutPromise]);
 
       lifecycle.transition("stopped");
-      shutdownResolve();
+      if (shutdownTrigger) shutdownTrigger();
     },
 
     async restart(_reason: RestartReason) {
@@ -215,11 +225,10 @@ export async function createRuntime(options: CreateRuntimeOptions): Promise<Runt
       if (needsRestart) {
         await executeReload(reloadPaths);
       } else {
-        ui?.logInfo(pc.dim("Metadata change detected, swapping deployments..."));
         for (const path of reloadPaths) {
           await coordinator.onFileChange(path);
         }
-        ui?.logSuccess(pc.dim("Hot swap complete"));
+        ui?.logSuccess(pc.bgGreen(pc.black(` ${pc.bold("✓")} Swapped `)));
       }
     });
   }
@@ -251,26 +260,21 @@ export async function createRuntime(options: CreateRuntimeOptions): Promise<Runt
 
       if (!runtimePaths) return;
 
-      const classifications = pendingPaths.map((p) => classifyChange(p, runtimePaths!, cwd));
-      const reasons = new Set(classifications.map((c) => c.restartReason).filter(Boolean) as RestartReason[]);
-      ui?.logInfo(pc.dim(`Hot reload triggered (${[...reasons].join(", ") || "unknown"})...`));
-
       const plan = await coordinator.prepareReloadPlan(pendingPaths, runtimePaths);
 
       const agentNames = Array.from(plan.compiledAgents.keys());
-      if (agentNames.length > 0) {
-        ui?.logInfo(pc.dim(`  → Recompiled: ${agentNames.join(", ")}`));
-      }
+      const n = agentNames.length;
+      ui?.logInfo(`${pc.cyan("▲")} ${n > 0 ? `Recompiled ${n} agent${n > 1 ? "s" : ""}` : "Updated"}`);
       if (plan.rematerialize) {
-        ui?.logInfo(pc.dim("  → Runtime template changed, rematerializing..."));
+        ui?.logInfo(`${pc.yellow("~")} Runtime template changed`);
       }
       if (plan.restartRequired) {
-        ui?.logInfo(pc.dim(`  → Restarting server (${plan.restartReason})...`));
+        ui?.logInfo(`${pc.blue("↻")} Restarting server`);
       }
 
       await reloader.execute(plan);
 
-      ui?.logSuccess(pc.dim("Hot reload complete"));
+      ui?.logSuccess(pc.bgGreen(pc.black(` ${pc.bold("✓")} Reloaded `)));
     } finally {
       if (lifecycle.getState() === "restarting") {
         acceptingReloads = true;
