@@ -1,6 +1,11 @@
 import { describe, expect, expectTypeOf, it, beforeEach } from "vitest";
 import { z } from "zod";
-import { defineListener, getRegistry, clearRegistry } from "../src";
+import {
+  defineListener,
+  getRegistry,
+  clearRegistry,
+  type TypedKalpContext,
+} from "../src";
 
 describe("defineListener", () => {
   beforeEach(() => {
@@ -8,14 +13,17 @@ describe("defineListener", () => {
   });
 
   it("creates a local listener with typed input/output", () => {
-    const listener = defineListener<{ processedCount: number }>({
+    const listener = defineListener({
       event: "ticket_created",
       inputSchema: z.object({
         ticketId: z.string(),
         priority: z.enum(["low", "high"]),
       }),
       outputSchema: z.object({ accepted: z.boolean() }),
-      async handler(payload, ctx) {
+      async handler(
+        payload: { ticketId: string; priority: "low" | "high" },
+        ctx: TypedKalpContext<{ processedCount: number }>,
+      ) {
         expectTypeOf(payload).toEqualTypeOf<{
           ticketId: string;
           priority: "low" | "high";

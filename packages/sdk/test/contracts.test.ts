@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
-import { defineContract } from "../src";
+import { defineContract, type TypedKalpContext } from "../src";
 
 describe("defineContract", () => {
   it("creates a contract with kind and name", () => {
@@ -8,7 +8,7 @@ describe("defineContract", () => {
       name: "test-agent",
       inputSchema: z.object({ query: z.string() }),
       outputSchema: z.object({ result: z.string() }),
-      async handler(input) {
+      async handler(input: { query: string }) {
         return { result: input.query };
       },
     });
@@ -21,11 +21,14 @@ describe("defineContract", () => {
     const inputSchema = z.object({ value: z.number() });
     const outputSchema = z.object({ doubled: z.number() });
 
-    const contract = defineContract<{ processedCount: number }>({
+    const contract = defineContract({
       name: "math-agent",
       inputSchema,
       outputSchema,
-      async handler(input, ctx) {
+      async handler(
+        input: { value: number },
+        ctx: TypedKalpContext<{ processedCount: number }>,
+      ) {
         expectTypeOf(input).toEqualTypeOf<{ value: number }>();
         expectTypeOf(ctx.state).toEqualTypeOf<{ processedCount: number }>();
         return { doubled: input.value * 2 };
