@@ -98,8 +98,16 @@ export class MiniflareServer {
     }
   }
 
-  async restart(): Promise<void> {
+  async restart(options?: {
+    scriptPath?: string;
+    bindings?: Record<string, string>;
+  }): Promise<void> {
+    if (options?.scriptPath) this.scriptPath = options.scriptPath;
+    if (options?.bindings) this.bindings = options.bindings;
+
     await this.drain.drain(() => this.stop());
+    // Allow OS to release the port on Windows
+    await new Promise(r => setTimeout(r, 500));
     await this.start();
   }
 

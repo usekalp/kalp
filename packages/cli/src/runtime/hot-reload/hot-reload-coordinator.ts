@@ -6,6 +6,10 @@ import type { CompiledDeployment } from "../deployment/types";
 import { detectChangeType, type ChangeType } from "./change-detector";
 import { resolveAffectedAgents } from "./affected-agents";
 import { hashJson } from "../utils/hashing";
+import type { ReloadPlan } from "./reload-plan";
+import type { RestartReason } from "../types";
+import { classifyChange } from "./change-classifier";
+import type { RuntimePaths } from "@/utils/runtime";
 
 export interface HotReloadOptions {
   registry: RuntimeRegistry;
@@ -33,17 +37,11 @@ export class HotReloadCoordinator {
 
     for (const agentName of affectedAgents) {
       const endCompile = this.registry.metricsRef.startCompile();
-      const compiled = await this.compileAgentToDeployment(agentName);
+      const compiled = await this.compileAgent(agentName);
       endCompile();
 
       const previous = this.previousDeployments.get(agentName);
       const changeType = previous ? detectChangeType(previous, compiled) : "code";
-
-      if (previous) {
-        console.error(`[hot-reload] ${agentName}: runtimeHash changed=${previous.runtimeHash !== compiled.runtimeHash}, bundleHash changed=${previous.bundleHash !== compiled.bundleHash}, changeType=${changeType}`);
-      } else {
-        console.error(`[hot-reload] ${agentName}: first compile, changeType=${changeType}`);
-      }
 
       await this.registry.swapDeployment(agentName, compiled);
       this.previousDeployments.set(agentName, compiled);
@@ -52,9 +50,7 @@ export class HotReloadCoordinator {
         needsRestart = true;
       }
 
-      const kv = await this.mfServer.getKVNamespace();
-      await this.mirrorDeploymentToKV(kv, agentName, compiled);
-      console.error(`[hot-reload] ${agentName}: mirrored to KV with hash=${compiled.hash.slice(0, 8)}..., label=${compiled.semanticIr.agent?.label}`);
+      await this.mirrorToKV(this.mfServer, agentName, compiled);
 
       this.registry.eventBusRef.emit({
         type: "agent_updated",
@@ -67,10 +63,8 @@ export class HotReloadCoordinator {
     }
 
     if (needsRestart) {
-      console.error(`[hot-reload] restarting miniflare...`);
       this.registry.metricsRef.recordFullRestart();
       await this.mfServer.restart();
-      console.error(`[hot-reload] miniflare restarted`);
     } else {
       this.registry.metricsRef.recordHotSwap();
     }
@@ -78,7 +72,7 @@ export class HotReloadCoordinator {
     endReload();
   }
 
-  private async compileAgentToDeployment(agentName: string): Promise<CompiledDeployment> {
+  async compileAgent(agentName: string): Promise<CompiledDeployment> {
     const manifest = await readAgentManifest({ cwd: this.cwd, agentName });
     const hash = computePushHash(manifest);
     const validation = validateCompiledIR({ agentName, manifest, hash });
@@ -113,6 +107,71 @@ export class HotReloadCoordinator {
     };
   }
 
+  async mirrorToKV(mfServer: MiniflareServer, agentName: string, compiled: CompiledDeployment): Promise<void> {
+    const kv = await mfServer.getKVNamespace();
+    const values: Array<{ key: string; value: string }> = [
+      { key: `${agentName}:${compiled.hash}:artifact-manifest`, value: JSON.stringify(compiled.artifactManifest) },
+      { key: `${agentName}:${compiled.hash}:semantic-ir`, value: JSON.stringify(compiled.semanticIr) },
+      { key: `${agentName}:${compiled.hash}:schemas`, value: JSON.stringify(compiled.schemas) },
+      { key: `${agentName}:${compiled.hash}:bundle-manifest`, value: JSON.stringify(compiled.bundleManifest) },
+    ];
+
+    for (const [bundleHash, bundle] of Object.entries(compiled.bundleFiles)) {
+      values.push({ key: `${agentName}:${compiled.hash}:bundle:${bundleHash}`, value: bundle.code });
+    }
+    values.push({ key: `${agentName}:latest`, value: compiled.hash });
+
+    for (const item of values) {
+      await kv.put(item.key, item.value);
+    }
+  }
+
+  async prepareReloadPlan(
+    changedPaths: string[],
+    runtimePaths: RuntimePaths,
+  ): Promise<ReloadPlan> {
+    const compiledAgents = new Map<string, CompiledDeployment>();
+    let restartRequired = false;
+    let restartReason: RestartReason | null = null;
+    let rematerialize = false;
+
+    for (const changedPath of changedPaths) {
+      const classification = classifyChange(changedPath, runtimePaths, this.cwd);
+
+      if (classification.requiresRematerialize) {
+        rematerialize = true;
+        restartRequired = true;
+        restartReason = "runtime-template-change";
+        continue;
+      }
+
+      if (classification.domain === "env") {
+        restartRequired = true;
+        restartReason = classification.restartReason;
+        continue;
+      }
+
+      if (classification.domain === "agent") {
+        const affectedAgents = await resolveAffectedAgents(changedPath, this.cwd);
+        for (const agentName of affectedAgents) {
+          const compiled = await this.compileAgent(agentName);
+          const previous = this.previousDeployments.get(agentName);
+          const changeType = previous ? detectChangeType(previous, compiled) : "code";
+
+          compiledAgents.set(agentName, compiled);
+          this.previousDeployments.set(agentName, compiled);
+
+          if (changeType === "code") {
+            restartRequired = true;
+            restartReason = "code-change";
+          }
+        }
+      }
+    }
+
+    return { compiledAgents, restartRequired, restartReason, rematerialize };
+  }
+
   private buildRoutingTable(manifest: Awaited<ReturnType<typeof readAgentManifest>>): CompiledDeployment["routingTable"] {
     return Object.values(manifest.semanticIr.nodes)
       .filter(n => n.kind === "route" || n.kind === "contract" || n.kind === "listener" || n.kind === "cron")
@@ -135,27 +194,5 @@ export class HotReloadCoordinator {
       routeCount: nodes.filter(n => n.kind === "route").length,
       contractCount: nodes.filter(n => n.kind === "contract").length,
     };
-  }
-
-  private async mirrorDeploymentToKV(
-    kv: Awaited<ReturnType<typeof import("miniflare").Miniflare.prototype.getKVNamespace>>,
-    agentName: string,
-    compiled: CompiledDeployment,
-  ): Promise<void> {
-    const values: Array<{ key: string; value: string }> = [
-      { key: `${agentName}:${compiled.hash}:artifact-manifest`, value: JSON.stringify(compiled.artifactManifest) },
-      { key: `${agentName}:${compiled.hash}:semantic-ir`, value: JSON.stringify(compiled.semanticIr) },
-      { key: `${agentName}:${compiled.hash}:schemas`, value: JSON.stringify(compiled.schemas) },
-      { key: `${agentName}:${compiled.hash}:bundle-manifest`, value: JSON.stringify(compiled.bundleManifest) },
-    ];
-
-    for (const [bundleHash, bundle] of Object.entries(compiled.bundleFiles)) {
-      values.push({ key: `${agentName}:${compiled.hash}:bundle:${bundleHash}`, value: bundle.code });
-    }
-    values.push({ key: `${agentName}:latest`, value: compiled.hash });
-
-    for (const item of values) {
-      await kv.put(item.key, item.value);
-    }
   }
 }
