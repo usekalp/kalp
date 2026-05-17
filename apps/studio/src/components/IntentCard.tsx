@@ -51,7 +51,7 @@ export function IntentCard({ event, index, isActive, onClick }: IntentCardProps)
               <p className="truncate text-xs text-zinc-200">
                 {JSON.stringify(event.payload ?? {}).slice(0, 120)}
               </p>
-              <p className="text-[11px] uppercase tracking-[0.12em] text-zinc-500">
+              <p className="text-3xs uppercase tracking-tightest text-zinc-500">
                 Execution {event.executionId}
               </p>
             </CardContent>
@@ -59,7 +59,7 @@ export function IntentCard({ event, index, isActive, onClick }: IntentCardProps)
         </TooltipTrigger>
         <TooltipContent side="right" className="max-w-xs">
           <p className="text-xs font-medium">{event.type}</p>
-          <pre className="mt-2 whitespace-pre-wrap text-[11px] text-zinc-200">
+          <pre className="mt-2 whitespace-pre-wrap text-3xs text-zinc-200">
             {JSON.stringify(event.payload, null, 2)}
           </pre>
         </TooltipContent>

@@ -64,16 +64,16 @@ function AgentOverviewPage() {
     <section className="grid gap-4 xl:grid-cols-12">
       {agentQuery.isLoading && (
         <>
-          <Skeleton className="h-44 w-full rounded-[5px] xl:col-span-6" />
-          <Skeleton className="h-44 w-full rounded-[5px] xl:col-span-6" />
-          <Skeleton className="h-[420px] w-full rounded-[5px] xl:col-span-7" />
-          <Skeleton className="h-[420px] w-full rounded-[5px] xl:col-span-5" />
+          <Skeleton className="h-44 w-full studio-tile xl:col-span-6" />
+          <Skeleton className="h-44 w-full studio-tile xl:col-span-6" />
+          <Skeleton className="h-105 w-full studio-tile xl:col-span-7" />
+          <Skeleton className="h-105 w-full studio-tile xl:col-span-5" />
         </>
       )}
 
       {agent && (
         <>
-          <Card className="studio-tile rounded-[5px] xl:col-span-6">
+          <Card className="studio-tile xl:col-span-6">
             <CardHeader>
               <CardTitle className="studio-metal-text flex items-center gap-2 text-base">
                 <Server className="h-4 w-4 text-primary" />
@@ -81,23 +81,35 @@ function AgentOverviewPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
-              <MetricTile label="Environment" value={agent.environment} icon={<Cloud className="h-3.5 w-3.5" />} />
+              <MetricTile
+                label="Environment"
+                value={agent.environment}
+                icon={<Cloud className="h-3.5 w-3.5" />}
+              />
               <MetricTile
                 label="Status"
                 value={agent.status}
                 icon={<Activity className="h-3.5 w-3.5" />}
-                badge={(
+                badge={
                   <Badge
                     variant={agent.status === 'online' ? 'default' : 'outline'}
-                    className={agent.status === 'online' ? 'bg-emerald-500/20 text-emerald-200' : ''}
+                    className={
+                      agent.status === 'online'
+                        ? 'bg-emerald-500/20 text-emerald-200'
+                        : ''
+                    }
                   >
                     {agent.status}
                   </Badge>
-                )}
+                }
               />
               <MetricTile label="Version" value={agent.version ?? 'v0'} />
               <MetricTile label="Updated" value={agent.updatedAt ?? 'n/a'} />
-              <MetricTile label="Routes" value={String(agent.routes.length)} icon={<RouteIcon className="h-3.5 w-3.5" />} />
+              <MetricTile
+                label="Routes"
+                value={String(agent.routes.length)}
+                icon={<RouteIcon className="h-3.5 w-3.5" />}
+              />
               <MetricTile
                 label="Executions"
                 value={String(agent.executionStats.total)}
@@ -106,7 +118,7 @@ function AgentOverviewPage() {
             </CardContent>
           </Card>
 
-          <Card className="studio-tile rounded-[5px] xl:col-span-6">
+          <Card className="studio-tile xl:col-span-6">
             <CardHeader>
               <CardTitle className="studio-metal-text flex items-center gap-2 text-base">
                 <Globe className="h-4 w-4 text-primary" />
@@ -129,10 +141,15 @@ function AgentOverviewPage() {
                 <p>Agent has not been deployed yet.</p>
               )}
 
-              {agent.requirements && Object.keys(agent.requirements).length > 0 ? (
+              {agent.requirements &&
+              Object.keys(agent.requirements).length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {Object.entries(agent.requirements).map(([key, value]) => (
-                    <Badge key={key} variant="outline" className="border-white/10 text-zinc-300">
+                    <Badge
+                      key={key}
+                      variant="outline"
+                      className="border-white/10 text-zinc-300"
+                    >
                       {key}:{value}
                     </Badge>
                   ))}
@@ -141,7 +158,7 @@ function AgentOverviewPage() {
             </CardContent>
           </Card>
 
-          <Card className="studio-tile rounded-[5px] xl:col-span-7">
+          <Card className="studio-tile rounded-5 xl:col-span-7">
             <CardHeader>
               <CardTitle className="studio-metal-text flex items-center gap-2 text-base">
                 <MessageSquareText className="h-4 w-4 text-primary" />
@@ -152,39 +169,57 @@ function AgentOverviewPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <Badge
                   variant={agent.chat.supportsChat ? 'default' : 'outline'}
-                  className={agent.chat.supportsChat ? 'bg-emerald-500/20 text-emerald-200' : 'text-zinc-500'}
+                  className={
+                    agent.chat.supportsChat
+                      ? 'bg-emerald-500/20 text-emerald-200'
+                      : 'text-zinc-500'
+                  }
                 >
-                  {agent.chat.supportsChat ? 'Message hook detected' : 'No message hook'}
+                  {agent.chat.supportsChat
+                    ? 'Message hook detected'
+                    : 'No message hook'}
                 </Badge>
-                <Badge variant="outline" className="border-white/10 text-zinc-400">
-                  Streaming: {agent.chat.supportsStreaming ? 'ready' : 'polling contract'}
+                <Badge
+                  variant="outline"
+                  className="border-white/10 text-zinc-400"
+                >
+                  Streaming:{' '}
+                  {agent.chat.supportsStreaming ? 'ready' : 'polling contract'}
                 </Badge>
-                <Badge variant="outline" className="border-white/10 text-zinc-400">
+                <Badge
+                  variant="outline"
+                  className="border-white/10 text-zinc-400"
+                >
                   History: {agent.chat.supportsHistory ? 'enabled' : 'disabled'}
                 </Badge>
               </div>
 
-              <ScrollArea className="h-[260px] rounded-[5px] border border-white/10 bg-black/20 p-3">
+              <ScrollArea className="h-65 rounded-5 border border-white/10 bg-black/20 p-3">
                 <div className="space-y-3">
                   {recentMessages.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      No chat history yet. Send a message to create a live session.
+                      No chat history yet. Send a message to create a live
+                      session.
                     </p>
                   ) : (
                     recentMessages.map((message) => (
                       <div
                         key={message.id}
-                        className={`rounded-[5px] border px-3 py-2 ${
+                        className={`rounded-5 border px-3 py-2 ${
                           message.role === 'assistant'
                             ? 'border-indigo-400/20 bg-indigo-400/10'
-                            : 'border-white/10 bg-white/[0.03]'
+                            : 'border-white/10 bg-white/3'
                         }`}
                       >
-                        <div className="mb-1 flex items-center justify-between text-[11px] uppercase tracking-[0.12em] text-zinc-500">
+                        <div className="mb-1 flex items-center justify-between text-3xs uppercase tracking-tightest text-zinc-500">
                           <span>{message.role}</span>
-                          <span>{new Date(message.createdAt).toLocaleTimeString()}</span>
+                          <span>
+                            {new Date(message.createdAt).toLocaleTimeString()}
+                          </span>
                         </div>
-                        <p className="whitespace-pre-wrap text-sm text-zinc-100">{message.content}</p>
+                        <p className="whitespace-pre-wrap text-sm text-zinc-100">
+                          {message.content}
+                        </p>
                         {message.executionId ? (
                           <Link
                             to="/replay/$executionId"
@@ -200,7 +235,7 @@ function AgentOverviewPage() {
                 </div>
               </ScrollArea>
 
-              <div className="rounded-[5px] border border-white/10 bg-black/20 p-3">
+              <div className="rounded-5 border border-white/10 bg-black/20 p-3">
                 <textarea
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
@@ -210,7 +245,7 @@ function AgentOverviewPage() {
                       : 'This agent does not expose a message hook yet.'
                   }
                   disabled={!agent.chat.supportsChat || sendMessage.isPending}
-                  className="min-h-24 w-full resize-none rounded-[5px] border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
+                  className="min-h-24 w-full resize-none rounded-5 border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
                 />
                 <div className="mt-3 flex items-center justify-between">
                   <p className="text-xs text-muted-foreground">
@@ -219,7 +254,11 @@ function AgentOverviewPage() {
                   <Button
                     size="sm"
                     onClick={onSend}
-                    disabled={!agent.chat.supportsChat || sendMessage.isPending || draft.trim().length === 0}
+                    disabled={
+                      !agent.chat.supportsChat ||
+                      sendMessage.isPending ||
+                      draft.trim().length === 0
+                    }
                   >
                     <Send className="mr-2 h-3.5 w-3.5" />
                     {sendMessage.isPending ? 'Sending...' : 'Send message'}
@@ -229,7 +268,7 @@ function AgentOverviewPage() {
             </CardContent>
           </Card>
 
-          <Card className="studio-tile rounded-[5px] xl:col-span-5">
+          <Card className="studio-tile rounded-5 xl:col-span-5">
             <CardHeader>
               <CardTitle className="studio-metal-text flex items-center gap-2 text-base">
                 <Sparkles className="h-4 w-4 text-primary" />
@@ -239,7 +278,10 @@ function AgentOverviewPage() {
             <CardContent className="space-y-4">
               <div className="space-y-3">
                 {recentEntrypoints.map((entry) => (
-                  <div key={entry.id} className="rounded-[5px] border border-white/10 bg-black/25 p-3">
+                  <div
+                    key={entry.id}
+                    className="rounded-5 border border-white/10 bg-black/25 p-3"
+                  >
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         {entry.kind === 'route' ? (
@@ -251,9 +293,14 @@ function AgentOverviewPage() {
                         ) : (
                           <CalendarClock className="h-4 w-4 text-zinc-300" />
                         )}
-                        <span className="font-medium text-zinc-100">{entry.title}</span>
+                        <span className="font-medium text-zinc-100">
+                          {entry.title}
+                        </span>
                       </div>
-                      <Badge variant="outline" className="border-white/10 text-zinc-300">
+                      <Badge
+                        variant="outline"
+                        className="border-white/10 text-zinc-300"
+                      >
                         {entry.kind}
                       </Badge>
                     </div>
@@ -265,16 +312,25 @@ function AgentOverviewPage() {
                 ))}
               </div>
 
-              <div className="rounded-[5px] border border-white/10 bg-black/25 p-3">
+              <div className="rounded-5 border border-white/10 bg-black/25 p-3">
                 <div className="mb-3 flex items-center gap-2">
                   <MemoryStick className="h-4 w-4 text-primary" />
-                  <span className="font-medium text-zinc-100">State surface</span>
+                  <span className="font-medium text-zinc-100">
+                    State surface
+                  </span>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {stateSummary.map((item) => (
-                    <div key={item.key} className="rounded-[5px] border border-white/10 bg-black/30 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">{item.key}</p>
-                      <p className="mt-1 text-sm font-medium text-zinc-100">{item.value}</p>
+                    <div
+                      key={item.key}
+                      className="rounded-5 border border-white/10 bg-black/30 p-3"
+                    >
+                      <p className="text-2xs uppercase tracking-tighter text-zinc-500">
+                        {item.key}
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-zinc-100">
+                        {item.value}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -304,8 +360,10 @@ function MetricTile({
   badge?: ReactNode
 }) {
   return (
-    <div className="rounded-[5px] border border-white/10 bg-black/20 p-3">
-      <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-zinc-500">{label}</p>
+    <div className="rounded-5 border border-white/10 bg-black/20 p-3">
+      <p className="mb-1 text-2xs uppercase tracking-tighter text-zinc-500">
+        {label}
+      </p>
       {badge ?? (
         <div className="flex items-center gap-1 text-zinc-100">
           {icon}

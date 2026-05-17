@@ -1,5 +1,6 @@
 {
   "CodeGPT.apiKey": "Groq",
   "deepwiki.disabled": false,
-  "chatgpt.openOnStartup": true
+  "chatgpt.openOnStartup": true,
+  "cSpell.words": ["kalp"]
 }

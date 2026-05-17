@@ -15,13 +15,19 @@ function AgentLayoutPage() {
 
   return (
     <main className="space-y-4">
-      <header className="rounded-[5px] border border-white/10 bg-white/5 px-5 py-4 backdrop-blur-xl">
+      <header className="rounded-5 border border-white/10 bg-white/5 px-5 py-4 backdrop-blur-xl">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex items-start gap-3">
-            <img src="/studio/kalp-logo.png" alt="Kalp" className="h-9 w-auto object-contain opacity-90" />
+            <img
+              src="/studio/kalp-logo.png"
+              alt="Kalp"
+              className="h-9 w-auto object-contain opacity-90"
+            />
             <div className="space-y-2">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">Agent</p>
+                <p className="text-2xs uppercase tracking-tightest3 text-zinc-500">
+                  Agent
+                </p>
                 {agentQuery.isLoading ? (
                   <Skeleton className="mt-2 h-7 w-48" />
                 ) : (
@@ -31,10 +37,15 @@ function AgentLayoutPage() {
                 )}
               </div>
               {agent?.description ? (
-                <p className="max-w-3xl text-sm text-muted-foreground">{agent.description}</p>
+                <p className="max-w-3xl text-sm text-muted-foreground">
+                  {agent.description}
+                </p>
               ) : null}
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="border-white/10 text-zinc-300">
+                <Badge
+                  variant="outline"
+                  className="border-white/10 text-zinc-300"
+                >
                   {agent?.version ?? 'v0'}
                 </Badge>
                 <Badge
@@ -50,7 +61,9 @@ function AgentLayoutPage() {
                 </Badge>
                 <Badge variant="secondary" className="gap-1">
                   <ShieldCheck className="h-3 w-3" />
-                  {agent?.public ? 'Public routes enabled' : 'Authenticated runtime'}
+                  {agent?.public
+                    ? 'Public routes enabled'
+                    : 'Authenticated runtime'}
                 </Badge>
                 {agent?.workerUrl ? (
                   <a
@@ -69,7 +82,7 @@ function AgentLayoutPage() {
 
           <Link
             to="/"
-            className="inline-flex items-center rounded-[5px] border border-white/15 px-3 py-2 text-xs uppercase tracking-[0.12em] text-zinc-400 transition hover:border-white/25 hover:text-zinc-100"
+            className="inline-flex items-center rounded-5 border border-white/15 px-3 py-2 text-xs uppercase tracking-tightest text-zinc-400 transition hover:border-white/25 hover:text-zinc-100"
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Dashboard

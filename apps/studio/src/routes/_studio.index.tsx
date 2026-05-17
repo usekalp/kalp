@@ -14,7 +14,10 @@ import {
 import { Badge } from '#/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import { Skeleton } from '#/components/ui/skeleton'
-import { useRuntimeAgents, useRuntimeSystem } from '#/hooks/useRuntimeSubscriptions'
+import {
+  useRuntimeAgents,
+  useRuntimeSystem,
+} from '#/hooks/useRuntimeSubscriptions'
 import { deriveLabelFromName } from '#/lib/labels'
 import type { RuntimeEnvironment } from '#/types/agents'
 
@@ -31,24 +34,34 @@ function DashboardPage() {
     <main className="space-y-6">
       <section className="studio-tile grid gap-4 p-5 xl:grid-cols-[1.4fr_1fr]">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Runtime Console</p>
-          <h1 className="studio-metal-text mt-2 text-2xl font-semibold">Kalp Studio</h1>
+          <p className="text-3xs uppercase tracking-tightest3 text-zinc-500">
+            Runtime Console
+          </p>
+          <h1 className="studio-metal-text mt-2 text-2xl font-semibold">
+            Kalp Studio
+          </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Live runtime surface for agent metadata, routes, executions, state availability,
-            contracts, triggers, and conversational inspection.
+            Live runtime surface for agent metadata, routes, executions, state
+            availability, contracts, triggers, and conversational inspection.
           </p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <SystemStat
             label="Runtime mode"
-            value={systemQuery.data?.runtimeMode === 'remote' ? 'Remote' : 'Local'}
+            value={
+              systemQuery.data?.runtimeMode === 'remote' ? 'Remote' : 'Local'
+            }
             icon={<Cloud className="h-4 w-4" />}
             loading={systemQuery.isLoading}
           />
           <SystemStat
             label="Studio mode"
-            value={systemQuery.data?.studioMode === 'live-workspace' ? 'Live Workspace' : 'Bundled Artifact'}
+            value={
+              systemQuery.data?.studioMode === 'live-workspace'
+                ? 'Live Workspace'
+                : 'Bundled Artifact'
+            }
             icon={<TerminalSquare className="h-4 w-4" />}
             loading={systemQuery.isLoading}
           />
@@ -70,7 +83,7 @@ function DashboardPage() {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {agentsQuery.isLoading &&
           Array.from({ length: 6 }).map((_, index) => (
-            <Card key={index} className="studio-tile rounded-[5px]">
+            <Card key={index} className="studio-tile">
               <CardHeader>
                 <Skeleton className="h-5 w-24" />
               </CardHeader>
@@ -85,7 +98,7 @@ function DashboardPage() {
           cards.map((agent) => (
             <Card
               key={agent.name}
-              className="studio-tile group rounded-[5px] transition-all duration-300 hover:-translate-y-[1px]"
+              className="group rounded-5 transition-all duration-300 hover:-translate-y-px"
             >
               <CardHeader className="flex flex-row items-start justify-between gap-3">
                 <div className="space-y-2">
@@ -93,20 +106,25 @@ function DashboardPage() {
                     {agent.label ?? deriveLabelFromName(agent.name)}
                   </CardTitle>
                   {agent.description ? (
-                    <p className="line-clamp-2 text-xs text-muted-foreground">{agent.description}</p>
+                    <p className="line-clamp-2 text-xs text-muted-foreground">
+                      {agent.description}
+                    </p>
                   ) : null}
                 </div>
                 <Link
                   to="/agent/$agentName"
                   params={{ agentName: agent.name }}
-                  className="rounded-[4px] border border-white/10 p-1 text-muted-foreground transition hover:border-white/20 hover:text-foreground"
+                  className="rounded-xs border border-white/10 p-1 text-muted-foreground transition hover:border-white/20 hover:text-foreground"
                 >
                   <ArrowUpRight className="h-4 w-4" />
                 </Link>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="border-slate-200/20 bg-white/[0.02] text-zinc-200">
+                  <Badge
+                    variant="outline"
+                    className="border-slate-200/20 bg-white/2 text-zinc-200"
+                  >
                     {agent.version ?? 'v0'}
                   </Badge>
                   <Badge variant="secondary" className="gap-1">
@@ -129,7 +147,11 @@ function DashboardPage() {
                 {agent.tags && agent.tags.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {agent.tags.slice(0, 4).map((tag) => (
-                      <Badge key={tag} variant="outline" className="border-white/10 text-zinc-400">
+                      <Badge
+                        key={tag}
+                        variant="outline"
+                        className="border-white/10 text-zinc-400"
+                      >
                         {tag}
                       </Badge>
                     ))}
@@ -138,10 +160,12 @@ function DashboardPage() {
 
                 <div className="space-y-1.5 text-xs text-muted-foreground">
                   <p className="truncate">
-                    <span className="text-zinc-500">Updated:</span> {agent.updatedAt ?? 'n/a'}
+                    <span className="text-zinc-500">Updated:</span>{' '}
+                    {agent.updatedAt ?? 'n/a'}
                   </p>
                   <p className="truncate">
-                    <span className="text-zinc-500">Hash:</span> {agent.hash ?? 'unpublished'}
+                    <span className="text-zinc-500">Hash:</span>{' '}
+                    {agent.hash ?? 'unpublished'}
                   </p>
                   <p className="truncate">
                     Endpoint:{' '}
@@ -166,7 +190,7 @@ function DashboardPage() {
       </section>
 
       {!agentsQuery.isLoading && cards.length === 0 && (
-        <section className="studio-tile flex min-h-[300px] w-full flex-col items-center justify-center rounded-[5px] border-dashed p-12 text-center">
+        <section className="studio-tile flex min-h-75 w-full flex-col items-center justify-center border-dashed p-12 text-center">
           <BotOff className="mb-4 h-9 w-9 text-muted-foreground/80" />
           <h2 className="text-lg font-medium">No agents found</h2>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -190,8 +214,10 @@ function SystemStat({
   loading?: boolean
 }) {
   return (
-    <div className="rounded-[5px] border border-white/10 bg-black/20 p-3">
-      <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-zinc-500">{label}</p>
+    <div className="rounded-5 border border-white/10 bg-black/20 p-3">
+      <p className="mb-1 text-2xs uppercase tracking-tighter text-zinc-500">
+        {label}
+      </p>
       {loading ? (
         <Skeleton className="h-5 w-24" />
       ) : (

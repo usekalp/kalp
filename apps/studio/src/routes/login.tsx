@@ -62,19 +62,19 @@ function LoginPage() {
           <CardContent>
             <form className="space-y-4" onSubmit={onSubmit}>
               <div className="space-y-2">
-                <label className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Username</label>
+                <label className="text-3xs uppercase tracking-tightest2 text-zinc-400">Username</label>
                 <div className="relative">
                   <UserRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                   <Input
                     value={username}
                     onChange={(event) => setUsername(event.target.value)}
                     autoComplete="username"
-                    className="studio-input h-11 rounded-[5px] pl-9"
+                    className="studio-input h-11 rounded-5 pl-9"
                   />
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-[11px] uppercase tracking-[0.16em] text-zinc-400">Password</label>
+                <label className="text-3xs uppercase tracking-tightest2 text-zinc-400">Password</label>
                 <div className="relative">
                   <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                   <Input
@@ -82,18 +82,18 @@ function LoginPage() {
                     type="password"
                     onChange={(event) => setPassword(event.target.value)}
                     autoComplete="current-password"
-                    className="studio-input h-11 rounded-[5px] pl-9 font-mono tracking-widest"
+                    className="studio-input h-11 rounded-5 pl-9 font-mono tracking-widest"
                   />
                 </div>
               </div>
               {error && (
-                <p className="rounded-[5px] border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <p className="rounded-5 border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {error}
                 </p>
               )}
               <Button
                 type="submit"
-                className="h-11 w-full rounded-[5px] border border-zinc-200/20 bg-gradient-to-r from-zinc-100/20 via-zinc-200/15 to-zinc-100/20 text-zinc-100 transition-all duration-300 hover:shadow-[0_0_28px_-12px_rgba(203,213,225,0.9)]"
+                className="h-11 w-full rounded-5 border border-zinc-200/20 bg-gradient-to-r from-zinc-100/20 via-zinc-200/15 to-zinc-100/20 text-zinc-100 transition-all duration-300 hover:shadow-[0_0_28px_-12px_rgba(203,213,225,0.9)]"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -113,14 +113,14 @@ function LoginPage() {
         </Card>
 
         <div className="relative hidden h-full min-h-[560px] items-center justify-center lg:flex">
-          <div className="absolute inset-0 rounded-[6px] border border-white/5 bg-gradient-to-br from-white/[0.03] to-transparent" />
+          <div className="absolute inset-0 rounded-6 border border-white/5 bg-gradient-to-br from-white/[0.03] to-transparent" />
           <div className="relative h-[340px] w-[340px]">
             <img
               src="/studio/kalp-logo.png"
               alt="Kalp mark"
-              className="absolute inset-0 h-full w-full object-contain opacity-35 [filter:drop-shadow(0_0_24px_rgba(148,163,184,0.22))] animate-[pulse_8s_ease-in-out_infinite]"
+              className="absolute inset-0 h-full w-full object-contain opacity-35 [filter:drop-shadow(0_0_24px_rgba(148,163,184,0.22))] animate-pulse-slow"
             />
-            <div className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-zinc-200/30 bg-gradient-to-br from-zinc-100/40 via-zinc-400/25 to-zinc-100/15 blur-[0.2px]" />
+            <div className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-zinc-200/30 bg-gradient-to-br from-zinc-100/40 via-zinc-400/25 to-zinc-100/15 blur-xs" />
           </div>
         </div>
       </div>

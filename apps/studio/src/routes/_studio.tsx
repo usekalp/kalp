@@ -58,9 +58,9 @@ function StudioShell() {
             <img src="/studio/kalp-logo.png" alt="Kalp" className="h-8 w-auto object-contain" />
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-[5px] border border-white/10 bg-white/[0.03] px-2 py-1">
-              <div className="h-7 w-7 rounded-[4px] border border-white/10 bg-gradient-to-br from-zinc-300/20 via-zinc-500/20 to-zinc-300/20" />
-              <span className="hidden text-[11px] uppercase tracking-[0.12em] text-zinc-400 md:inline">
+            <div className="flex items-center gap-2 rounded-5 border border-white/10 bg-white/[0.03] px-2 py-1">
+              <div className="h-7 w-7 rounded-xs border border-white/10 bg-gradient-to-br from-zinc-300/20 via-zinc-500/20 to-zinc-300/20" />
+              <span className="hidden text-3xs uppercase tracking-tightest text-zinc-400 md:inline">
                 {username ?? 'admin'}
               </span>
             </div>
@@ -68,7 +68,7 @@ function StudioShell() {
               variant="ghost"
               size="sm"
               onClick={onLogout}
-              className="rounded-[5px] border border-transparent text-zinc-400 hover:border-white/10 hover:bg-white/5 hover:text-zinc-100"
+              className="rounded-5 border border-transparent text-zinc-400 hover:border-white/10 hover:bg-white/5 hover:text-zinc-100"
             >
               <LogOut className="mr-1 h-3.5 w-3.5" />
               Logout
@@ -169,7 +169,7 @@ function AgentNav({ agentName }: { agentName: string | null }) {
         label="Routes & Triggers"
         icon={<Zap className="h-4 w-4" />}
       />
-      <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] uppercase tracking-[0.12em] text-zinc-500">
+      <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-3xs uppercase tracking-tightest text-zinc-500">
         <div className="mb-1 flex items-center gap-2 text-zinc-400">
           <MessageSquareText className="h-3.5 w-3.5" />
           Chat

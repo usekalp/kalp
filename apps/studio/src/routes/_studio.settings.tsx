@@ -7,12 +7,12 @@ export const Route = createFileRoute('/_studio/settings')({
 
 function SettingsPage() {
   return (
-    <Card className="border-white/10 bg-white/[0.03]">
+    <Card className="border-white/10 bg-white/3">
       <CardHeader>
         <CardTitle>Settings</CardTitle>
       </CardHeader>
       <CardContent className="text-sm text-muted-foreground">
-        Team settings stub for Studio. Próximo paso: wiring real config.
+        Team settings stub for Studio
       </CardContent>
     </Card>
   )
