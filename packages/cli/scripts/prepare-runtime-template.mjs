@@ -98,11 +98,8 @@ async function prepareRuntimeTemplate() {
 
   await rm(DIST_RUNTIME_TEMPLATE_DIR, { recursive: true, force: true });
   await mkdir(DIST_RUNTIME_TEMPLATE_DIR, { recursive: true });
+  await cp(TEMPLATE_SOURCE_DIR, DIST_RUNTIME_TEMPLATE_DIR, { recursive: true });
   await cp(studioDistDir, DIST_STUDIO_DIR, { recursive: true });
-  await cp(
-    join(TEMPLATE_SOURCE_DIR, "worker-entry.js"),
-    join(DIST_RUNTIME_TEMPLATE_DIR, "worker-entry.js"),
-  );
   await ensureStudioIndex(DIST_STUDIO_DIR, rootElementId);
 }
 

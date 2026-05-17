@@ -1,7 +1,6 @@
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { buildAgent } from "@kalphq/compiler";
 import type {
   ArtifactManifest,
   BundleManifest,
@@ -9,9 +8,20 @@ import type {
   SchemaRegistry,
 } from "@kalphq/sdk";
 import type { AgentManifestV3 } from "@/utils/manifest/types";
+import { buildAgent } from "@kalphq/compiler";
 
 export type { AgentManifestV3 } from "@/utils/manifest/types";
 export { computePushHash } from "@/utils/ir/hashIR";
+
+async function compileAgent(params: {
+  agentPath: string;
+  tempOutDir: string;
+  cwd: string;
+}): Promise<void> {
+  await buildAgent(params.agentPath, params.tempOutDir, params.cwd, {
+    includeDebug: false,
+  });
+}
 
 async function loadJson<T>(filePath: string): Promise<T> {
   const content = await readFile(filePath, "utf-8");
@@ -29,14 +39,18 @@ export async function readAgentManifest(params: {
   const tempOutDir = await mkdtemp(join(tmpdir(), "kalp-build-"));
 
   try {
-    await buildAgent(agentPath, tempOutDir, cwd, { includeDebug: false });
+    await compileAgent({ agentPath, tempOutDir, cwd });
 
     const artifactsDir = join(tempOutDir, ".kalp", "artifacts");
     const artifactManifest = await loadJson<ArtifactManifest>(
       join(artifactsDir, "artifact-manifest.json"),
     );
-    const semanticIr = await loadJson<IRGraph>(join(artifactsDir, "semantic-ir.json"));
-    const schemas = await loadJson<SchemaRegistry>(join(artifactsDir, "schemas.json"));
+    const semanticIr = await loadJson<IRGraph>(
+      join(artifactsDir, "semantic-ir.json"),
+    );
+    const schemas = await loadJson<SchemaRegistry>(
+      join(artifactsDir, "schemas.json"),
+    );
     const bundleManifest = await loadJson<BundleManifest>(
       join(artifactsDir, "bundle-manifest.json"),
     );
@@ -49,7 +63,10 @@ export async function readAgentManifest(params: {
         continue;
       }
 
-      const filePath = join(artifactsDir, binding.file.replace(/^\.\//, "").replace(/\//g, "\\"));
+      const filePath = join(
+        artifactsDir,
+        binding.file.replace(/^\.\//, "").replace(/\//g, "\\"),
+      );
       bundles[binding.bundle] = {
         file: binding.file,
         code: await readFile(filePath, "utf-8"),
@@ -74,4 +91,3 @@ export async function readAgentManifest(params: {
     await rm(tempOutDir, { recursive: true, force: true });
   }
 }
-

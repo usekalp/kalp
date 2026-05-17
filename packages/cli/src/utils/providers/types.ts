@@ -52,6 +52,11 @@ export interface RuntimeProvider {
     key: string;
     value: string;
   }): Promise<void>;
+  putBulkValues?(params: {
+    cwd: string;
+    configPath: string;
+    values: Array<{ key: string; value: string }>;
+  }): Promise<void>;
   deleteValue(params: {
     cwd: string;
     configPath: string;

@@ -124,6 +124,16 @@ function createCompilerState() {
   };
 }
 
+function purgeProjectModuleCache(projectRoot: string) {
+  const normalizedRoot = path.resolve(projectRoot);
+  const rootPrefix = `${normalizedRoot}${path.sep}`;
+  for (const cacheKey of Object.keys(require.cache)) {
+    if (cacheKey === normalizedRoot || cacheKey.startsWith(rootPrefix)) {
+      delete require.cache[cacheKey];
+    }
+  }
+}
+
 export async function buildAgent(
   entryPath: string,
   outDir: string,
@@ -145,6 +155,7 @@ export async function buildAgent(
 
     const sdkSource = resolveWorkspaceSdkSource();
     const jiti = createJiti(jitiBase, {
+      fsCache: false,
       interopDefault: true,
       alias: sdkSource
         ? {
@@ -155,6 +166,7 @@ export async function buildAgent(
         : undefined,
     });
 
+    purgeProjectModuleCache(resolvedProjectRoot);
     const mod = await jiti.import(entryFullPath);
     const agentConfig: any = (mod as any).default || mod;
 

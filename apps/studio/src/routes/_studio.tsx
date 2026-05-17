@@ -9,13 +9,14 @@ import {
 } from '@tanstack/react-router'
 import {
   BrainCircuit,
+  LayoutGrid,
   LogOut,
+  MessageSquareText,
   Radar,
   Settings2,
   UsersRound,
   Workflow,
   Zap,
-  LayoutGrid,
 } from 'lucide-react'
 import { signOut, useAuth } from '#/hooks/useAuth'
 import { Button } from '#/components/ui/button'
@@ -153,21 +154,28 @@ function AgentNav({ agentName }: { agentName: string | null }) {
       <NavItem
         to="/agent/$agentName/memory"
         params={{ agentName }}
-        label="Memory"
+        label="State"
         icon={<BrainCircuit className="h-4 w-4" />}
       />
       <NavItem
         to="/agent/$agentName/replay"
         params={{ agentName }}
-        label="Replay"
+        label="Executions"
         icon={<Radar className="h-4 w-4" />}
       />
       <NavItem
         to="/agent/$agentName/triggers"
         params={{ agentName }}
-        label="Triggers"
+        label="Routes & Triggers"
         icon={<Zap className="h-4 w-4" />}
       />
+      <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] uppercase tracking-[0.12em] text-zinc-500">
+        <div className="mb-1 flex items-center gap-2 text-zinc-400">
+          <MessageSquareText className="h-3.5 w-3.5" />
+          Chat
+        </div>
+        Use the overview page to send live messages and inspect runtime responses.
+      </div>
     </>
   )
 }

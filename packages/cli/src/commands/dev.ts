@@ -1,11 +1,11 @@
-import { watch, type FSWatcher } from "node:fs";
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { execa } from "execa";
+import chokidar from "chokidar";
 import open from "open";
 import { generateTypes } from "@/utils/codegen";
 import { ensureSecretKey } from "@/utils/secret";
@@ -21,16 +21,35 @@ import {
 const LOGO = "🦋";
 const LOCAL_MANIFESTS_DIR = ".kalp/runtime/local-manifests";
 const HOT_RELOAD_DEBOUNCE_MS = 450;
+const STUDIO_ORIGIN = "http://localhost:8787";
 
 type KvBulkEntry = {
   key: string;
   value: string;
 };
 
+type RuntimeAgentIndexEntry = {
+  name: string;
+  label?: string;
+  description?: string;
+  tags?: string[];
+  environment: "local" | "remote" | "both";
+  status: "online" | "offline";
+  hash: string | null;
+  version: string | null;
+  versionNumber: number | null;
+  lastRemoteHash: string | null;
+  lastLocalHash: string | null;
+  workerUrl: string | null;
+  localPath: string | null;
+  updatedAt: string | null;
+};
+
 async function putLocalBulkValues(params: {
   cwd: string;
   configPath: string;
   bulkPath: string;
+  persistTo: string;
 }): Promise<void> {
   await execa(
     "npx",
@@ -43,6 +62,8 @@ async function putLocalBulkValues(params: {
       "--binding",
       "KALP_MANIFESTS",
       "--local",
+      "--persist-to",
+      params.persistTo,
       "--config",
       params.configPath,
     ],
@@ -54,17 +75,28 @@ async function syncLocalRuntimeState(params: {
   cwd: string;
   runtimeDir: string;
   configPath: string;
+  persistTo: string;
 }): Promise<{ synced: number; failed: string[] }> {
-  const { cwd, runtimeDir, configPath } = params;
+  const { cwd, runtimeDir, configPath, persistTo } = params;
   await writeRuntimeAgentsSnapshot({ cwd, runtimeDir, mode: "local" });
+  const snapshotPath = join(runtimeDir, "agents.snapshot.json");
+  const snapshotRaw = await readFile(snapshotPath, "utf-8").catch(() => "");
+  let snapshot: { agents?: Array<Record<string, unknown>> } | null = null;
+  if (snapshotRaw) {
+    try {
+      snapshot = JSON.parse(snapshotRaw) as { agents?: Array<Record<string, unknown>> };
+    } catch {
+      snapshot = null;
+    }
+  }
 
   const manifestDir = join(cwd, LOCAL_MANIFESTS_DIR);
-  await rm(manifestDir, { recursive: true, force: true });
   await mkdir(manifestDir, { recursive: true });
 
   const agentNames = await readLocalAgentNames(cwd);
   const failed: string[] = [];
   const bulkEntries: KvBulkEntry[] = [];
+  const compiledIndexEntries: RuntimeAgentIndexEntry[] = [];
   let synced = 0;
 
   for (const agentName of agentNames) {
@@ -104,12 +136,58 @@ async function syncLocalRuntimeState(params: {
           value: bundle.code,
         });
       }
+
+      compiledIndexEntries.push({
+        name: agentName,
+        label: manifest.semanticIr.agent?.label ?? agentName,
+        description: manifest.semanticIr.agent?.description,
+        tags: manifest.semanticIr.agent?.tags ?? [],
+        environment: "local",
+        status: "online",
+        hash,
+        version: null,
+        versionNumber: null,
+        lastRemoteHash: null,
+        lastLocalHash: hash,
+        workerUrl: `http://localhost:8787/a/${agentName}`,
+        localPath: join(cwd, "agents", agentName, "index.ts"),
+        updatedAt: new Date().toISOString(),
+      });
+
       bulkEntries.push({ key: latestKey, value: hash });
       synced += 1;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       failed.push(`${agentName}: ${reason}`);
     }
+  }
+
+  const syncStatusPath = join(manifestDir, "sync-status.json");
+  await writeFile(
+    syncStatusPath,
+    JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        totalAgents: agentNames.length,
+        synced,
+        failed,
+      },
+      null,
+      2,
+    ),
+    "utf-8",
+  );
+
+  if (compiledIndexEntries.length > 0) {
+    bulkEntries.push({
+      key: "agents:index",
+      value: JSON.stringify(compiledIndexEntries),
+    });
+  } else if (snapshot?.agents && Array.isArray(snapshot.agents)) {
+    bulkEntries.push({
+      key: "agents:index",
+      value: JSON.stringify(snapshot.agents),
+    });
   }
 
   if (bulkEntries.length > 0) {
@@ -120,10 +198,17 @@ async function syncLocalRuntimeState(params: {
         cwd,
         configPath,
         bulkPath,
+        persistTo,
       });
     } finally {
       await rm(bulkPath, { force: true });
     }
+  }
+
+  if (agentNames.length > 0 && synced === 0 && failed.length > 0) {
+    throw new Error(
+      `Local sync failed for all agents (${failed.length}): ${failed.slice(0, 3).join(" | ")}`,
+    );
   }
 
   return { synced, failed };
@@ -176,6 +261,49 @@ async function writeLocalArtifactFiles(params: {
   };
 }
 
+async function terminateProcessTree(processHandle: ReturnType<typeof execa>): Promise<void> {
+  if (processHandle.killed) return;
+  const pid = processHandle.pid;
+  if (!pid) return;
+
+  try {
+    processHandle.kill("SIGINT");
+  } catch {
+    // noop
+  }
+  await delay(250);
+  if (processHandle.killed) return;
+
+  if (process.platform === "win32") {
+    try {
+      await execa("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
+      return;
+    } catch {
+      // noop
+    }
+  }
+
+  try {
+    processHandle.kill("SIGTERM");
+  } catch {
+    // noop
+  }
+  await delay(200);
+
+  if (!processHandle.killed) {
+    try {
+      processHandle.kill("SIGKILL");
+    } catch {
+      // noop
+    }
+  }
+}
+
+async function touchFile(filePath: string): Promise<void> {
+  const now = new Date();
+  await utimes(filePath, now, now).catch(() => undefined);
+}
+
 export default defineCommand({
   meta: { name: "dev", description: "Run Worker + Studio local environment" },
   async run() {
@@ -191,17 +319,23 @@ export default defineCommand({
     const nextDevVars = devVarsContent
       .replace(/^KALP_ENV=.*$/m, "")
       .replace(/^KALP_RUNTIME_MODE=.*$/m, "")
+      .replace(/^KALP_STUDIO_DEV_ORIGIN=.*$/m, "")
       .trimEnd();
     await writeFile(
       devVarsPath,
       `${nextDevVars}\nKALP_ENV=local\nKALP_RUNTIME_MODE=local\n`,
       "utf-8",
     );
-    const runtime = await materializeRuntime(cwd, { mode: "local" });
+    const runtime = await materializeRuntime(cwd, {
+      mode: "local",
+      studioMode: "bundled-artifact",
+    });
+    const persistTo = join(runtime.runtimeDir, ".wrangler-state");
     const initialSync = await syncLocalRuntimeState({
       cwd,
       runtimeDir: runtime.runtimeDir,
       configPath: runtime.wranglerConfigPath,
+      persistTo,
     });
     if (initialSync.failed.length > 0) {
       for (const failure of initialSync.failed) {
@@ -212,7 +346,7 @@ export default defineCommand({
       `${pc.dim("Local agent runtime synced:")} ${pc.cyan(String(initialSync.synced))}`,
     );
 
-    p.note("Starting local runtime (wrangler dev :8787)");
+    p.note("Local environment prepared", "Kalp Dev");
 
     const backend = execa(
       "npx",
@@ -222,6 +356,9 @@ export default defineCommand({
         "--port",
         "8787",
         "--local",
+        "--persist-to",
+        persistTo,
+        "--live-reload",
         "--config",
         runtime.wranglerConfigPath,
       ],
@@ -231,6 +368,7 @@ export default defineCommand({
     let hotReloadTimer: NodeJS.Timeout | null = null;
     let hotReloadRunning = false;
     let hotReloadPending = false;
+    let hotReloadRequiresRuntimeRefresh = false;
 
     const runHotReloadSync = async () => {
       if (hotReloadRunning) {
@@ -240,11 +378,20 @@ export default defineCommand({
 
       hotReloadRunning = true;
       try {
+        if (hotReloadRequiresRuntimeRefresh) {
+          await materializeRuntime(cwd, {
+            mode: "local",
+            studioMode: "bundled-artifact",
+          });
+          hotReloadRequiresRuntimeRefresh = false;
+        }
         const sync = await syncLocalRuntimeState({
           cwd,
           runtimeDir: runtime.runtimeDir,
           configPath: runtime.wranglerConfigPath,
+          persistTo,
         });
+        await touchFile(runtime.workerEntrypointPath);
         if (sync.failed.length > 0) {
           p.log.warn(
             `Local hot reload synced ${sync.synced} agents with ${sync.failed.length} warnings.`,
@@ -264,53 +411,76 @@ export default defineCommand({
       }
     };
 
-    const scheduleHotReloadSync = () => {
+    const scheduleHotReloadSync = (options?: { refreshRuntime?: boolean }) => {
+      if (options?.refreshRuntime) {
+        hotReloadRequiresRuntimeRefresh = true;
+      }
       if (hotReloadTimer) clearTimeout(hotReloadTimer);
       hotReloadTimer = setTimeout(() => {
         void runHotReloadSync();
       }, HOT_RELOAD_DEBOUNCE_MS);
     };
 
-    const watchers: FSWatcher[] = [];
-    const watchTargets = [join(cwd, "agents"), join(cwd, ".kalp", "state.json")];
-    for (const target of watchTargets) {
-      try {
-        const watcher = watch(
-          target,
-          target.endsWith(".json") ? undefined : { recursive: true },
-          () => scheduleHotReloadSync(),
-        );
-        watchers.push(watcher);
-      } catch {
-        // Ignore missing targets (e.g. no agents yet)
-      }
-    }
+    const watchRoots = [
+      join(cwd, "agents"),
+      join(cwd, ".kalp", "state.json"),
+      join(cwd, "packages", "cli", "runtime-template"),
+    ];
+    const watcher = chokidar.watch(watchRoots, {
+      ignoreInitial: true,
+      persistent: true,
+      usePolling: false,
+      awaitWriteFinish: {
+        stabilityThreshold: 150,
+        pollInterval: 20,
+      },
+      ignored: [
+        /(^|[\\/])\.git([\\/]|$)/,
+        /(^|[\\/])node_modules([\\/]|$)/,
+        /(^|[\\/])\.kalp[\\/]runtime[\\/]local-manifests([\\/]|$)/,
+      ],
+    });
+    watcher.on("all", (_event, changedPath) => {
+      const refreshRuntime = changedPath.includes(
+        `${join("packages", "cli", "runtime-template")}`,
+      );
+      scheduleHotReloadSync({ refreshRuntime });
+    });
 
-    const shutdown = () => {
+    let shuttingDown = false;
+    const shutdown = async (exitAfter = false) => {
+      if (shuttingDown) return;
+      shuttingDown = true;
       if (hotReloadTimer) {
         clearTimeout(hotReloadTimer);
         hotReloadTimer = null;
       }
-      for (const watcher of watchers) {
-        watcher.close();
-      }
-      backend.kill("SIGINT");
+      await watcher.close().catch(() => undefined);
+      await Promise.allSettled([
+        terminateProcessTree(backend),
+      ]);
+      if (exitAfter) process.exit(130);
     };
 
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
+    const onSigInt = () => void shutdown(true);
+    const onSigTerm = () => void shutdown(true);
+    process.once("SIGINT", onSigInt);
+    process.once("SIGTERM", onSigTerm);
 
-    await delay(2500);
-    const studioUrl = "http://localhost:8787/studio/login";
+    const bootSpinner = p.spinner();
+    bootSpinner.start("Starting development server...");
+    await delay(1800);
+    bootSpinner.stop("Development server is running at http://localhost:8787");
+    const studioUrl = `${STUDIO_ORIGIN}/studio/login`;
     await open(studioUrl);
-    p.log.success(`Studio opened at ${pc.cyan(studioUrl)}`);
+    p.log.success(`Studio available at ${pc.cyan(studioUrl)}`);
 
     try {
       await backend;
     } finally {
-      shutdown();
-      process.off("SIGINT", shutdown);
-      process.off("SIGTERM", shutdown);
+      await shutdown(false);
+      process.off("SIGINT", onSigInt);
+      process.off("SIGTERM", onSigTerm);
     }
   },
 });

@@ -13,6 +13,7 @@ import {
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deriveLabelFromName } from "@kalphq/project";
+import { readAgentManifest } from "@/utils/manifest";
 import { getRequiredSecretForProvider, resolveProviderFromConfig } from "@/utils/ai";
 import {
   resolveIdentityAuthRequirements,
@@ -39,6 +40,7 @@ interface RuntimeAgentRecord {
   name: string;
   label?: string;
   tags?: string[];
+  description?: string;
   environment: "local" | "remote" | "both";
   status: "online" | "offline";
   hash: string | null;
@@ -51,6 +53,28 @@ interface RuntimeAgentRecord {
   updatedAt: string | null;
 }
 
+interface LocalAgentMetadata {
+  label?: string;
+  description?: string;
+  tags?: string[];
+}
+
+async function readLocalAgentMetadata(
+  cwd: string,
+  agentName: string,
+): Promise<LocalAgentMetadata | null> {
+  try {
+    const manifest = await readAgentManifest({ cwd, agentName });
+    return {
+      label: manifest.semanticIr.agent?.label,
+      description: manifest.semanticIr.agent?.description,
+      tags: manifest.semanticIr.agent?.tags,
+    };
+  } catch {
+    return null;
+  }
+}
+
 interface RuntimeAgentsSnapshot {
   generatedAt: string;
   projectPath: string;
@@ -61,6 +85,7 @@ interface RuntimeAgentsSnapshot {
 
 export interface MaterializeRuntimeOptions {
   mode?: "local" | "remote";
+  studioMode?: "bundled-artifact" | "live-workspace";
 }
 
 interface WranglerConfig {
@@ -88,8 +113,9 @@ interface WranglerConfig {
 }
 
 interface RuntimeTemplatePaths {
-  studioTemplateDir: string;
+  templateRoot: string;
   workerEntryPath: string;
+  studioTemplateDir?: string;
 }
 
 function sanitizeSegment(input: string): string {
@@ -175,9 +201,10 @@ function createRuntimeConfig(
   };
 }
 
-function runtimeTemplateCandidates(): Array<{
-  studioTemplateDir: string;
+function runtimeTemplateCandidates(studioMode: "bundled-artifact" | "live-workspace"): Array<{
+  templateRoot: string;
   workerEntryPath: string;
+  studioTemplateDir?: string;
 }> {
   const here = dirname(fileURLToPath(import.meta.url));
   const distTemplateRoot = resolve(here, "runtime-template");
@@ -196,30 +223,51 @@ function runtimeTemplateCandidates(): Array<{
   );
 
   return [
+    ...(studioMode === "live-workspace"
+      ? [
+          {
+            templateRoot: packageRootTemplate,
+            studioTemplateDir: resolve(
+              here,
+              "..",
+              "..",
+              "..",
+              "..",
+              "apps",
+              "studio",
+              "public",
+            ),
+            workerEntryPath: join(packageRootTemplate, WORKER_ENTRY_FILE),
+          },
+        ]
+      : []),
     {
-      studioTemplateDir: join(distTemplateRoot, STUDIO_DIR),
+      templateRoot: distTemplateRoot,
       workerEntryPath: join(distTemplateRoot, WORKER_ENTRY_FILE),
+      studioTemplateDir: join(distTemplateRoot, STUDIO_DIR),
     },
     {
-      studioTemplateDir: join(packageRootTemplate, STUDIO_DIR),
+      templateRoot: packageRootTemplate,
       workerEntryPath: join(packageRootTemplate, WORKER_ENTRY_FILE),
+      studioTemplateDir: join(packageRootTemplate, STUDIO_DIR),
     },
     {
-      studioTemplateDir: join(sourceTemplateRoot, STUDIO_DIR),
+      templateRoot: sourceTemplateRoot,
       workerEntryPath: join(sourceTemplateRoot, WORKER_ENTRY_FILE),
-    },
-    {
       studioTemplateDir: monorepoStudioDist,
-      workerEntryPath: join(sourceTemplateRoot, WORKER_ENTRY_FILE),
     },
   ];
 }
 
-async function resolveRuntimeTemplate(): Promise<RuntimeTemplatePaths> {
-  for (const candidate of runtimeTemplateCandidates()) {
+async function resolveRuntimeTemplate(
+  studioMode: "bundled-artifact" | "live-workspace",
+): Promise<RuntimeTemplatePaths> {
+  for (const candidate of runtimeTemplateCandidates(studioMode)) {
     try {
-      await access(candidate.studioTemplateDir);
       await access(candidate.workerEntryPath);
+      if (candidate.studioTemplateDir) {
+        await access(candidate.studioTemplateDir);
+      }
       return candidate;
     } catch {
       // continue
@@ -278,6 +326,75 @@ async function ensureStudioIndex(studioDir: string): Promise<void> {
   await writeFile(indexPath, html, "utf-8");
 }
 
+async function ensureLiveWorkspaceStudioPlaceholder(studioDir: string): Promise<void> {
+  await mkdir(studioDir, { recursive: true });
+  await writeFile(
+    join(studioDir, "index.html"),
+    `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kalp Studio</title>
+  </head>
+  <body>
+    <div id="root">Kalp Studio live workspace proxy is starting...</div>
+  </body>
+</html>
+`,
+    "utf-8",
+  );
+}
+
+async function copyTemplateRootContents(
+  templateRoot: string,
+  runtimeDir: string,
+): Promise<void> {
+  const entries = await readdir(templateRoot, { withFileTypes: true });
+  for (const entry of entries) {
+    const sourcePath = join(templateRoot, entry.name);
+    const targetPath = join(runtimeDir, entry.name);
+    await cp(sourcePath, targetPath, { recursive: true, force: true });
+  }
+}
+
+const REQUIRED_RUNTIME_MODULES = [
+  "shared.js",
+  "constants.js",
+  "assets.js",
+  "studio-routes.js",
+  "durable-object.js",
+  "auth.js",
+  "storage.js",
+  "resolvers.js",
+  "agent-runtime.js",
+  "executions.js",
+  "chat.js",
+];
+
+async function ensureRuntimeWorkerModules(params: {
+  runtimeDir: string;
+  candidateRoots: string[];
+}): Promise<void> {
+  for (const fileName of REQUIRED_RUNTIME_MODULES) {
+    const targetPath = join(params.runtimeDir, fileName);
+    const exists = await stat(targetPath)
+      .then(() => true)
+      .catch(() => false);
+    if (exists) continue;
+
+    for (const root of params.candidateRoots) {
+      const sourcePath = join(root, fileName);
+      const sourceExists = await stat(sourcePath)
+        .then(() => true)
+        .catch(() => false);
+      if (!sourceExists) continue;
+      await cp(sourcePath, targetPath, { force: true });
+      break;
+    }
+  }
+}
+
 export async function readLocalAgentNames(cwd: string): Promise<string[]> {
   const agentsDir = join(cwd, "agents");
   try {
@@ -310,6 +427,7 @@ async function createAgentsSnapshot(
   for (const name of localAgentNames) {
     const localPath = join(cwd, "agents", name, "index.ts");
     const saved = stateAgents[name];
+    const localMetadata = await readLocalAgentMetadata(cwd, name);
     const hasRemoteVersion = !!saved?.lastRemoteHash && (saved?.currentVersion ?? 0) > 0;
 
     if (mode === "remote" && !hasRemoteVersion) {
@@ -326,8 +444,9 @@ async function createAgentsSnapshot(
 
     byName.set(name, {
       name,
-      label: deriveLabelFromName(name),
-      tags: [],
+      label: localMetadata?.label ?? deriveLabelFromName(name),
+      description: localMetadata?.description,
+      tags: localMetadata?.tags ?? [],
       environment:
         mode === "remote"
           ? "remote"
@@ -421,6 +540,8 @@ export async function materializeRuntime(
   options: MaterializeRuntimeOptions = {},
 ): Promise<RuntimePaths> {
   const mode = options.mode ?? "remote";
+  const studioMode =
+    options.studioMode ?? (mode === "local" ? "live-workspace" : "bundled-artifact");
   const runtimeDir = join(cwd, RUNTIME_ROOT, RUNTIME_DIR);
   const studioDir = join(runtimeDir, STUDIO_DIR);
   const workerEntrypointPath = join(runtimeDir, WORKER_ENTRY_FILE);
@@ -429,13 +550,27 @@ export async function materializeRuntime(
   // Preserve existing KV namespace IDs before wiping the runtime directory
   const existingKvIds = await readExistingKvNamespaceIds(wranglerConfigPath);
 
-  const template = await resolveRuntimeTemplate();
+  const template = await resolveRuntimeTemplate(studioMode);
   await rm(runtimeDir, { recursive: true, force: true });
   await mkdir(runtimeDir, { recursive: true });
 
-  await cp(template.studioTemplateDir, studioDir, { recursive: true });
-  await cp(template.workerEntryPath, workerEntrypointPath);
-  await ensureStudioIndex(studioDir);
+  await copyTemplateRootContents(template.templateRoot, runtimeDir);
+  await rm(studioDir, { recursive: true, force: true });
+  if (template.studioTemplateDir) {
+    await cp(template.studioTemplateDir, studioDir, { recursive: true }).catch(() => undefined);
+  }
+  if (studioMode === "live-workspace") {
+    await ensureLiveWorkspaceStudioPlaceholder(studioDir);
+  } else {
+    await ensureStudioIndex(studioDir);
+  }
+  await ensureRuntimeWorkerModules({
+    runtimeDir,
+    candidateRoots: [
+      template.templateRoot,
+      resolve(dirname(template.workerEntryPath), "..", "runtime-template"),
+    ],
+  });
 
   // Bundle worker-entry.js to bake in dependencies (hono, jose, etc.)
   // We mark generated/dynamic files as external so they are resolved at runtime in the same dir.

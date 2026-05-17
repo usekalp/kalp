@@ -1,48 +1,79 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
-import { Activity, CalendarClock, Cloud, Globe, MemoryStick, MessageSquareText, Server, Sparkles } from 'lucide-react'
-import { getAgent } from '#/lib/api'
+import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
+import { createFileRoute, Link } from '@tanstack/react-router'
+import {
+  Activity,
+  CalendarClock,
+  Cloud,
+  Globe,
+  MemoryStick,
+  MessageSquareText,
+  Route as RouteIcon,
+  Send,
+  Server,
+  Sparkles,
+} from 'lucide-react'
 import { Badge } from '#/components/ui/badge'
+import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
+import { ScrollArea } from '#/components/ui/scroll-area'
 import { Skeleton } from '#/components/ui/skeleton'
+import {
+  useRuntimeAgent,
+  useRuntimeChatSession,
+  useSendAgentChatMessage,
+} from '#/hooks/useRuntimeSubscriptions'
 
 export const Route = createFileRoute('/_studio/agent/$agentName/')({
   component: AgentOverviewPage,
 })
 
-const MOCK_ENTRY_POINTS = [
-  { name: 'onMessage', method: 'POST', path: '/a/:agentName', icon: MessageSquareText },
-  { name: 'onSchedule', method: 'CRON', path: '*/5 * * * *', icon: CalendarClock },
-]
-
-const MOCK_MEMORY = {
-  tickets_open: 14,
-  conversations_active: 5,
-  faq_cache_hit_rate: '91%',
-}
-
 function AgentOverviewPage() {
   const { agentName } = Route.useParams()
+  const agentQuery = useRuntimeAgent(agentName)
+  const agent = agentQuery.data
+  const [draft, setDraft] = useState('')
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
 
-  const agentQuery = useQuery({
-    queryKey: ['runtime-agent', agentName],
-    queryFn: () => getAgent(agentName),
-    retry: false,
-  })
+  useEffect(() => {
+    if (!activeSessionId && agent?.chatSessions?.[0]?.id) {
+      setActiveSessionId(agent.chatSessions[0].id)
+    }
+  }, [activeSessionId, agent?.chatSessions])
+
+  const chatSessionId = activeSessionId ?? agent?.chatSessions?.[0]?.id ?? ''
+  const chatMessagesQuery = useRuntimeChatSession(agentName, chatSessionId)
+  const sendMessage = useSendAgentChatMessage(agentName)
+
+  const recentEntrypoints = useMemo(() => agent?.entrypoints ?? [], [agent])
+  const stateSummary = useMemo(() => agent?.state.summary ?? [], [agent])
+  const recentMessages = chatMessagesQuery.data ?? []
+
+  const onSend = async () => {
+    const message = draft.trim()
+    if (!message) return
+    const result = await sendMessage.mutateAsync({
+      message,
+      sessionId: activeSessionId ?? undefined,
+    })
+    setActiveSessionId(result.session.id)
+    setDraft('')
+  }
 
   return (
-    <section className="grid gap-4 md:grid-cols-2">
+    <section className="grid gap-4 xl:grid-cols-12">
       {agentQuery.isLoading && (
         <>
-          <Skeleton className="h-44 w-full rounded-2xl" />
-          <Skeleton className="h-44 w-full rounded-2xl" />
-          <Skeleton className="h-44 w-full rounded-2xl md:col-span-2" />
+          <Skeleton className="h-44 w-full rounded-[5px] xl:col-span-6" />
+          <Skeleton className="h-44 w-full rounded-[5px] xl:col-span-6" />
+          <Skeleton className="h-[420px] w-full rounded-[5px] xl:col-span-7" />
+          <Skeleton className="h-[420px] w-full rounded-[5px] xl:col-span-5" />
         </>
       )}
 
-      {agentQuery.data && (
+      {agent && (
         <>
-          <Card className="studio-tile rounded-[5px]">
+          <Card className="studio-tile rounded-[5px] xl:col-span-6">
             <CardHeader>
               <CardTitle className="studio-metal-text flex items-center gap-2 text-base">
                 <Server className="h-4 w-4 text-primary" />
@@ -50,37 +81,32 @@ function AgentOverviewPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
-              <div className="rounded-[5px] border border-white/10 bg-black/20 p-3">
-                <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-zinc-500">Environment</p>
-                <div className="flex items-center gap-1 text-zinc-100">
-                  <Cloud className="h-3.5 w-3.5" />
-                  {agentQuery.data.environment}
-                </div>
-              </div>
-              <div className="rounded-[5px] border border-white/10 bg-black/20 p-3">
-                <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-zinc-500">Status</p>
-                <Badge
-                  variant={agentQuery.data.status === 'online' ? 'default' : 'outline'}
-                  className={agentQuery.data.status === 'online' ? 'bg-emerald-500/20 text-emerald-200' : ''}
-                >
-                  <Activity className="mr-1 h-3 w-3" />
-                  {agentQuery.data.status}
-                </Badge>
-              </div>
-              <div className="rounded-[5px] border border-white/10 bg-black/20 p-3">
-                <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-zinc-500">Version</p>
-                <Badge variant="outline" className="border-slate-200/20 bg-white/[0.02] text-zinc-200">
-                  {agentQuery.data.version ?? 'v0'}
-                </Badge>
-              </div>
-              <div className="rounded-[5px] border border-white/10 bg-black/20 p-3">
-                <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-zinc-500">Updated</p>
-                <span className="text-zinc-300">{agentQuery.data.updatedAt ?? 'n/a'}</span>
-              </div>
+              <MetricTile label="Environment" value={agent.environment} icon={<Cloud className="h-3.5 w-3.5" />} />
+              <MetricTile
+                label="Status"
+                value={agent.status}
+                icon={<Activity className="h-3.5 w-3.5" />}
+                badge={(
+                  <Badge
+                    variant={agent.status === 'online' ? 'default' : 'outline'}
+                    className={agent.status === 'online' ? 'bg-emerald-500/20 text-emerald-200' : ''}
+                  >
+                    {agent.status}
+                  </Badge>
+                )}
+              />
+              <MetricTile label="Version" value={agent.version ?? 'v0'} />
+              <MetricTile label="Updated" value={agent.updatedAt ?? 'n/a'} />
+              <MetricTile label="Routes" value={String(agent.routes.length)} icon={<RouteIcon className="h-3.5 w-3.5" />} />
+              <MetricTile
+                label="Executions"
+                value={String(agent.executionStats.total)}
+                icon={<Sparkles className="h-3.5 w-3.5" />}
+              />
             </CardContent>
           </Card>
 
-          <Card className="studio-tile rounded-[5px]">
+          <Card className="studio-tile rounded-[5px] xl:col-span-6">
             <CardHeader>
               <CardTitle className="studio-metal-text flex items-center gap-2 text-base">
                 <Globe className="h-4 w-4 text-primary" />
@@ -88,88 +114,204 @@ function AgentOverviewPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <p className="truncate">Local path: {agentQuery.data.localPath ?? 'n/a'}</p>
-              <p className="truncate">Hash: {agentQuery.data.hash ?? 'n/a'}</p>
-              {agentQuery.data.workerUrl ? (
+              <p className="truncate">Local path: {agent.localPath ?? 'n/a'}</p>
+              <p className="truncate">Hash: {agent.hash ?? 'n/a'}</p>
+              {agent.workerUrl ? (
                 <a
-                  href={agentQuery.data.workerUrl}
+                  href={agent.workerUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="break-all text-primary hover:underline"
                 >
-                  {agentQuery.data.workerUrl}
+                  {agent.workerUrl}
                 </a>
               ) : (
                 <p>Agent has not been deployed yet.</p>
               )}
+
+              {agent.requirements && Object.keys(agent.requirements).length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(agent.requirements).map(([key, value]) => (
+                    <Badge key={key} variant="outline" className="border-white/10 text-zinc-300">
+                      {key}:{value}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
-          <Card className="studio-tile rounded-[5px] md:col-span-2">
+          <Card className="studio-tile rounded-[5px] xl:col-span-7">
             <CardHeader>
               <CardTitle className="studio-metal-text flex items-center gap-2 text-base">
-                <Sparkles className="h-4 w-4 text-primary" />
-                Available Entry Points
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              {MOCK_ENTRY_POINTS.map((entry) => {
-                const Icon = entry.icon
-                return (
-                  <div
-                    key={entry.name}
-                    className="rounded-[5px] border border-white/10 bg-black/25 p-3 transition hover:border-white/20 hover:bg-black/35"
-                  >
-                    <div className="mb-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-zinc-300" />
-                        <span className="font-medium text-zinc-100">{entry.name}</span>
-                      </div>
-                      <Badge variant="outline" className="border-white/10 text-zinc-300">
-                        {entry.method}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-zinc-400">{entry.path}</p>
-                  </div>
-                )
-              })}
-            </CardContent>
-          </Card>
-
-          <Card className="studio-tile rounded-[5px] md:col-span-2">
-            <CardHeader>
-              <CardTitle className="studio-metal-text flex items-center gap-2 text-base">
-                <MemoryStick className="h-4 w-4 text-primary" />
-                Memory / State
+                <MessageSquareText className="h-4 w-4 text-primary" />
+                Agent Chat Console
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                {Object.entries(MOCK_MEMORY).map(([key, value], index) => (
-                  <div key={key} className="rounded-[5px] border border-white/10 bg-black/25 p-3">
-                    <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">{key}</p>
-                    <p className="mt-1 text-lg font-semibold text-zinc-100">{String(value)}</p>
-                    <div className="mt-2 h-1.5 rounded-full bg-white/10">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  variant={agent.chat.supportsChat ? 'default' : 'outline'}
+                  className={agent.chat.supportsChat ? 'bg-emerald-500/20 text-emerald-200' : 'text-zinc-500'}
+                >
+                  {agent.chat.supportsChat ? 'Message hook detected' : 'No message hook'}
+                </Badge>
+                <Badge variant="outline" className="border-white/10 text-zinc-400">
+                  Streaming: {agent.chat.supportsStreaming ? 'ready' : 'polling contract'}
+                </Badge>
+                <Badge variant="outline" className="border-white/10 text-zinc-400">
+                  History: {agent.chat.supportsHistory ? 'enabled' : 'disabled'}
+                </Badge>
+              </div>
+
+              <ScrollArea className="h-[260px] rounded-[5px] border border-white/10 bg-black/20 p-3">
+                <div className="space-y-3">
+                  {recentMessages.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No chat history yet. Send a message to create a live session.
+                    </p>
+                  ) : (
+                    recentMessages.map((message) => (
                       <div
-                        className="h-full rounded-full bg-gradient-to-r from-zinc-200/40 to-indigo-200/50"
-                        style={{ width: `${Math.min(95, 35 + index * 22)}%` }}
-                      />
+                        key={message.id}
+                        className={`rounded-[5px] border px-3 py-2 ${
+                          message.role === 'assistant'
+                            ? 'border-indigo-400/20 bg-indigo-400/10'
+                            : 'border-white/10 bg-white/[0.03]'
+                        }`}
+                      >
+                        <div className="mb-1 flex items-center justify-between text-[11px] uppercase tracking-[0.12em] text-zinc-500">
+                          <span>{message.role}</span>
+                          <span>{new Date(message.createdAt).toLocaleTimeString()}</span>
+                        </div>
+                        <p className="whitespace-pre-wrap text-sm text-zinc-100">{message.content}</p>
+                        {message.executionId ? (
+                          <Link
+                            to="/replay/$executionId"
+                            params={{ executionId: message.executionId }}
+                            className="mt-2 inline-flex text-xs text-primary hover:underline"
+                          >
+                            Open execution replay
+                          </Link>
+                        ) : null}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+
+              <div className="rounded-[5px] border border-white/10 bg-black/20 p-3">
+                <textarea
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder={
+                    agent.chat.supportsChat
+                      ? 'Send a runtime message to the message hook...'
+                      : 'This agent does not expose a message hook yet.'
+                  }
+                  disabled={!agent.chat.supportsChat || sendMessage.isPending}
+                  className="min-h-24 w-full resize-none rounded-[5px] border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500"
+                />
+                <div className="mt-3 flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    Current session: {chatSessionId || 'new session'}
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={onSend}
+                    disabled={!agent.chat.supportsChat || sendMessage.isPending || draft.trim().length === 0}
+                  >
+                    <Send className="mr-2 h-3.5 w-3.5" />
+                    {sendMessage.isPending ? 'Sending...' : 'Send message'}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="studio-tile rounded-[5px] xl:col-span-5">
+            <CardHeader>
+              <CardTitle className="studio-metal-text flex items-center gap-2 text-base">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Entrypoints & Runtime State
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                {recentEntrypoints.map((entry) => (
+                  <div key={entry.id} className="rounded-[5px] border border-white/10 bg-black/25 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {entry.kind === 'route' ? (
+                          <RouteIcon className="h-4 w-4 text-zinc-300" />
+                        ) : entry.kind === 'hook' ? (
+                          <MessageSquareText className="h-4 w-4 text-zinc-300" />
+                        ) : entry.kind === 'listener' ? (
+                          <Sparkles className="h-4 w-4 text-zinc-300" />
+                        ) : (
+                          <CalendarClock className="h-4 w-4 text-zinc-300" />
+                        )}
+                        <span className="font-medium text-zinc-100">{entry.title}</span>
+                      </div>
+                      <Badge variant="outline" className="border-white/10 text-zinc-300">
+                        {entry.kind}
+                      </Badge>
                     </div>
+                    <p className="text-xs text-zinc-400">
+                      {entry.method ? `${entry.method} ` : ''}
+                      {entry.path ?? entry.stableName ?? entry.id}
+                    </p>
                   </div>
                 ))}
               </div>
-              <details className="rounded-[5px] border border-white/10 bg-black/35 p-3">
-                <summary className="cursor-pointer text-xs uppercase tracking-[0.14em] text-zinc-400">
-                  Expand full state JSON
-                </summary>
-                <pre className="mt-3 overflow-x-auto font-mono text-xs text-zinc-200">
-                  {JSON.stringify(MOCK_MEMORY, null, 2)}
-                </pre>
-              </details>
+
+              <div className="rounded-[5px] border border-white/10 bg-black/25 p-3">
+                <div className="mb-3 flex items-center gap-2">
+                  <MemoryStick className="h-4 w-4 text-primary" />
+                  <span className="font-medium text-zinc-100">State surface</span>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {stateSummary.map((item) => (
+                    <div key={item.key} className="rounded-[5px] border border-white/10 bg-black/30 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">{item.key}</p>
+                      <p className="mt-1 text-sm font-medium text-zinc-100">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+                {!agent.state.availability.supported ? (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {agent.state.availability.reason}
+                  </p>
+                ) : null}
+              </div>
             </CardContent>
           </Card>
         </>
       )}
     </section>
+  )
+}
+
+function MetricTile({
+  label,
+  value,
+  icon,
+  badge,
+}: {
+  label: string
+  value: string
+  icon?: ReactNode
+  badge?: ReactNode
+}) {
+  return (
+    <div className="rounded-[5px] border border-white/10 bg-black/20 p-3">
+      <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-zinc-500">{label}</p>
+      {badge ?? (
+        <div className="flex items-center gap-1 text-zinc-100">
+          {icon}
+          {value}
+        </div>
+      )}
+    </div>
   )
 }

@@ -289,6 +289,27 @@ export const cloudflareProvider: RuntimeProvider = {
       );
     });
   },
+  async putBulkValues({ cwd, configPath, values }) {
+    if (values.length === 0) return;
+    await withTempJsonFile("kalp-kv-bulk-put-", values, async (jsonPath) => {
+      await execa(
+        "npx",
+        [
+          "wrangler",
+          "kv",
+          "bulk",
+          "put",
+          jsonPath,
+          "--binding",
+          "KALP_MANIFESTS",
+          "--remote",
+          "--config",
+          configPath,
+        ],
+        { cwd },
+      );
+    });
+  },
   async deleteValue({ cwd, configPath, key }) {
     await execa(
       "npx",

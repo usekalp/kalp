@@ -1,4 +1,4 @@
-import { access, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
@@ -227,19 +227,36 @@ async function pruneStaleRemoteAgents(params: {
   };
 }
 
-async function mergeRemoteAgentIndexEntry(params: {
+function hydrateLocalAgentVersionsFromRemoteIndex(params: {
+  state: ProjectState;
+  remoteEntries: RemoteAgentIndexEntry[];
   cwd: string;
-  wranglerConfigPath: string;
-  entry: RemoteAgentIndexEntry;
-}): Promise<void> {
-  const { cwd, wranglerConfigPath, entry } = params;
-  const currentIndex = await readRemoteAgentsIndex(cwd, wranglerConfigPath);
-  const merged = [
-    ...currentIndex.filter((existing) => existing.name !== entry.name),
-    entry,
-  ].sort((a, b) => a.name.localeCompare(b.name));
+}): void {
+  const byName = new Map(params.remoteEntries.map((entry) => [entry.name, entry]));
 
-  await writeRemoteAgentsIndex(cwd, wranglerConfigPath, merged);
+  for (const [agentName, agentState] of Object.entries(params.state.agents)) {
+    const remote = byName.get(agentName);
+    if (!remote) continue;
+
+    if (agentState.currentVersion <= 0 && remote.versionNumber) {
+      agentState.currentVersion = remote.versionNumber;
+    }
+    if (!agentState.lastRemoteHash && remote.hash) {
+      agentState.lastRemoteHash = remote.hash;
+    }
+    if (!agentState.currentHash && remote.hash) {
+      agentState.currentHash = remote.hash;
+    }
+    if (!agentState.lastPushedAt && remote.updatedAt) {
+      agentState.lastPushedAt = remote.updatedAt;
+    }
+    if (!agentState.workerUrl && remote.workerUrl) {
+      agentState.workerUrl = remote.workerUrl;
+    }
+    if (!agentState.localPath) {
+      agentState.localPath = join(params.cwd, "agents", agentName, "index.ts");
+    }
+  }
 }
 
 async function pushRemoteManifest(params: {
@@ -250,72 +267,55 @@ async function pushRemoteManifest(params: {
   manifest: AgentManifestV3;
 }): Promise<void> {
   const { cwd, wranglerConfigPath, agentName, hash, manifest } = params;
-  const latestKey = `${agentName}:latest`;
-  const artifactsDir = join(cwd, ".kalp", `${agentName}-${hash}-artifacts`);
-  await mkdir(artifactsDir, { recursive: true });
-
-  const artifactManifestPath = join(artifactsDir, "artifact-manifest.json");
-  const semanticIrPath = join(artifactsDir, "semantic-ir.json");
-  const schemasPath = join(artifactsDir, "schemas.json");
-  const bundleManifestPath = join(artifactsDir, "bundle-manifest.json");
-
-  await writeFile(
-    artifactManifestPath,
-    JSON.stringify(manifest.artifactManifest),
-    "utf-8",
-  );
-  await writeFile(semanticIrPath, JSON.stringify(manifest.semanticIr), "utf-8");
-  await writeFile(schemasPath, JSON.stringify(manifest.schemas), "utf-8");
-  await writeFile(
-    bundleManifestPath,
-    JSON.stringify(manifest.bundleManifest),
-    "utf-8",
-  );
-
   const provider = resolveProvider();
-  try {
-    await provider.putManifest({
-      cwd,
-      configPath: wranglerConfigPath,
+
+  const values: Array<{ key: string; value: string }> = [
+    {
       key: `${agentName}:${hash}:artifact-manifest`,
-      jsonPath: artifactManifestPath,
-    });
-    await provider.putManifest({
-      cwd,
-      configPath: wranglerConfigPath,
+      value: JSON.stringify(manifest.artifactManifest),
+    },
+    {
       key: `${agentName}:${hash}:semantic-ir`,
-      jsonPath: semanticIrPath,
-    });
-    await provider.putManifest({
-      cwd,
-      configPath: wranglerConfigPath,
+      value: JSON.stringify(manifest.semanticIr),
+    },
+    {
       key: `${agentName}:${hash}:schemas`,
-      jsonPath: schemasPath,
+      value: JSON.stringify(manifest.schemas),
+    },
+    {
+      key: `${agentName}:${hash}:bundle-manifest`,
+      value: JSON.stringify(manifest.bundleManifest),
+    },
+  ];
+
+  for (const [bundleHash, bundle] of Object.entries(manifest.bundles)) {
+    values.push({
+      key: `${agentName}:${hash}:bundle:${bundleHash}`,
+      value: bundle.code,
     });
-    await provider.putManifest({
+  }
+  values.push({
+    key: `${agentName}:latest`,
+    value: hash,
+  });
+
+  if (provider.putBulkValues) {
+    await provider.putBulkValues({
       cwd,
       configPath: wranglerConfigPath,
-      key: `${agentName}:${hash}:bundle-manifest`,
-      jsonPath: bundleManifestPath,
+      values,
     });
+    return;
+  }
 
-    for (const [bundleHash, bundle] of Object.entries(manifest.bundles)) {
-      await provider.putValue({
-        cwd,
-        configPath: wranglerConfigPath,
-        key: `${agentName}:${hash}:bundle:${bundleHash}`,
-        value: bundle.code,
-      });
-    }
-
+  // Fallback for providers without bulk support.
+  for (const item of values) {
     await provider.putValue({
       cwd,
       configPath: wranglerConfigPath,
-      key: latestKey,
-      value: hash,
+      key: item.key,
+      value: item.value,
     });
-  } finally {
-    await rm(artifactsDir, { recursive: true, force: true });
   }
 }
 
@@ -377,7 +377,7 @@ export default defineCommand({
       const deployTarget = await p.select({
         message: "No remote runtime detected yet. Where do you want to deploy?",
         options: [
-          { value: "cloudflare", label: "☁️ Cloudflare (your account)" },
+          { value: "cloudflare", label: "☁️  Cloudflare (your account)" },
           { value: "kalp-cloud", label: "🦋 Kalp Cloud (managed)" },
         ],
       });
@@ -404,7 +404,10 @@ export default defineCommand({
     runtime = await materializeRuntime(cwd);
 
     // Ensure KV namespace has an ID before pushing
-    const kvId = await ensureKvNamespaceBindingId(cwd, runtime.wranglerConfigPath);
+    const kvId = await ensureKvNamespaceBindingId(
+      cwd,
+      runtime.wranglerConfigPath,
+    );
     if (!kvId) {
       p.log.error(
         `Could not resolve KV namespace ID for KALP_MANIFESTS. Run \`npx wrangler kv namespace create ${runtime.workerName}-kalp-manifests\` manually.`,
@@ -448,15 +451,19 @@ export default defineCommand({
       }
     }
 
+    let remoteIndex = await readRemoteAgentsIndex(cwd, runtime.wranglerConfigPath);
+
+    for (const agentName of availableAgents) {
+      const agentPath = join(cwd, "agents", agentName, "index.ts");
+      ensureAgentState(state, agentName, agentPath);
+    }
+    hydrateLocalAgentVersionsFromRemoteIndex({ state, remoteEntries: remoteIndex, cwd });
+
     if (isBulkPush) {
-      const currentIndex = await readRemoteAgentsIndex(
-        cwd,
-        runtime.wranglerConfigPath,
-      );
       const prune = await pruneStaleRemoteAgents({
         cwd,
         wranglerConfigPath: runtime.wranglerConfigPath,
-        remoteEntries: currentIndex,
+        remoteEntries: remoteIndex,
         localAgentNames: availableAgents,
       });
 
@@ -464,8 +471,15 @@ export default defineCommand({
         p.log.info(
           `Pruned stale remote agents: ${pc.cyan(prune.removedAgents.join(", "))} ${pc.dim(`(${prune.deletedKeys} keys cleaned)`)}`,
         );
+        remoteIndex = remoteIndex.filter(
+          (entry) => !prune.removedAgents.includes(entry.name),
+        );
       }
     }
+
+    const remoteIndexByName = new Map(
+      remoteIndex.map((entry) => [entry.name, entry]),
+    );
 
     const spinner = p.spinner();
     const result: PushResult = { pushed: 0, skipped: 0, failed: 0 };
@@ -516,10 +530,9 @@ export default defineCommand({
         agentState.currentVersion = Math.max(0, agentState.currentVersion) + 1;
         agentState.currentHash = hash;
         agentState.lastPushedAt = new Date().toISOString();
-        agentState.workerUrl =
-          state.workerUrl
-            ? `${state.workerUrl.replace(/\/$/, "")}/a/${agentName}`
-            : agentState.workerUrl;
+        agentState.workerUrl = state.workerUrl
+          ? `${state.workerUrl.replace(/\/$/, "")}/a/${agentName}`
+          : agentState.workerUrl;
 
         agentState.lastRemoteHash = hash;
         agentState.lastLocalHash = hash;
@@ -534,11 +547,7 @@ export default defineCommand({
           label: manifest.semanticIr.agent?.label,
           tags: manifest.semanticIr.agent?.tags,
         };
-        await mergeRemoteAgentIndexEntry({
-          cwd,
-          wranglerConfigPath: runtime.wranglerConfigPath,
-          entry: nextEntry,
-        });
+        remoteIndexByName.set(agentName, nextEntry);
 
         await exportCompiledIrForDebug({
           cwd,
@@ -562,6 +571,16 @@ export default defineCommand({
       }
     }
 
+    if (result.pushed > 0) {
+      await writeRemoteAgentsIndex(
+        cwd,
+        runtime.wranglerConfigPath,
+        Array.from(remoteIndexByName.values()).sort((a, b) =>
+          a.name.localeCompare(b.name),
+        ),
+      );
+    }
+
     await writeProjectState(cwd, state);
     await materializeRuntime(cwd);
 
@@ -569,7 +588,6 @@ export default defineCommand({
       `Successfully pushed ${result.pushed} agents. ${result.skipped} omitted (no changes). ${result.failed} failed.`,
       "Remote push",
     );
-
 
     if (failures.length > 0) {
       for (const failure of failures) {
