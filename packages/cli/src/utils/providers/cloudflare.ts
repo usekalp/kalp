@@ -268,23 +268,26 @@ export const cloudflareProvider: RuntimeProvider = {
     );
   },
   async putValue({ cwd, configPath, key, value }) {
-    await execa(
-      "npx",
-      [
-        "wrangler",
-        "kv",
-        "key",
-        "put",
-        "--binding",
-        "KALP_MANIFESTS",
-        key,
-        value,
-        "--remote",
-        "--config",
-        configPath,
-      ],
-      { cwd },
-    );
+    await withTempTextFile("kalp-kv-put-", value, async (valuePath) => {
+      await execa(
+        "npx",
+        [
+          "wrangler",
+          "kv",
+          "key",
+          "put",
+          "--binding",
+          "KALP_MANIFESTS",
+          key,
+          "--path",
+          valuePath,
+          "--remote",
+          "--config",
+          configPath,
+        ],
+        { cwd },
+      );
+    });
   },
   async deleteValue({ cwd, configPath, key }) {
     await execa(
@@ -371,6 +374,21 @@ export async function withTempJsonFile<T>(
   const dir = await mkdtemp(join(tmpdir(), prefix));
   const filePath = join(dir, "payload.json");
   await writeFile(filePath, JSON.stringify(payload), "utf-8");
+  try {
+    return await fn(filePath);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function withTempTextFile<T>(
+  prefix: string,
+  payload: string,
+  fn: (path: string) => Promise<T>,
+): Promise<T> {
+  const dir = await mkdtemp(join(tmpdir(), prefix));
+  const filePath = join(dir, "payload.txt");
+  await writeFile(filePath, payload, "utf-8");
   try {
     return await fn(filePath);
   } finally {

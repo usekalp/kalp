@@ -1,11 +1,16 @@
 import { z } from "zod";
-import { defineStep, defineAgent } from "@kalphq/sdk";
+import { defineAgent, defineHook, defineTool } from "@kalphq/sdk";
 
-export const stepA = defineStep({
-  id: "step_a",
-  inputSchema: z.object({}),
-  outputSchema: z.object({}),
-  async handler() { return {}; }
+export const stepA = defineTool({
+  id: "tool_a",
+  inputSchema: z.object({ text: z.string() }),
+  async handler(input) {
+    return { text: input.text };
+  },
 });
 
-export default defineAgent({ name: "agent-1" });
+export default defineAgent({
+  name: "agent-1",
+  state: z.object({ ok: z.boolean().default(true) }),
+  hooks: [defineHook({ type: "message", async handler() { return { text: "a" }; } })],
+});

@@ -4,7 +4,10 @@ import pc from "picocolors";
 import { generateTypes } from "@/utils/codegen";
 import { requireAuth } from "@/utils/auth";
 import { runInitialDeploy } from "@/utils/deploy";
-import { promptDeployTarget, showKalpCloudWaitlist } from "@/utils/deploy-target";
+import {
+  promptDeployTarget,
+  showKalpCloudWaitlist,
+} from "@/utils/deploy-target";
 
 const LOGO = "🦋";
 
@@ -21,7 +24,9 @@ export default defineCommand({
       process.exit(1);
     });
 
-    const target = await promptDeployTarget("Choose where to deploy your runtime");
+    const target = await promptDeployTarget(
+      "Choose where to deploy your runtime",
+    );
     if (!target) {
       p.outro("Cancelled");
       return;
@@ -41,7 +46,9 @@ export default defineCommand({
       p.log.success(`Runtime URL: ${pc.cyan(result.workerUrl)}`);
       if (result.customDomains.length > 0) {
         p.note(
-          result.customDomains.map((domain) => pc.cyan(`https://${domain}`)).join("\n"),
+          result.customDomains
+            .map((domain) => pc.cyan(`https://${domain}`))
+            .join("\n"),
           "Custom domains detected",
         );
       }

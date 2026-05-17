@@ -1,22 +1,18 @@
-import type { IRGraph } from "@kalphq/sdk";
-import { calculateAgentHash } from "@kalphq/compiler";
+import type { AgentManifestV3 } from "@/utils/manifest/types";
 
-export function getIRHash(ir: IRGraph): string {
-  const { calculateIRHash } = require("@kalphq/compiler");
-  return calculateIRHash(ir);
+export function getSemanticHash(manifest: Pick<AgentManifestV3, "artifactManifest">): string {
+  return manifest.artifactManifest.semanticHash;
 }
 
 export function computePushHash(
-  ir: IRGraph & { bundles?: Record<string, { code: string }> },
+  manifest: Pick<AgentManifestV3, "artifactManifest">,
+  target = "default",
 ): string {
-  const bundles = ir.bundles || {};
-  const handlers = Object.keys(bundles).reduce(
-    (acc, hash) => ({
-      ...acc,
-      [hash]: { hash },
-    }),
-    {} as Record<string, { hash: string }>,
-  );
+  const deploymentHash = manifest.artifactManifest.targets[target]?.deploymentHash;
+  if (!deploymentHash) {
+    throw new Error(`Missing deployment hash for target "${target}"`);
+  }
 
-  return calculateAgentHash(ir, handlers);
+  return deploymentHash;
 }
+

@@ -1,10 +1,11 @@
 /**
  * Template system for agent scaffolding.
  *
- * Provides three templates that showcase Kalp's unique features:
- * - Researcher: Deterministic time scheduling with waitUntil
- * - Support: Human-in-the-Loop with waitForEvent
- * - Blank: Modern syntax with autodiscovery
+ * Provides example templates for the vNext Kalp mental model:
+ * - Researcher: hooks + cron + tools
+ * - Support: contracts + local listeners
+ * - Blank: minimal declarative agent
+ * - Ops Revenue: contracts + tools + listeners orchestration
  *
  * @module
  */
@@ -17,9 +18,6 @@ import { blankTemplate } from "./blank";
 import { opsRevenueTemplate } from "./ops-revenue";
 import type { TemplateId, TemplateDefinition } from "./types";
 
-/**
- * Registry of all available templates.
- */
 export const TEMPLATES: Record<TemplateId, TemplateDefinition> = {
   researcher: researcherTemplate,
   support: supportTemplate,
@@ -27,11 +25,6 @@ export const TEMPLATES: Record<TemplateId, TemplateDefinition> = {
   "ops-revenue": opsRevenueTemplate,
 };
 
-/**
- * Get a template by ID.
- * @param id - Template identifier
- * @returns Template definition or undefined if not found
- */
 export function getTemplate(id: TemplateId): TemplateDefinition | undefined {
   return TEMPLATES[id];
 }

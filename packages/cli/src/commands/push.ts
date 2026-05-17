@@ -6,8 +6,9 @@ import pc from "picocolors";
 import { ensureConfig } from "@/utils/fs";
 import { generateTypes } from "@/utils/codegen";
 import { readAgentManifest, computePushHash } from "@/utils/manifest";
+import type { AgentManifestV3 } from "@/utils/manifest";
 import { requireAuth } from "@/utils/auth";
-import { runInitialDeploy } from "@/utils/deploy";
+import { runInitialDeploy, ensureKvNamespaceBindingId } from "@/utils/deploy";
 import {
   type ProjectAgentState,
   type ProjectState,
@@ -18,10 +19,7 @@ import { validateCompiledIR } from "@/utils/validate";
 import { materializeRuntime, readLocalAgentNames } from "@/utils/runtime";
 import { resolveProvider } from "@/utils/providers";
 import { exportCompiledIrForDebug } from "@/utils/ir/export";
-import {
-  promptDeployTarget,
-  showKalpCloudWaitlist,
-} from "@/utils/deploy-target";
+import { showKalpCloudWaitlist } from "@/utils/deploy-target";
 import { loadProjectConfig } from "@/utils/project-config";
 import {
   collectMcpSecretRequirements,
@@ -71,8 +69,6 @@ function ensureAgentState(
   state.agents[agentName] = created;
   return created;
 }
-
-type PushTarget = "local" | "remote";
 
 interface PushResult {
   pushed: number;
@@ -198,15 +194,25 @@ async function pruneStaleRemoteAgents(params: {
     if (latestDeleted) deletedKeys += 1;
 
     for (const hash of hashes) {
-      const deleted = await provider
-        .deleteValue({
+      const artifactKeys = await provider
+        .listKeys({
           cwd,
           configPath: wranglerConfigPath,
-          key: `${entry.name}:${hash}`,
+          prefix: `${entry.name}:${hash}:`,
         })
-        .then(() => true)
-        .catch(() => false);
-      if (deleted) deletedKeys += 1;
+        .catch(() => []);
+
+      for (const artifactKey of artifactKeys) {
+        const deleted = await provider
+          .deleteValue({
+            cwd,
+            configPath: wranglerConfigPath,
+            key: artifactKey.name,
+          })
+          .then(() => true)
+          .catch(() => false);
+        if (deleted) deletedKeys += 1;
+      }
     }
   }
 
@@ -241,23 +247,67 @@ async function pushRemoteManifest(params: {
   wranglerConfigPath: string;
   agentName: string;
   hash: string;
-  ir: unknown;
+  manifest: AgentManifestV3;
 }): Promise<void> {
-  const { cwd, wranglerConfigPath, agentName, hash, ir } = params;
-  const manifestKey = `${agentName}:${hash}`;
+  const { cwd, wranglerConfigPath, agentName, hash, manifest } = params;
   const latestKey = `${agentName}:latest`;
-  const manifestPath = join(cwd, ".kalp", `${agentName}-${hash}.json`);
-  await mkdir(join(cwd, ".kalp"), { recursive: true });
-  await writeFile(manifestPath, JSON.stringify(ir), "utf-8");
+  const artifactsDir = join(cwd, ".kalp", `${agentName}-${hash}-artifacts`);
+  await mkdir(artifactsDir, { recursive: true });
+
+  const artifactManifestPath = join(artifactsDir, "artifact-manifest.json");
+  const semanticIrPath = join(artifactsDir, "semantic-ir.json");
+  const schemasPath = join(artifactsDir, "schemas.json");
+  const bundleManifestPath = join(artifactsDir, "bundle-manifest.json");
+
+  await writeFile(
+    artifactManifestPath,
+    JSON.stringify(manifest.artifactManifest),
+    "utf-8",
+  );
+  await writeFile(semanticIrPath, JSON.stringify(manifest.semanticIr), "utf-8");
+  await writeFile(schemasPath, JSON.stringify(manifest.schemas), "utf-8");
+  await writeFile(
+    bundleManifestPath,
+    JSON.stringify(manifest.bundleManifest),
+    "utf-8",
+  );
 
   const provider = resolveProvider();
   try {
     await provider.putManifest({
       cwd,
       configPath: wranglerConfigPath,
-      key: manifestKey,
-      jsonPath: manifestPath,
+      key: `${agentName}:${hash}:artifact-manifest`,
+      jsonPath: artifactManifestPath,
     });
+    await provider.putManifest({
+      cwd,
+      configPath: wranglerConfigPath,
+      key: `${agentName}:${hash}:semantic-ir`,
+      jsonPath: semanticIrPath,
+    });
+    await provider.putManifest({
+      cwd,
+      configPath: wranglerConfigPath,
+      key: `${agentName}:${hash}:schemas`,
+      jsonPath: schemasPath,
+    });
+    await provider.putManifest({
+      cwd,
+      configPath: wranglerConfigPath,
+      key: `${agentName}:${hash}:bundle-manifest`,
+      jsonPath: bundleManifestPath,
+    });
+
+    for (const [bundleHash, bundle] of Object.entries(manifest.bundles)) {
+      await provider.putValue({
+        cwd,
+        configPath: wranglerConfigPath,
+        key: `${agentName}:${hash}:bundle:${bundleHash}`,
+        value: bundle.code,
+      });
+    }
+
     await provider.putValue({
       cwd,
       configPath: wranglerConfigPath,
@@ -265,24 +315,18 @@ async function pushRemoteManifest(params: {
       value: hash,
     });
   } finally {
-    await rm(manifestPath, { force: true });
+    await rm(artifactsDir, { recursive: true, force: true });
   }
 }
 
 export default defineCommand({
-  meta: { name: "push", description: "Upload updated agents" },
+  meta: { name: "push", description: "Upload agents to remote runtime" },
   args: {
     agent: {
       type: "string",
       alias: "a",
       description: "Agent name to push",
       required: false,
-    },
-    local: {
-      type: "boolean",
-      description: "Update only local runtime snapshot and state",
-      required: false,
-      default: false,
     },
     strictSecrets: {
       type: "boolean",
@@ -294,7 +338,6 @@ export default defineCommand({
   },
   async run({ args }) {
     const cwd = process.cwd();
-    const target: PushTarget = args.local ? "local" : "remote";
     const isBulkPush = !args.agent;
 
     p.intro(`${LOGO} ${pc.bold("kalp push")}`);
@@ -323,92 +366,104 @@ export default defineCommand({
     }
 
     let state = (await readProjectState(cwd)) ?? createInitialState();
-    let runtime = await materializeRuntime(cwd, { mode: target });
+    let runtime = await materializeRuntime(cwd);
 
-    if (target === "remote") {
-      await requireAuth().catch(() => {
-        p.log.error("Not authenticated. Run `kalp login` first.");
-        process.exit(1);
+    await requireAuth().catch(() => {
+      p.log.error("Not authenticated. Run `kalp login` first.");
+      process.exit(1);
+    });
+
+    if (!state.workerUrl) {
+      const deployTarget = await p.select({
+        message: "No remote runtime detected yet. Where do you want to deploy?",
+        options: [
+          { value: "cloudflare", label: "☁️ Cloudflare (your account)" },
+          { value: "kalp-cloud", label: "🦋 Kalp Cloud (managed)" },
+        ],
       });
 
-      if (!state.workerUrl) {
-        const target = await promptDeployTarget(
-          "No remote runtime detected yet. Where do you want to deploy?",
-        );
-        if (!target) {
-          p.outro("Cancelled");
-          return;
-        }
-        if (target === "kalp-cloud") {
-          showKalpCloudWaitlist();
-          p.outro(pc.green("Got it — you'll hear from us soon."));
-          return;
-        }
-        const s = p.spinner();
-        s.start("Running initial deploy");
-        const deploy = await runInitialDeploy(cwd);
-        s.stop("Initial deploy completed");
-        state = (await readProjectState(cwd)) ?? createInitialState();
-        state.workerUrl = deploy.workerUrl;
-        state.accountId = deploy.accountId;
-        state.deployedAt = new Date().toISOString();
+      if (p.isCancel(deployTarget) || !deployTarget) {
+        p.outro("Cancelled");
+        return;
       }
+      if (deployTarget === "kalp-cloud") {
+        showKalpCloudWaitlist();
+        p.outro(pc.green("Got it — you'll hear from us soon."));
+        return;
+      }
+      const s = p.spinner();
+      s.start("Running initial deploy");
+      const deploy = await runInitialDeploy(cwd);
+      s.stop("Initial deploy completed");
+      state = (await readProjectState(cwd)) ?? createInitialState();
+      state.workerUrl = deploy.workerUrl;
+      state.accountId = deploy.accountId;
+      state.deployedAt = new Date().toISOString();
+    }
 
-      runtime = await materializeRuntime(cwd, { mode: "remote" });
+    runtime = await materializeRuntime(cwd);
 
-      // Validate MCP Secrets
-      const { raw: config } = await loadProjectConfig(cwd);
-      const requiredMcpSecrets = collectMcpSecretRequirements(
-        config as unknown as KalpProjectConfig,
+    // Ensure KV namespace has an ID before pushing
+    const kvId = await ensureKvNamespaceBindingId(cwd, runtime.wranglerConfigPath);
+    if (!kvId) {
+      p.log.error(
+        `Could not resolve KV namespace ID for KALP_MANIFESTS. Run \`npx wrangler kv namespace create ${runtime.workerName}-kalp-manifests\` manually.`,
       );
-      if (requiredMcpSecrets.length > 0) {
-        const provider = resolveProvider();
-        const remoteSecrets = await provider
-          .listSecrets({ cwd, configPath: runtime.wranglerConfigPath })
-          .catch(() => []);
-        const remoteSecretNames = new Set(remoteSecrets.map((s) => s.name));
-        const missing = requiredMcpSecrets.filter(
-          (s) => !remoteSecretNames.has(s),
-        );
+      process.exit(1);
+    }
 
-        if (missing.length > 0) {
-          p.log.warn(
-            `${pc.yellow("⚠️  Missing MCP secrets detected in remote runtime:")}\n` +
-              missing.map((m) => `   - ${pc.bold(m)}`).join("\n"),
-          );
-          if (args.strictSecrets) {
-            p.log.error(
-              pc.red(
-                "Push aborted due to missing required secrets (--strict-secrets is enabled).",
-              ),
-            );
-            process.exit(1);
-          }
-          p.log.info(
-            pc.dim(
-              "Deployment will continue. You can add them later with `kalp secrets add`.",
+    // Validate MCP Secrets
+    const { raw: config } = await loadProjectConfig(cwd);
+    const requiredMcpSecrets = collectMcpSecretRequirements(
+      config as unknown as KalpProjectConfig,
+    );
+    if (requiredMcpSecrets.length > 0) {
+      const provider = resolveProvider();
+      const remoteSecrets = await provider
+        .listSecrets({ cwd, configPath: runtime.wranglerConfigPath })
+        .catch(() => []);
+      const remoteSecretNames = new Set(remoteSecrets.map((s) => s.name));
+      const missing = requiredMcpSecrets.filter(
+        (s) => !remoteSecretNames.has(s),
+      );
+
+      if (missing.length > 0) {
+        p.log.warn(
+          `${pc.yellow("⚠️  Missing MCP secrets detected in remote runtime:")}\n` +
+            missing.map((m) => `   - ${pc.bold(m)}`).join("\n"),
+        );
+        if (args.strictSecrets) {
+          p.log.error(
+            pc.red(
+              "Push aborted due to missing required secrets (--strict-secrets is enabled).",
             ),
           );
+          process.exit(1);
         }
-      }
-
-      if (isBulkPush) {
-        const currentIndex = await readRemoteAgentsIndex(
-          cwd,
-          runtime.wranglerConfigPath,
+        p.log.info(
+          pc.dim(
+            "Deployment will continue. You can add them later with `kalp secrets add`.",
+          ),
         );
-        const prune = await pruneStaleRemoteAgents({
-          cwd,
-          wranglerConfigPath: runtime.wranglerConfigPath,
-          remoteEntries: currentIndex,
-          localAgentNames: availableAgents,
-        });
+      }
+    }
 
-        if (prune.removedAgents.length > 0) {
-          p.log.info(
-            `Pruned stale remote agents: ${pc.cyan(prune.removedAgents.join(", "))} ${pc.dim(`(${prune.deletedKeys} keys cleaned)`)}`,
-          );
-        }
+    if (isBulkPush) {
+      const currentIndex = await readRemoteAgentsIndex(
+        cwd,
+        runtime.wranglerConfigPath,
+      );
+      const prune = await pruneStaleRemoteAgents({
+        cwd,
+        wranglerConfigPath: runtime.wranglerConfigPath,
+        remoteEntries: currentIndex,
+        localAgentNames: availableAgents,
+      });
+
+      if (prune.removedAgents.length > 0) {
+        p.log.info(
+          `Pruned stale remote agents: ${pc.cyan(prune.removedAgents.join(", "))} ${pc.dim(`(${prune.deletedKeys} keys cleaned)`)}`,
+        );
       }
     }
 
@@ -425,10 +480,10 @@ export default defineCommand({
       try {
         spinner.start(`Compiling ${pc.cyan(agentName)}`);
         const manifest = await readAgentManifest({ cwd, agentName });
-        const hash = computePushHash(manifest.ir);
+        const hash = computePushHash(manifest);
         const validation = validateCompiledIR({
           agentName,
-          ir: manifest.ir,
+          manifest,
           hash,
         });
         if (!validation.ok) {
@@ -439,10 +494,7 @@ export default defineCommand({
         }
 
         const agentState = ensureAgentState(state, agentName, agentPath);
-        const previousHash =
-          target === "local"
-            ? agentState.lastLocalHash
-            : agentState.lastRemoteHash;
+        const previousHash = agentState.lastRemoteHash;
 
         if (previousHash === hash) {
           result.skipped += 1;
@@ -450,61 +502,54 @@ export default defineCommand({
           continue;
         }
 
-        if (target === "remote") {
-          spinner.message(
-            `Uploading agent ${pc.cyan(agentName)} to remote runtime`,
-          );
-          await pushRemoteManifest({
-            cwd,
-            wranglerConfigPath: runtime.wranglerConfigPath,
-            agentName,
-            hash,
-            ir: manifest.ir,
-          });
-        }
+        spinner.message(
+          `Uploading agent ${pc.cyan(agentName)} to remote runtime`,
+        );
+        await pushRemoteManifest({
+          cwd,
+          wranglerConfigPath: runtime.wranglerConfigPath,
+          agentName,
+          hash,
+          manifest,
+        });
 
         agentState.currentVersion = Math.max(0, agentState.currentVersion) + 1;
         agentState.currentHash = hash;
         agentState.lastPushedAt = new Date().toISOString();
         agentState.workerUrl =
-          state.workerUrl && target === "remote"
+          state.workerUrl
             ? `${state.workerUrl.replace(/\/$/, "")}/a/${agentName}`
             : agentState.workerUrl;
 
-        if (target === "local") {
-          agentState.lastLocalHash = hash;
-        } else {
-          agentState.lastRemoteHash = hash;
-          agentState.lastLocalHash = hash;
+        agentState.lastRemoteHash = hash;
+        agentState.lastLocalHash = hash;
 
-          const nextEntry: RemoteAgentIndexEntry = {
-            name: agentName,
-            hash,
-            version: `v${agentState.currentVersion}`,
-            versionNumber: agentState.currentVersion,
-            updatedAt: agentState.lastPushedAt,
-            workerUrl: agentState.workerUrl,
-            label: manifest.ir.agent?.label,
-            tags: manifest.ir.agent?.tags,
-          };
-          await mergeRemoteAgentIndexEntry({
-            cwd,
-            wranglerConfigPath: runtime.wranglerConfigPath,
-            entry: nextEntry,
-          });
-        }
+        const nextEntry: RemoteAgentIndexEntry = {
+          name: agentName,
+          hash,
+          version: `v${agentState.currentVersion}`,
+          versionNumber: agentState.currentVersion,
+          updatedAt: agentState.lastPushedAt,
+          workerUrl: agentState.workerUrl,
+          label: manifest.semanticIr.agent?.label,
+          tags: manifest.semanticIr.agent?.tags,
+        };
+        await mergeRemoteAgentIndexEntry({
+          cwd,
+          wranglerConfigPath: runtime.wranglerConfigPath,
+          entry: nextEntry,
+        });
 
-        const bundles = manifest.ir.bundles || {};
         await exportCompiledIrForDebug({
           cwd,
           agentName,
-          ir: manifest.ir,
+          manifest,
         });
-        const totalSize = Object.values(bundles).reduce(
+        const totalSize = Object.values(manifest.bundles).reduce(
           (sum, bundle) => sum + Buffer.byteLength(bundle.code),
           0,
         );
-        const handlerCount = Object.keys(bundles).length;
+        const handlerCount = Object.keys(manifest.bundles).length;
         spinner.stop(
           `${pc.bold(agentName)} pushed ${pc.dim(`(v${agentState.currentVersion})`)} · ${handlerCount} handlers · ${formatBytes(totalSize)}`,
         );
@@ -518,11 +563,11 @@ export default defineCommand({
     }
 
     await writeProjectState(cwd, state);
-    await materializeRuntime(cwd, { mode: target });
+    await materializeRuntime(cwd);
 
     p.note(
       `Successfully pushed ${result.pushed} agents. ${result.skipped} omitted (no changes). ${result.failed} failed.`,
-      target === "local" ? "Local push" : "Remote push",
+      "Remote push",
     );
 
 

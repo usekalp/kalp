@@ -1,9 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type { IRGraph } from "@kalphq/sdk";
 
-type RuntimeManifest = IRGraph & {
-  bundles?: Record<string, { code: string; type?: string }>;
-};
+type RuntimeManifest = IRGraph;
 
 /**
  * Durable Object shell for Kalp agent execution.
@@ -33,7 +31,7 @@ export class AgentDurableObject extends DurableObject {
     }
 
     const manifestRaw = await this.env.KALP_MANIFESTS.get(
-      `${agentName}:${latestHash}`,
+      `${agentName}:${latestHash}:semantic-ir`,
     );
 
     if (!manifestRaw) {
@@ -72,7 +70,7 @@ export class AgentDurableObject extends DurableObject {
       const eventType =
         url.pathname === "/" || url.pathname === ""
           ? "onMessage"
-          : `route:${url.pathname}`;
+          : `route:${request.method.toUpperCase()}:${url.pathname}`;
       const payload =
         request.method.toUpperCase() === "GET"
           ? Object.fromEntries(url.searchParams)
@@ -108,4 +106,3 @@ export class AgentDurableObject extends DurableObject {
     }
   }
 }
-

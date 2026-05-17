@@ -1,17 +1,18 @@
 {
   "extends": "../typescript-config/base.json",
   "compilerOptions": {
+    "noEmit": true,
     "outDir": "./dist",
-    "rootDir": "./src",
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@kalphq/compiler": ["../compiler/src/index.ts"],
+      "@kalphq/compiler/*": ["../compiler/src/*"]
     },
     "types": ["node"],
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "esModuleInterop": true
   },
-  "include": ["src"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

@@ -99,13 +99,13 @@ export async function readRemoteManifestMetadata(params: {
     .getValue({
       cwd: params.cwd,
       configPath: params.wranglerConfigPath,
-      key: `${params.agentName}:${params.hash}`,
+      key: `${params.agentName}:${params.hash}:semantic-ir`,
     })
     .catch(() => null);
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as { metadata?: ManifestMetadata };
-    return parsed.metadata ?? null;
+    const parsed = JSON.parse(raw) as { agent?: ManifestMetadata };
+    return parsed.agent ?? null;
   } catch {
     return null;
   }

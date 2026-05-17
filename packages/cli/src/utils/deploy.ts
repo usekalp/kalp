@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { execa } from "execa";
 import { requireAuth } from "@/utils/auth";
 import { ensureStudioSecrets } from "@/utils/secret";
 import { readProjectState, writeProjectState } from "@/utils/project-state";
@@ -56,7 +57,7 @@ async function listKvNamespaces(
   }));
 }
 
-async function ensureKvNamespaceBindingId(
+export async function ensureKvNamespaceBindingId(
   cwd: string,
   configPath: string,
 ): Promise<string | null> {
@@ -69,13 +70,40 @@ async function ensureKvNamespaceBindingId(
   if (binding.id) return binding.id;
 
   const expectedTitle = deriveKvNamespaceTitle(config.name, binding.binding);
-  const namespaces = await listKvNamespaces(cwd, configPath);
-  const existing = namespaces.find((item) => item.title === expectedTitle);
-  if (!existing) return null;
 
-  binding.id = existing.id;
+  // List namespaces using wrangler directly
+  const listResult = await execa(
+    "npx",
+    ["wrangler", "kv", "namespace", "list", "--config", configPath],
+    { cwd },
+  ).catch(() => null);
+
+  if (listResult) {
+    try {
+      const namespaces = JSON.parse(listResult.stdout) as Array<{ id: string; title: string }>;
+      const existing = namespaces.find((item) => item.title === expectedTitle);
+      if (existing) {
+        binding.id = existing.id;
+        await writeWranglerConfig(configPath, config);
+        return existing.id;
+      }
+    } catch {
+      // JSON parse failed, fall through to create
+    }
+  }
+
+  // Create the namespace if it doesn't exist
+  const createResult = await execa(
+    "npx",
+    ["wrangler", "kv", "namespace", "create", expectedTitle, "--config", configPath],
+    { cwd },
+  );
+  const idMatch = createResult.stdout.match(/"id":\s*"([^"]+)"/);
+  if (!idMatch) return null;
+
+  binding.id = idMatch[1];
   await writeWranglerConfig(configPath, config);
-  return existing.id;
+  return idMatch[1];
 }
 
 function isNamespaceAlreadyExistsError(output: string): boolean {

@@ -16,10 +16,6 @@ import type {
   KalpHistoryMessage,
 } from "../src";
 
-/**
- * Creates a fully typed mock KalpContext for testing.
- * All primitives are mocked with vitest.fn() for easy spying.
- */
 export const createMockContext = (): KalpContext => ({
   ai: {
     generate: vi.fn(),
@@ -47,9 +43,11 @@ export const createMockContext = (): KalpContext => ({
         get: vi.fn().mockResolvedValue(null),
         put: vi.fn(),
         delete: vi.fn(),
-        keys: vi.fn().mockReturnValue([]),
+        increment: vi.fn().mockResolvedValue(1),
+        list: vi.fn().mockResolvedValue([]),
       }),
     ),
+    list: vi.fn().mockResolvedValue([]),
   } as unknown as StoragePrimitive,
 
   auth: {
@@ -65,10 +63,10 @@ export const createMockContext = (): KalpContext => ({
     loop: vi.fn(),
     fetch: vi.fn().mockResolvedValue(new Response()),
     ask: vi.fn(),
-    requestApproval: vi.fn(),
+    requestApproval: vi.fn().mockResolvedValue(true),
     emit: vi.fn(),
+    dispatch: vi.fn().mockResolvedValue(undefined),
     callAgent: vi.fn(),
-    waitForEvent: vi.fn(),
     waitUntil: vi.fn(),
     schedule: vi.fn(),
   } as any,
@@ -100,9 +98,6 @@ export const createMockContext = (): KalpContext => ({
   state: {},
 });
 
-/**
- * Helper to create a mock context with custom overrides.
- */
 export const createMockContextWith = (
   overrides: Partial<KalpContext>,
 ): KalpContext => ({

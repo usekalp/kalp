@@ -73,7 +73,7 @@ interface WranglerConfig {
   durable_objects: {
     bindings: Array<{ name: string; class_name: string }>;
   };
-  kv_namespaces: Array<{ binding: string }>;
+  kv_namespaces: Array<{ binding: string; id?: string }>;
   assets: {
     directory: string;
     binding: string;
@@ -398,6 +398,24 @@ export async function writeRuntimeAgentsSnapshot(params: {
   );
 }
 
+async function readExistingKvNamespaceIds(
+  wranglerConfigPath: string,
+): Promise<Record<string, string>> {
+  try {
+    const raw = await readFile(wranglerConfigPath, "utf-8");
+    const config = JSON.parse(raw) as {
+      kv_namespaces?: Array<{ binding: string; id?: string }>;
+    };
+    const ids: Record<string, string> = {};
+    for (const kv of config.kv_namespaces ?? []) {
+      if (kv.binding && kv.id) ids[kv.binding] = kv.id;
+    }
+    return ids;
+  } catch {
+    return {};
+  }
+}
+
 export async function materializeRuntime(
   cwd: string,
   options: MaterializeRuntimeOptions = {},
@@ -407,6 +425,9 @@ export async function materializeRuntime(
   const studioDir = join(runtimeDir, STUDIO_DIR);
   const workerEntrypointPath = join(runtimeDir, WORKER_ENTRY_FILE);
   const wranglerConfigPath = join(runtimeDir, WRANGLER_CONFIG_FILE);
+
+  // Preserve existing KV namespace IDs before wiping the runtime directory
+  const existingKvIds = await readExistingKvNamespaceIds(wranglerConfigPath);
 
   const template = await resolveRuntimeTemplate();
   await rm(runtimeDir, { recursive: true, force: true });
@@ -464,6 +485,13 @@ export async function materializeRuntime(
     mode,
     [...requiredSecrets].sort((a, b) => a.localeCompare(b)),
   );
+
+  // Restore preserved KV namespace IDs
+  for (const kv of wranglerConfig.kv_namespaces) {
+    const preserved = existingKvIds[kv.binding];
+    if (preserved) kv.id = preserved;
+  }
+
   await writeFile(
     wranglerConfigPath,
     `${JSON.stringify(wranglerConfig, null, 2)}\n`,

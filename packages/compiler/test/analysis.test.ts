@@ -1,42 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { validateIR } from "../src/analysis";
 
-describe("validateIR metadata extensions", () => {
-  it("accepts label, tags and emits structures", () => {
+describe("validateIR", () => {
+  it("accepts v3 semantic IR with namespaced requirements and state schema refs", () => {
     const result = validateIR({
-      version: 1,
-      metadata: {
+      schemaVersion: 3,
+      requirements: {
+        "kalp/state": 1,
+      },
+      agent: {
         name: "support",
         label: "Support",
         tags: ["customer"],
-        emits: {
-          ticket_created: {
-            type: "schema",
-            schema: { type: "object" },
-          },
-          note: {
-            type: "description",
-            description: "event description",
-          },
-        },
-        public: true,
-        routesPublic: {
-          "GET:/health": false,
-          "POST:/webhook": true,
-        },
-        listeners: [
-          {
-            sourceAgentId: "source-agent",
-            event: "ticket_created",
-            targetEntryKey: "listener:source-agent:ticket_created:0",
-          },
-        ],
+        skipAuth: true,
+        stateSchema: "schema_abc123",
       },
-      entries: {},
-      bundles: {},
+      nodes: {},
     });
 
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
   });
 });
+

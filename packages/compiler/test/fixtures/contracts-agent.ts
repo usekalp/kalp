@@ -1,85 +1,52 @@
 import { z } from "zod";
 import {
-  defineStep,
-  defineTool,
   defineAgent,
   defineContract,
+  defineHook,
+  defineTool,
   defineRoute,
 } from "@kalphq/sdk";
 
-// Contract for external agent communication
-export const externalAgentContract = defineContract("external-agent", {
-  input: z.object({
-    query: z.string(),
-    context: z.record(z.unknown()).optional(),
-  }),
-  output: z.object({ result: z.string(), confidence: z.number().optional() }),
-});
+export const stateSchema = z.object({ processedCount: z.number().default(0) });
 
-// Contract for internal step communication
-export const internalContract = defineContract("internal-step", {
-  input: z.object({ data: z.string() }),
-  output: z.object({ processed: z.string(), timestamp: z.number() }),
-});
-
-// Step that uses a contract for type-safe communication
-export const contractStep = defineStep({
-  id: "contract_step",
-  inputSchema: z.object({ payload: z.string() }),
-  outputSchema: z.object({ validated: z.boolean() }),
-  async handler(input, _ctx) {
-    // Validate input using contract logic
-    const validated = input.payload.length > 0;
-    return { validated };
+export const approvalContract = defineContract<z.infer<typeof stateSchema>>({
+  name: "approval-service",
+  inputSchema: z.object({ opportunityId: z.string() }),
+  outputSchema: z.object({ approved: z.boolean() }),
+  async handler(input) {
+    return { approved: input.opportunityId.length > 0 };
   },
 });
 
-// Step that simulates calling another agent
-export const agentCallerStep = defineStep({
-  id: "agent_caller",
-  inputSchema: z.object({ query: z.string() }),
-  outputSchema: z.object({ response: z.string() }),
-  async handler(input, _ctx) {
-    // This would use ctx.actions.callAgent in real implementation
-    // For now, just simulate the contract-based communication
-    const mockResponse = `Processed: ${input.query}`;
-    return { response: mockResponse };
-  },
-});
-
-// Tool that processes data with contract validation
-export const contractTool = defineTool({
+export const contractTool = defineTool<z.infer<typeof stateSchema>>({
   id: "contract_tool",
-  inputSchema: z.object({ raw: z.string() }),
-  async handler(input, _ctx) {
-    // Validate and transform input
-    const valid = input.raw.length > 0;
-    return { valid, transformed: valid ? input.raw.toUpperCase() : null };
+  inputSchema: z.object({ payload: z.string() }),
+  async handler(input) {
+    return { validated: input.payload.length > 0 };
   },
 });
 
-// Route for contract-based API
 export const contractRoute = defineRoute({
-  id: "POST:/api/contract",
+  id: "contract_route",
   method: "POST",
   path: "/api/contract",
-  async handler({ req: _req, res: _res, ctx: _ctx }) {
-    // Simulate contract-based request/response
-    return { processed: true, contract: "external-agent" };
+  inputSchema: z.object({ ok: z.boolean() }),
+  async handler({ body }) {
+    return { echoed: body?.ok ?? false };
   },
 });
 
-// Agent with contracts - include steps/tools so they register
+export const messageHook = defineHook({
+  type: "message",
+  async handler(message) {
+    return { text: message.text };
+  },
+});
+
 export default defineAgent({
   name: "contracts-test-agent",
-  description: "An agent that tests contract definitions",
-  contract: externalAgentContract,
+  state: stateSchema,
+  contracts: [approvalContract],
   routes: [contractRoute],
-  async onMessage(_message, _ctx) {
-    return { text: "contract agent ready" };
-  },
-  async onCall(_input, _ctx) {
-    // Simulate RPC handling with contract types
-    return { result: "contract call handled", confidence: 0.95 };
-  },
+  hooks: [messageHook],
 });

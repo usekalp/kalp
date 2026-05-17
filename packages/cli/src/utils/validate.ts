@@ -1,10 +1,12 @@
 import {
   analyzeHandler,
-  calculateAgentHash,
+  calculateArtifactHash,
+  calculateDeploymentHash,
+  calculateSemanticHash,
   validateIR,
   validateIRBindings,
 } from "@kalphq/compiler";
-import type { IRGraph } from "@kalphq/sdk";
+import type { AgentManifestV3 } from "@/utils/manifest/types";
 
 export interface NamedAnalysis {
   name: string;
@@ -14,14 +16,11 @@ export interface NamedAnalysis {
   warnings: string[];
 }
 
-type IRWithBundles = IRGraph & {
-  bundles?: Record<string, { code: string }>;
-};
-
 export function validateCompiledIR(input: {
   agentName: string;
-  ir: IRWithBundles;
+  manifest: AgentManifestV3;
   hash: string;
+  target?: string;
 }): {
   ok: boolean;
   phase?: "ir" | "bindings" | "hash" | "analysis";
@@ -29,37 +28,48 @@ export function validateCompiledIR(input: {
   blockers?: string[];
   analysis?: NamedAnalysis[];
 } {
-  const { ir, hash } = input;
-  const bundles = ir.bundles || {};
-  const bundleHashes = Object.keys(bundles);
+  const { manifest, hash, target = "default" } = input;
+  const targetManifest = manifest.bundleManifest.targets[target];
 
-  const irValidation = validateIR(ir);
+  const irValidation = validateIR(manifest.semanticIr);
   if (!irValidation.valid) {
     return { ok: false, phase: "ir", errors: irValidation.errors };
   }
 
-  const bindingsValidation = validateIRBindings(ir, bundleHashes);
+  if (!targetManifest) {
+    return {
+      ok: false,
+      phase: "bindings",
+      errors: [`Missing bundle target manifest for "${target}"`],
+    };
+  }
+
+  const bindingsValidation = validateIRBindings(
+    manifest.semanticIr,
+    manifest.bundleManifest,
+    manifest.schemas,
+  );
   if (!bindingsValidation.valid) {
     return { ok: false, phase: "bindings", errors: bindingsValidation.errors };
   }
 
-  const handlers = bundleHashes.reduce(
-    (acc, key) => ({ ...acc, [key]: { hash: key } }),
-    {} as Record<string, { hash: string }>,
+  const semanticHash = calculateSemanticHash(manifest.semanticIr, manifest.schemas);
+  const artifactHash = calculateArtifactHash(targetManifest);
+  const deploymentHash = calculateDeploymentHash(
+    semanticHash,
+    artifactHash,
+    manifest.artifactManifest.targets[target]?.abiVersion ?? targetManifest.abiVersion,
   );
-  const expectedHash = calculateAgentHash(ir, handlers);
 
-  if (expectedHash !== hash) {
+  if (deploymentHash !== hash) {
     return {
       ok: false,
       phase: "hash",
-      errors: [
-        `Hash mismatch: client provided ${hash}, calculated ${expectedHash}`,
-      ],
+      errors: [`Hash mismatch: client provided ${hash}, calculated ${deploymentHash}`],
     };
   }
 
-  const analysis: NamedAnalysis[] = Object.entries(bundles).map(
+  const analysis: NamedAnalysis[] = Object.entries(manifest.bundles).map(
     ([name, bundle]) => ({
       name,
       ...analyzeHandler(bundle.code),
@@ -75,10 +85,11 @@ export function validateCompiledIR(input: {
       ok: false,
       phase: "analysis",
       blockers,
-      errors: blockers.map((b) => `[Analysis Blocker] ${b}`),
+      errors: blockers.map((blocker) => `[Analysis Blocker] ${blocker}`),
       analysis,
     };
   }
 
   return { ok: true, analysis };
 }
+

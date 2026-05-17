@@ -1,209 +1,103 @@
-/**
- * Blank template - minimal structure for a Kalp agent.
- *
- * @module
- */
-
 import { join } from "node:path";
 import type { TemplateDefinition } from "./types";
 import { writeTemplateFile } from "./utils";
 
-/**
- * Generate the blank agent template.
- */
-async function generateBlank(opts: {
-  agentName: string;
-  cwd: string;
-  label?: string;
-}): Promise<void> {
+async function generateBlank(opts: { agentName: string; cwd: string; label?: string }): Promise<void> {
   const { agentName, cwd } = opts;
   const agentDir = join(cwd, "agents", agentName);
- 
-  // Derive contract name from agent name (e.g. "my-agent" -> "MyAgent")
-  const contractName = agentName
-    .replace(/-+(.)/g, (_, char: string) => char.toUpperCase())
-    .replace(/^./, (char: string) => char.toUpperCase());
 
-  // Main agent file
-  const agentIndex = [
-    'import { defineAgent } from "@kalphq/sdk";',
-    'import { onInit } from "./hooks/onInit";',
-    'import { onTick } from "./hooks/onTick";',
-    'import { exampleContract } from "./contract/example-contract";',
-    'import { healthRoute } from "./routes/health";',
-    "",
-    "/**",
-    " * A blank agent ready for your custom logic.",
-    " */",
-    "export default defineAgent({",
-    '  name: "' + agentName + '",',
-    '  label: "' + (opts.label ?? agentName) + '",',
-    '  description: "A helpful AI assistant",',
-    "",
-    "  contract: exampleContract,",
-    "",
-    "  systemPrompt: () => {",
-    '    return "You are a helpful AI assistant. Answer questions and help users with their tasks.";',
-    "  },",
-    "",
-    "  onInit,",
-    "  onTick,",
-    "",
-    "  onCall: async (input, ctx) => {",
-    "    return { success: true };",
-    "  },",
-    "",
-    "  routes: [healthRoute],",
-    "",
-    "  async onMessage(message, ctx) {",
-    "    // Access the message directly",
-    "    const userText = message.text;",
-    "",
-    "    // TODO: Implement your agent logic here",
-    "",
-    '    return { text: "" };',
-    "  },",
-    "});",
-  ].join("\n");
+  const stateFile = `import { z } from "zod";
 
-  // Step: example
-  const exampleStep = [
-    'import { defineStep, z } from "@kalphq/sdk";',
-    "",
-    "/**",
-    " * An example step that processes text and returns the uppercase version.",
-    " */",
-    "export const exampleStep = defineStep({",
-    '  id: "example_step",',
-    '  description: "An example step that processes text",',
-    "  inputSchema: z.object({ text: z.string() }),",
-    "  outputSchema: z.object({ processed: z.string() }),",
-    "  handler: async ({ text }, ctx) => {",
-    "    // Process the text",
-    "",
-    "    return { processed: text.toUpperCase() };",
-    "  },",
-    "});",
-  ].join("\n");
+export const agentState = z.object({
+  status: z.enum(["idle", "processing"]).default("idle"),
+  processedCount: z.number().default(0),
+});
 
-  // Tool: example
-  const exampleTool = [
-    'import { defineTool, z } from "@kalphq/sdk";',
-    "",
-    "/**",
-    " * An example tool that searches for documentation.",
-    " */",
-    "export const exampleTool = defineTool({",
-    '  id: "example_tool",',
-    '  description: "An example tool that returns empty results",',
-    "  inputSchema: z.object({ query: z.string() }),",
-    "  handler: async ({ query }, ctx) => {",
-    '    ctx.log.info("Query: " + query);',
-    "    // TODO: Implement tool logic",
-    "",
-    "    return { results: [] };",
-    "  },",
-    "});",
-  ].join("\n");
+export type AgentState = z.infer<typeof agentState>;
+`;
 
-  // Route: health check
-  const healthRoute = [
-    'import { defineRoute } from "@kalphq/sdk";',
-    "",
-    "/**",
-    " * Health check endpoint.",
-    " */",
-    "export const healthRoute = defineRoute({",
-    '  id: "health",',
-    '  method: "GET",',
-    '  path: "/health",',
-    "  handler: async ({ res, ctx }) => {",
-    "    res.json({",
-    '      status: "ok",',
-    '      agent: "' + agentName + '",',
-    "      timestamp: ctx.date.toISOString(),",
-    "    });",
-    "  },",
-    "});",
-  ].join("\n");
+  const toolFile = `import { defineTool } from "@kalphq/sdk";
+import { z } from "zod";
 
-  // Hook: onInit
-  const onInitHook = [
-    'import { TypedKalpContext } from "@kalphq/sdk";',
-    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
-    "",
-    "/**",
-    " * Runs when the agent starts up.",
-    " * Initialize any required state here.",
-    " */",
-    'export async function onInit(ctx: TypedKalpContext<typeof ' + contractName + 'Contract>): Promise<void> {',
-    "  // TODO: Add initialization logic",
-    "  // Example: Load configuration, warm up caches, connect to databases",
-    "}",
-  ].join("\n");
+export const exampleTool = defineTool({
+  id: "example_tool",
+  inputSchema: z.object({ text: z.string() }),
+  async handler({ text }) {
+    return { summary: text.toUpperCase() };
+  },
+});
+`;
 
-  // Hook: onTick
-  const onTickHook = [
-    'import { TypedKalpContext } from "@kalphq/sdk";',
-    'import { ' + contractName + 'Contract } from "../contract/' + agentName + '-contract";',
-    "",
-    "/**",
-    " * Runs periodically to perform background tasks.",
-    " * Configure the schedule in kalp.config.ts",
-    " */",
-    'export async function onTick(ctx: TypedKalpContext<typeof ' + contractName + 'Contract>): Promise<void> {',
-    "  // TODO: Add periodic task logic",
-    "}",
-  ].join("\n");
+  const contractFile = `import { defineContract } from "@kalphq/sdk";
+import { z } from "zod";
+import type { AgentState } from "../state";
 
-  // Contract: example
-  const contractFile = [
-    'import { defineContract, z } from "@kalphq/sdk";',
-    "",
-    "/**",
-    " * Contract for external systems to call this agent.",
-    " */",
-    'export const exampleContract = defineContract("example", {',
-    "  input: z.object({",
-    "    action: z.string(),",
-    "    data: z.record(z.unknown()),",
-    "  }),",
-    "  output: z.object({",
-    "    success: z.boolean(),",
-    "    result: z.unknown(),",
-    "  }),",
-    "});",
-  ].join("\n");
+export const exampleContract = defineContract<AgentState>({
+  name: "${agentName}",
+  inputSchema: z.object({ action: z.string() }),
+  outputSchema: z.object({ ok: z.boolean() }),
+  async handler() {
+    return { ok: true };
+  },
+});
+`;
 
-  // Write all files
+  const messageHook = `import { defineHook } from "@kalphq/sdk";
+import type { AgentState } from "../state";
+import { exampleTool } from "../tools/example-tool";
+
+export const messageHook = defineHook<AgentState>({
+  type: "message",
+  async handler(message, ctx) {
+    const result = await ctx.actions.run(exampleTool, { text: message.text });
+    ctx.state.processedCount += 1;
+    return { text: result.summary };
+  },
+});
+`;
+
+  const routeFile = `import { defineRoute } from "@kalphq/sdk";
+import type { AgentState } from "../state";
+
+export const healthRoute = defineRoute<AgentState>({
+  id: "health",
+  method: "GET",
+  path: "/health",
+  async handler() {
+    return { ok: true };
+  },
+});
+`;
+
+  const agentIndex = `import { defineAgent } from "@kalphq/sdk";
+import { agentState } from "./state";
+import { healthRoute } from "./routes/health";
+import { exampleContract } from "./contracts/example-contract";
+import { messageHook } from "./hooks/message";
+
+export default defineAgent({
+  name: "${agentName}",
+  label: "${opts.label ?? agentName}",
+  description: "A blank vNext Kalp agent.",
+  state: agentState,
+  routes: [healthRoute],
+  contracts: [exampleContract],
+  hooks: [messageHook],
+});
+`;
+
   await writeTemplateFile(agentDir, "index.ts", agentIndex);
-  await writeTemplateFile(
-    join(agentDir, "steps"),
-    "example-step.ts",
-    exampleStep,
-  );
-  await writeTemplateFile(
-    join(agentDir, "tools"),
-    "example-tool.ts",
-    exampleTool,
-  );
-  await writeTemplateFile(join(agentDir, "routes"), "health.ts", healthRoute);
-  await writeTemplateFile(join(agentDir, "hooks"), "onInit.ts", onInitHook);
-  await writeTemplateFile(join(agentDir, "hooks"), "onTick.ts", onTickHook);
-  await writeTemplateFile(
-    join(agentDir, "contract"),
-    "example-contract.ts",
-    contractFile,
-  );
+  await writeTemplateFile(agentDir, "state.ts", stateFile);
+  await writeTemplateFile(join(agentDir, "tools"), "example-tool.ts", toolFile);
+  await writeTemplateFile(join(agentDir, "hooks"), "message.ts", messageHook);
+  await writeTemplateFile(join(agentDir, "routes"), "health.ts", routeFile);
+  await writeTemplateFile(join(agentDir, "contracts"), "example-contract.ts", contractFile);
 }
 
-/**
- * Blank template definition.
- */
 export const blankTemplate: TemplateDefinition = {
   id: "blank",
   name: "Blank",
-  description: "Minimal structure to start building your agent",
+  description: "Minimal vNext structure with state, hooks, contracts and tools",
   icon: "⬜",
   generate: generateBlank,
 };

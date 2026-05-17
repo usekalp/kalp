@@ -13,10 +13,11 @@
  * @module
  */
 
-import type { IRGraph } from "@kalphq/sdk";
+import type { BundleManifest, IRGraph, SchemaRegistry } from "@kalphq/sdk";
 import { KalpRuntime } from "@/engine/runtime";
 import type { PersistenceAdapter } from "@/adapters/interfaces";
 import type { EffectResolver } from "@/engine/types";
+import type { RuntimeBundleLoader } from "@/engine/handler-executor";
 
 export { KalpRuntime };
 
@@ -29,6 +30,12 @@ export { KalpRuntime };
 export interface RuntimeConfig {
   /** The compiled IR manifest for the agent. */
   ir: IRGraph;
+  /** Deduplicated schema registry referenced by the semantic IR. */
+  schemas: SchemaRegistry;
+  /** Bundle manifest that maps node ids to executable bundle bindings. */
+  bundleManifest: BundleManifest;
+  /** Loader that returns bundle source code for a node binding. */
+  bundleLoader: RuntimeBundleLoader;
   /** Composite persistence adapter (state, events, idempotency, threads). */
   persistence: PersistenceAdapter;
   /** Platform-provided resolver that executes effects. */
@@ -58,6 +65,9 @@ export interface RuntimeConfig {
 export function createRuntime(config: RuntimeConfig): KalpRuntime {
   return new KalpRuntime(
     config.ir,
+    config.schemas,
+    config.bundleManifest,
+    config.bundleLoader,
     config.persistence,
     config.resolver,
   );

@@ -1,21 +1,24 @@
 import { z } from "zod";
-import { defineStep, defineAgent } from "@kalphq/sdk";
+import { defineAgent, defineHook, defineTool } from "@kalphq/sdk";
 
-export const step1 = defineStep({
-  id: "duplicate_id",
+export const tool1 = defineTool({
+  id: "duplicate_tool",
   inputSchema: z.object({}),
-  outputSchema: z.object({}),
-  async handler() { return {}; }
+  async handler() {
+    return { ok: true };
+  },
 });
 
-export const step2 = defineStep({
-  id: "duplicate_id",
+export const tool2 = defineTool({
+  id: "duplicate_tool",
   inputSchema: z.object({}),
-  outputSchema: z.object({}),
-  async handler() { return {}; }
+  async handler() {
+    return { ok: false };
+  },
 });
 
 export default defineAgent({
-  name: "duplicate-agent",
-  onMessage: async () => ({ text: "ok" })
+  name: "duplicate-tools-agent",
+  state: z.object({ ok: z.boolean().default(true) }),
+  hooks: [defineHook({ type: "message", async handler() { return { text: "dup" }; } })],
 });

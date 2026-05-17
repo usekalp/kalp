@@ -1,41 +1,32 @@
-import { describe, expect, it, expectTypeOf } from "vitest";
+import { describe, expect, expectTypeOf, it, beforeEach } from "vitest";
 import { z } from "zod";
-import { defineContract, defineListener, defineAgent } from "../src";
+import { defineListener, getRegistry, clearRegistry } from "../src";
 
 describe("defineListener", () => {
-  it("infers payload from source contract emits", () => {
-    const sourceContract = defineContract("source-agent", {
-      input: z.object({}),
-      output: z.object({ ok: z.boolean() }),
-      emits: {
-        ticket_created: z.object({
-          ticketId: z.string(),
-          priority: z.enum(["low", "high"]),
-        }),
-      },
-    });
+  beforeEach(() => {
+    clearRegistry();
+  });
 
-    const listener = defineListener({
-      source: sourceContract,
+  it("creates a local listener with typed input/output", () => {
+    const listener = defineListener<{ processedCount: number }>({
       event: "ticket_created",
-      async handler(payload) {
+      inputSchema: z.object({
+        ticketId: z.string(),
+        priority: z.enum(["low", "high"]),
+      }),
+      outputSchema: z.object({ accepted: z.boolean() }),
+      async handler(payload, ctx) {
         expectTypeOf(payload).toEqualTypeOf<{
           ticketId: string;
           priority: "low" | "high";
         }>();
+        expectTypeOf(ctx.state).toEqualTypeOf<{ processedCount: number }>();
+        return { accepted: payload.priority === "high" };
       },
     });
 
-    const agent = defineAgent({
-      name: "listener-agent",
-      listeners: [listener],
-      async onMessage() {
-        return { text: "ok" };
-      },
-    });
-
-    expect(agent.listeners).toHaveLength(1);
-    expect(agent.listeners?.[0]?.event).toBe("ticket_created");
+    expect(listener.event).toBe("ticket_created");
+    expect(listener.kind).toBe("listener");
+    expect(getRegistry().has("listeners.ticket_created")).toBe(true);
   });
 });
-

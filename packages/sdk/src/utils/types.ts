@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Step, Tool } from "@/nodes/types";
+import type { Tool } from "@/nodes/types";
 
 /**
  * Type utility helpers for the Kalp SDK.
@@ -8,24 +8,19 @@ import type { Step, Tool } from "@/nodes/types";
  */
 
 /**
- * Extracts the input type from a Step or Tool.
+ * Extracts the input type from a Tool.
  */
-export type InputOf<T> =
-  T extends Step<infer I, any>
-    ? z.infer<I>
-    : T extends Tool<infer I, any>
-      ? z.infer<I>
-      : never;
+export type InputOf<T> = T extends Tool<infer I, any, any, any> ? z.infer<I> : never;
 
 /**
- * Extracts the output type from a Step or Tool.
+ * Extracts the output type from a Tool.
+ * Infers from outputSchema when present, otherwise falls back to handler return type.
  */
-export type OutputOf<T> =
-  T extends Step<any, infer O>
-    ? z.infer<O>
-    : T extends Tool<any, infer R>
-      ? R
-      : never;
+export type OutputOf<T> = T extends Tool<any, infer O, any, infer OSchema>
+  ? OSchema extends z.ZodTypeAny
+    ? z.infer<OSchema>
+    : O
+  : never;
 
 /**
  * Flattens complex intersections and types into a simple object structure.

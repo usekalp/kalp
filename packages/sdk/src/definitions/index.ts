@@ -1,8 +1,8 @@
 /**
- * Factory functions for defining Kalp nodes and routes.
+ * Factory functions for defining Kalp tools and routes.
  *
  * @module
  */
 
-export { defineStep, defineTool } from "@/definitions/nodes";
+export { defineTool } from "@/definitions/nodes";
 export { defineRoute } from "@/definitions/routes";

@@ -1,10 +1,3 @@
-/**
- * Effect system types (IR v2).
- * Re-exports from effects module for unified access.
- *
- * @module
- */
-
 export type {
   Effect,
   EffectResult,

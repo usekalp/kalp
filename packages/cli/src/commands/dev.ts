@@ -10,6 +10,7 @@ import open from "open";
 import { generateTypes } from "@/utils/codegen";
 import { ensureSecretKey } from "@/utils/secret";
 import { readAgentManifest, computePushHash } from "@/utils/manifest";
+import type { AgentManifestV3 } from "@/utils/manifest";
 import { validateCompiledIR } from "@/utils/validate";
 import {
   materializeRuntime,
@@ -91,8 +92,8 @@ async function syncLocalRuntimeState(params: {
   for (const agentName of agentNames) {
     try {
       const manifest = await readAgentManifest({ cwd, agentName });
-      const hash = computePushHash(manifest.ir);
-      const validation = validateCompiledIR({ agentName, ir: manifest.ir, hash });
+      const hash = computePushHash(manifest);
+      const validation = validateCompiledIR({ agentName, manifest, hash });
       if (!validation.ok) {
         const details = (validation.errors ?? []).join(" | ");
         throw new Error(
@@ -100,17 +101,51 @@ async function syncLocalRuntimeState(params: {
         );
       }
 
-      const manifestKey = `${agentName}:${hash}`;
+      const artifactManifestKey = `${agentName}:${hash}:artifact-manifest`;
+      const semanticIrKey = `${agentName}:${hash}:semantic-ir`;
+      const schemasKey = `${agentName}:${hash}:schemas`;
+      const bundleManifestKey = `${agentName}:${hash}:bundle-manifest`;
       const latestKey = `${agentName}:latest`;
-      const manifestPath = join(manifestDir, `${agentName}-${hash}.json`);
-      await writeFile(manifestPath, JSON.stringify(manifest.ir), "utf-8");
+      const files = await writeLocalArtifactFiles({
+        manifestDir,
+        agentName,
+        hash,
+        manifest,
+      });
 
       await putLocalManifest({
         cwd,
         configPath,
-        key: manifestKey,
-        manifestPath,
+        key: artifactManifestKey,
+        manifestPath: files.artifactManifestPath,
       });
+      await putLocalManifest({
+        cwd,
+        configPath,
+        key: semanticIrKey,
+        manifestPath: files.semanticIrPath,
+      });
+      await putLocalManifest({
+        cwd,
+        configPath,
+        key: schemasKey,
+        manifestPath: files.schemasPath,
+      });
+      await putLocalManifest({
+        cwd,
+        configPath,
+        key: bundleManifestKey,
+        manifestPath: files.bundleManifestPath,
+      });
+
+      for (const [bundleHash, bundle] of Object.entries(manifest.bundles)) {
+        await putLocalValue({
+          cwd,
+          configPath,
+          key: `${agentName}:${hash}:bundle:${bundleHash}`,
+          value: bundle.code,
+        });
+      }
       await putLocalValue({
         cwd,
         configPath,
@@ -125,6 +160,41 @@ async function syncLocalRuntimeState(params: {
   }
 
   return { synced, failed };
+}
+
+async function writeLocalArtifactFiles(params: {
+  manifestDir: string;
+  agentName: string;
+  hash: string;
+  manifest: AgentManifestV3;
+}): Promise<{
+  artifactManifestPath: string;
+  semanticIrPath: string;
+  schemasPath: string;
+  bundleManifestPath: string;
+}> {
+  const outDir = join(params.manifestDir, `${params.agentName}-${params.hash}`);
+  await mkdir(outDir, { recursive: true });
+
+  const artifactManifestPath = join(outDir, "artifact-manifest.json");
+  const semanticIrPath = join(outDir, "semantic-ir.json");
+  const schemasPath = join(outDir, "schemas.json");
+  const bundleManifestPath = join(outDir, "bundle-manifest.json");
+
+  await writeFile(
+    artifactManifestPath,
+    JSON.stringify(params.manifest.artifactManifest),
+    "utf-8",
+  );
+  await writeFile(semanticIrPath, JSON.stringify(params.manifest.semanticIr), "utf-8");
+  await writeFile(schemasPath, JSON.stringify(params.manifest.schemas), "utf-8");
+  await writeFile(
+    bundleManifestPath,
+    JSON.stringify(params.manifest.bundleManifest),
+    "utf-8",
+  );
+
+  return { artifactManifestPath, semanticIrPath, schemasPath, bundleManifestPath };
 }
 
 export default defineCommand({

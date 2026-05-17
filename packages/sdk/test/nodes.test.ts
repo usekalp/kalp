@@ -1,43 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { z } from "zod";
-import { defineStep, defineTool, getRegistry, clearRegistry } from "../src";
-
-describe("defineStep", () => {
-  beforeEach(() => {
-    clearRegistry();
-  });
-
-  it("attaches kind step", () => {
-    const step = defineStep({
-      id: "step_1",
-      inputSchema: z.object({ value: z.string() }),
-      outputSchema: z.object({ result: z.string() }),
-      async handler(params: { value: string }) {
-        return { result: params.value.toUpperCase() };
-      },
-    });
-
-    expect(step.kind).toBe("step");
-    expect(step.id).toBe("step_1");
-    expect(step.inputSchema).toBeDefined();
-    expect(step.outputSchema).toBeDefined();
-    expect("handler" in step).toBe(true);
-  });
-
-  it("registers in global registry", () => {
-    defineStep({
-      id: "registered-step",
-      inputSchema: z.object({}),
-      outputSchema: z.object({}),
-      async handler() {
-        return {};
-      },
-    });
-
-    const registry = getRegistry();
-    expect(registry.has("steps.registered-step")).toBe(true);
-  });
-});
+import { defineListener, defineTool, getRegistry, clearRegistry } from "../src";
 
 describe("defineTool", () => {
   beforeEach(() => {
@@ -59,9 +22,9 @@ describe("defineTool", () => {
     expect("handler" in tool).toBe(true);
   });
 
-  it("supports optional description", () => {
-    const toolWithDesc = defineTool({
-      id: "tool_desc",
+  it("supports optional description and registry autodiscovery", () => {
+    const tool = defineTool({
+      id: "registered-tool",
       description: "A helpful tool",
       inputSchema: z.object({}),
       async handler() {
@@ -69,28 +32,26 @@ describe("defineTool", () => {
       },
     });
 
-    const toolWithoutDesc = defineTool({
-      id: "tool_no_desc",
-      inputSchema: z.object({}),
-      async handler() {
-        return {};
-      },
-    });
+    expect(tool.description).toBe("A helpful tool");
+    expect(getRegistry().has("tools.registered-tool")).toBe(true);
+  });
+});
 
-    expect(toolWithDesc.description).toBe("A helpful tool");
-    expect(toolWithoutDesc.description).toBeUndefined();
+describe("listener registry", () => {
+  beforeEach(() => {
+    clearRegistry();
   });
 
-  it("registers in global registry", () => {
-    defineTool({
-      id: "registered-tool",
-      inputSchema: z.object({}),
+  it("registers listeners in the global registry", () => {
+    defineListener({
+      event: "approval_requested",
+      inputSchema: z.object({ id: z.string() }),
+      outputSchema: z.object({ approved: z.boolean() }),
       async handler() {
-        return {};
+        return { approved: true };
       },
     });
 
-    const registry = getRegistry();
-    expect(registry.has("tools.registered-tool")).toBe(true);
+    expect(getRegistry().has("listeners.approval_requested")).toBe(true);
   });
 });

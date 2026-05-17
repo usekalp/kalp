@@ -1,48 +1,50 @@
 import type { z } from "zod";
-import type { AgentContract } from "@/contracts/types";
-import type { KalpContext, TypedKalpContext } from "@/context/types";
+import type { TypedKalpContext } from "@/context/types";
+import { registerNode } from "@/registry";
 import { captureFilePath } from "@/utils";
 
-type SourceEmits<TContract extends AgentContract<any, any, any>> =
-  TContract extends AgentContract<any, any, infer TEmits> ? TEmits : never;
-
-type InferListenerPayload<
-  TContract extends AgentContract<any, any, any>,
-  TEvent extends keyof NonNullable<SourceEmits<TContract>>,
-> = NonNullable<SourceEmits<TContract>>[TEvent] extends z.ZodTypeAny
-  ? z.infer<NonNullable<SourceEmits<TContract>>[TEvent]>
-  : unknown;
-
 export interface Listener<
-  TContract extends AgentContract<any, any, any> = AgentContract<any, any, any>,
-  TEvent extends keyof NonNullable<SourceEmits<TContract>> = keyof NonNullable<
-    SourceEmits<TContract>
-  >,
-  THostContract extends AgentContract<any, any, any> | undefined = undefined,
+  TInput extends z.ZodTypeAny = z.ZodTypeAny,
+  TOutput extends z.ZodTypeAny = z.ZodTypeAny,
+  TState extends Record<string, unknown> = Record<string, unknown>,
 > {
-  source: TContract;
-  event: TEvent;
-  handler: (
-    payload: InferListenerPayload<TContract, TEvent>,
-    context: THostContract extends AgentContract<any, any, any>
-      ? TypedKalpContext<THostContract>
-      : KalpContext,
-  ) => Promise<void> | void;
-  __filePath?: string;
-  __internalId?: symbol;
+  readonly kind: "listener";
+  readonly event: string;
+  readonly inputSchema: TInput;
+  readonly outputSchema: TOutput;
+  readonly handler: (
+    payload: z.infer<TInput>,
+    context: TypedKalpContext<TState>,
+  ) => Promise<z.infer<TOutput>> | z.infer<TOutput>;
+  readonly __filePath?: string;
+  readonly __internalId?: symbol;
+  readonly __runtimeId?: string;
 }
 
 export function defineListener<
-  const TContract extends AgentContract<any, any, any>,
-  const TEvent extends keyof NonNullable<SourceEmits<TContract>>,
-  const THostContract extends AgentContract<any, any, any> | undefined = undefined,
->(
-  config: Listener<TContract, TEvent, THostContract>,
-): Listener<TContract, TEvent, THostContract> {
-  return {
-    ...config,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  const TInput extends z.ZodTypeAny = z.ZodTypeAny,
+  const TOutput extends z.ZodTypeAny = z.ZodTypeAny,
+>(config: {
+  event: string;
+  inputSchema: TInput;
+  outputSchema: TOutput;
+  handler: (
+    payload: z.infer<TInput>,
+    context: TypedKalpContext<TState>,
+  ) => Promise<z.infer<TOutput>> | z.infer<TOutput>;
+}): Listener<TInput, TOutput, TState> {
+  const listener: Listener<TInput, TOutput, TState> = {
+    kind: "listener",
+    event: config.event,
+    inputSchema: config.inputSchema,
+    outputSchema: config.outputSchema,
+    handler: config.handler,
     __filePath: captureFilePath(),
-    __internalId: Symbol(`listener:${String(config.event)}`),
+    __internalId: Symbol(`listener:${config.event}`),
+    __runtimeId: `listener:${config.event}`,
   };
-}
 
+  registerNode("listener", config.event, listener);
+  return listener;
+}

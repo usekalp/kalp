@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { createMockContext } from "./shared";
 
 describe("KalpContext", () => {
@@ -38,9 +38,9 @@ describe("KalpContext", () => {
   it("exposes auth primitive", () => {
     const ctx = createMockContext();
 
-    expect(ctx.auth.userId).toBeDefined();
-    expect(ctx.auth.providerId).toBeDefined();
-    expect(typeof ctx.auth.hasPermission).toBe("function");
+    expect(ctx.auth?.userId).toBeDefined();
+    expect(ctx.auth?.providerId).toBeDefined();
+    expect(typeof ctx.auth?.hasPermission).toBe("function");
   });
 
   it("exposes actions primitive", () => {
@@ -53,15 +53,14 @@ describe("KalpContext", () => {
     expect(typeof ctx.actions.ask).toBe("function");
     expect(typeof ctx.actions.requestApproval).toBe("function");
     expect(typeof ctx.actions.emit).toBe("function");
+    expect(typeof ctx.actions.dispatch).toBe("function");
     expect(typeof ctx.actions.callAgent).toBe("function");
   });
 
-  it("exposes log primitive", () => {
+  it("exposes mutable state document", () => {
     const ctx = createMockContext();
+    ctx.state = { processedCount: 1 };
 
-    expect(typeof ctx.log.info).toBe("function");
-    expect(typeof ctx.log.warn).toBe("function");
-    expect(typeof ctx.log.error).toBe("function");
-    expect(typeof ctx.log.debug).toBe("function");
+    expect(ctx.state).toEqual({ processedCount: 1 });
   });
 });

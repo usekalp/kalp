@@ -5,7 +5,16 @@
  */
 
 export type {
+  ArtifactManifest,
+  ArtifactTargetManifest,
+  BundleManifest,
+  BundleNodeBinding,
+  BundleTargetManifest,
   NodeDescriptor,
+  NodeKind,
+  RequirementDescriptor,
+  SchemaDescriptor,
+  SchemaRegistry,
   TriggerDescriptor,
   IRGraph,
 } from "@/ir/types";

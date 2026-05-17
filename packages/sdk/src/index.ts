@@ -1,10 +1,5 @@
 export { z } from "zod";
 
-// ============================================================================
-// Identity Module
-// ============================================================================
-
-// Branded types
 export type {
   UserId,
   AgentId,
@@ -13,7 +8,6 @@ export type {
   TraceId,
 } from "@/identity";
 
-// Type constructors (runtime functions)
 export {
   asUserId,
   asAgentId,
@@ -22,7 +16,6 @@ export {
   asTraceId,
 } from "@/identity";
 
-// Identity configuration & auth strategies
 export type {
   IdentityConfig,
   JwtPayload,
@@ -32,19 +25,10 @@ export type {
   AuthStrategy,
 } from "@/identity";
 
-// ============================================================================
-// Contracts Module (RPC)
-// ============================================================================
-
-export type { AgentContract, EmitsOf } from "@/contracts";
+export type { AgentContract } from "@/contracts";
 export { defineContract } from "@/contracts";
 
-// ============================================================================
-// Primitives Module
-// ============================================================================
-
 export type {
-  // AI
   AIProvider,
   ProviderModelMap,
   ConfiguredModel,
@@ -52,36 +36,27 @@ export type {
   KalpModelId,
   AIParams,
   KalpHistoryMessage,
-  // Memory
   MemoryListParams,
   MemoryListResult,
-  // Vault
   SecretsRegistry,
   RegisteredSecrets,
   SecretKey,
-  // Logging
   KalpLog,
   LogLevel,
   KalpAI,
   KalpMemory,
   KalpVault,
   StoragePrimitive,
-  // Storage
   StoragePutOptions,
   StorageTransaction,
   TransactionOptions,
   AgentIntrospection,
-  // Deterministic Primitives
   KalpDate,
   TimezoneFormatter,
   KalpMath,
   KalpMcp,
   McpRegistry,
 } from "@/primitives";
-
-// ============================================================================
-// Schedule Module
-// ============================================================================
 
 export {
   cron,
@@ -107,46 +82,28 @@ export type {
   IanaTimezone,
 } from "@/schedule";
 
-// ============================================================================
-// Actions Module
-// ============================================================================
-
 export type {
   WakeReason,
   AskOptions,
-  EmitOptions,
-  InferEmitPayload,
-  TypedEmit,
+  ListenerDispatchOptions,
   KalpActions,
   TypedActions,
 } from "@/actions";
 
-// ============================================================================
-// Nodes Module
-// ============================================================================
-
 export type {
   NodeKind,
-  Node,
-  Step,
   Tool,
-  AnyStep,
   AnyTool,
   Route,
-  StepConfig,
   ToolConfig,
   RouteConfig,
   ExecutableNode,
   RegistryNode,
 } from "@/nodes";
 
-// ============================================================================
-// Context Module
-// ============================================================================
-
 export type {
   InferNodes,
-  InferAgentEmits,
+  InferAgentState,
   KalpAuth,
   KalpContext,
   TypedKalpContext,
@@ -154,37 +111,42 @@ export type {
   AgentResponse,
 } from "@/context";
 
-// ============================================================================
-// IR Module
-// ============================================================================
-
 export type {
   NodeDescriptor,
   TriggerDescriptor,
   IRGraph,
+  RequirementDescriptor,
+  SchemaDescriptor,
+  SchemaRegistry,
+  BundleNodeBinding,
+  BundleTargetManifest,
+  BundleManifest,
+  ArtifactTargetManifest,
+  ArtifactManifest,
+  NodeKind as IRNodeKind,
 } from "@/ir";
 
-// ============================================================================
-// Utils Module
-// ============================================================================
-
-export type { InputOf, OutputOf } from "@/utils";
-
-// ============================================================================
-// Agent Definition
-// ============================================================================
+export type { InputOf, OutputOf, Simplify } from "@/utils";
 
 export { defineAgent } from "@/agent";
-export type { AgentConfigBase } from "@/agent";
+export type { AgentConfig } from "@/agent";
+
+export { defineHook } from "@/hooks";
+export type {
+  Hook,
+  HookType,
+  InitHook,
+  TickHook,
+  MessageHook,
+} from "@/hooks";
+
 export { defineListener } from "@/listeners";
 export type { Listener } from "@/listeners";
 
-// ============================================================================
-// Factory Functions (Definitions)
-// ============================================================================
-
-export { defineStep, defineTool } from "@/definitions";
+export { defineTool } from "@/definitions";
 export { defineRoute } from "@/definitions";
+export { defineCron } from "@/cron-definition";
+export type { CronDefinition } from "@/cron-definition";
 export {
   defineConfig,
   normalizeMcpServer,
@@ -199,16 +161,8 @@ export type {
   KalpAIEnvironment,
 } from "@/project";
 
-// ============================================================================
-// Registry
-// ============================================================================
-
-export { getRegistry, clearRegistry, bindContract } from "@/registry";
+export { getRegistry, clearRegistry } from "@/registry";
 export type { RegistryEntry } from "@/registry";
-
-// ============================================================================
-// Errors
-// ============================================================================
 
 export {
   KalpError,

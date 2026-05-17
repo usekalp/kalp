@@ -14,7 +14,12 @@
 
 import { createRuntime } from "@kalphq/core/factory";
 import type { KalpRuntime, EffectResolver } from "@kalphq/core";
-import type { IRGraph } from "@kalphq/sdk";
+import type {
+  BundleManifest,
+  BundleNodeBinding,
+  IRGraph,
+  SchemaRegistry,
+} from "@kalphq/sdk";
 import { DurableObjectPersistence } from "./adapters/durable-object";
 import { CloudflareEffectResolver } from "./adapters/effect-resolver";
 
@@ -41,6 +46,9 @@ export interface CloudflareProviders {
 export function wireRuntime(
   storage: DurableObjectStorage,
   ir: IRGraph,
+  schemas: SchemaRegistry,
+  bundleManifest: BundleManifest,
+  bundleLoader: (binding: BundleNodeBinding, nodeId: string) => Promise<string>,
   providers?: CloudflareProviders,
 ): KalpRuntime {
   const persistence = new DurableObjectPersistence(storage);
@@ -48,5 +56,12 @@ export function wireRuntime(
 
   const resolver: EffectResolver = new CloudflareEffectResolver(providers);
 
-  return createRuntime({ ir, persistence, resolver });
+  return createRuntime({
+    ir,
+    schemas,
+    bundleManifest,
+    bundleLoader,
+    persistence,
+    resolver,
+  });
 }

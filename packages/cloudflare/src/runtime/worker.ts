@@ -77,8 +77,9 @@ type ManifestMetadata = {
 };
 
 type RuntimeManifest = {
-  metadata?: ManifestMetadata;
-  entries?: Record<string, string>;
+  schemaVersion?: number;
+  agent?: { name?: string; label?: string; tags?: string[]; skipAuth?: boolean; systemPrompt?: string };
+  nodes?: Record<string, { id?: string; stableName?: string }>;
 };
 
 function withCors(response: Response): Response {
@@ -144,7 +145,7 @@ async function readLatestManifest(
 ): Promise<RuntimeManifest | null> {
   const latest = await env.KALP_MANIFESTS.get(`${agentName}:latest`);
   if (!latest) return null;
-  const raw = await env.KALP_MANIFESTS.get(`${agentName}:${latest}`);
+  const raw = await env.KALP_MANIFESTS.get(`${agentName}:${latest}:semantic-ir`);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as RuntimeManifest;
@@ -156,14 +157,11 @@ async function readLatestManifest(
 async function resolveAgentAccess(
   env: RuntimeBindings,
   agentName: string,
-  routeKey: string,
-): Promise<{ isPublic: boolean; metadata?: ManifestMetadata }> {
+  _routeKey: string,
+): Promise<{ isPublic: boolean }> {
   const manifest = await readLatestManifest(env, agentName);
-  const metadata = manifest?.metadata;
-  const routePublic = metadata?.routesPublic?.[routeKey];
-  const agentPublic = metadata?.public ?? false;
-  const isPublic = routePublic !== undefined ? routePublic : agentPublic;
-  return { isPublic, metadata };
+  const agentPublic = manifest?.agent?.skipAuth ?? false;
+  return { isPublic: agentPublic };
 }
 
 async function verifyGatewayAuth(c: any): Promise<{ sub?: string } | null> {
@@ -427,21 +425,24 @@ async function loadAgentsFromIndexOrPointers(
     const hash = await env.KALP_MANIFESTS.get(`${agentName}:latest`);
     if (!hash) continue;
 
-    const manifestRaw = await env.KALP_MANIFESTS.get(`${agentName}:${hash}`);
-    let metadata: ManifestMetadata | null = null;
+    const manifestRaw = await env.KALP_MANIFESTS.get(`${agentName}:${hash}:semantic-ir`);
+    let agentData: { name?: string; label?: string; tags?: string[] } | null = null;
     if (manifestRaw) {
       try {
         const parsed = JSON.parse(manifestRaw) as RuntimeManifest;
-        metadata = parsed.metadata ?? null;
+        const agentVal = parsed.agent;
+        if (agentVal) {
+          agentData = agentVal;
+        }
       } catch {
-        metadata = null;
+        // ignore parse errors
       }
     }
 
     agents.push({
       name: agentName,
-      label: metadata?.label,
-      tags: metadata?.tags ?? [],
+      label: agentData?.label,
+      tags: agentData?.tags ?? [],
       environment: "remote",
       status: "online",
       hash,
@@ -549,11 +550,11 @@ function createRuntimeApp() {
       if (!manifest) {
         return c.json({ error: `Agent "${agentName}" not found.` }, 404);
       }
-      const metadata = manifest.metadata ?? {};
+      const agent = manifest.agent ?? {};
       return c.json({
-        name: metadata.name ?? agentName,
-        label: metadata.label,
-        tags: metadata.tags ?? [],
+        name: agent.name ?? agentName,
+        label: agent.label,
+        tags: agent.tags ?? [],
         environment: "remote",
         status: "online",
         hash: null,
@@ -564,9 +565,9 @@ function createRuntimeApp() {
         workerUrl: `${new URL(c.req.url).origin.replace(/\/$/, "")}/a/${agentName}`,
         localPath: null,
         updatedAt: null,
-        public: metadata.skipAuth ?? metadata.public ?? false,
-        routesPublic: metadata.routesSkipAuth ?? metadata.routesPublic ?? {},
-        listeners: metadata.listeners ?? [],
+        public: agent.skipAuth ?? false,
+        routesPublic: {},
+        listeners: [],
       });
     }
     const agent = snapshot.agents.find((item) => item.name === agentName);

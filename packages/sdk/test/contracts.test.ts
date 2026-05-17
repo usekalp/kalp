@@ -1,50 +1,38 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 import { defineContract } from "../src";
 
 describe("defineContract", () => {
-  it("creates a contract with kind", () => {
-    const contract = defineContract("test-agent", {
-      input: z.object({ query: z.string() }),
-      output: z.object({ result: z.string() }),
+  it("creates a contract with kind and name", () => {
+    const contract = defineContract({
+      name: "test-agent",
+      inputSchema: z.object({ query: z.string() }),
+      outputSchema: z.object({ result: z.string() }),
+      async handler(input) {
+        return { result: input.query };
+      },
     });
 
     expect(contract.kind).toBe("contract");
-    expect(contract.agentId).toBe("test-agent");
+    expect(contract.name).toBe("test-agent");
   });
 
-  it("stores input and output schemas", () => {
+  it("stores input/output schemas and infers handler types", async () => {
     const inputSchema = z.object({ value: z.number() });
     const outputSchema = z.object({ doubled: z.number() });
 
-    const contract = defineContract("math-agent", {
-      input: inputSchema,
-      output: outputSchema,
+    const contract = defineContract<{ processedCount: number }>({
+      name: "math-agent",
+      inputSchema,
+      outputSchema,
+      async handler(input, ctx) {
+        expectTypeOf(input).toEqualTypeOf<{ value: number }>();
+        expectTypeOf(ctx.state).toEqualTypeOf<{ processedCount: number }>();
+        return { doubled: input.value * 2 };
+      },
     });
 
     expect(contract.inputSchema).toBe(inputSchema);
     expect(contract.outputSchema).toBe(outputSchema);
-  });
-
-  it("has onCall type metadata", () => {
-    const contract = defineContract("api-agent", {
-      input: z.object({}),
-      output: z.object({}),
-    });
-
-    expect(contract.onCall.input).toBeDefined();
-    expect(contract.onCall.output).toBeDefined();
-  });
-
-  it("supports emits declaration on contract", () => {
-    const contract = defineContract("events-agent", {
-      input: z.object({}),
-      output: z.object({ ok: z.boolean() }),
-      emits: {
-        ping: z.object({ id: z.string() }),
-      },
-    });
-
-    expect(contract.emits?.ping).toBeDefined();
   });
 });

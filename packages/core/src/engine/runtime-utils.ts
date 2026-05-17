@@ -1,14 +1,7 @@
-import type { IRGraph } from "@kalphq/sdk";
+import type { BundleManifest, BundleNodeBinding, IRGraph } from "@kalphq/sdk";
 import type { EventDispatchEnvelope } from "./types";
 import type { ReplayLog } from "../state/replay-log";
 
-/**
- * Validates if a payload is a valid EventDispatchEnvelope.
- * Used for causal chain tracking in cross-agent event emissions.
- *
- * @param payload - The payload to validate.
- * @returns True if the payload is an EventDispatchEnvelope.
- */
 export function isDispatchEnvelope(
   payload: unknown,
 ): payload is EventDispatchEnvelope {
@@ -21,45 +14,102 @@ export function isDispatchEnvelope(
   );
 }
 
-/**
- * Resolves the handler bundle hash from the IR graph based on the event type.
- * Maps high-level SDK hooks (onMessage, onInit, etc.) to their internal IR stable IDs.
- *
- * @param eventType - The type of the event (e.g., "onMessage", "route:GET:/").
- * @param ir - The Intermediate Representation (IR) graph.
- * @returns The bundle hash if found, null otherwise.
- */
-export function resolveHandlerHash(
+export function resolveNodeId(
   eventType: string,
   ir: IRGraph,
 ): string | null {
-  let stableId = eventType;
+  if (eventType === "onMessage") {
+    return findNodeId(ir, (node) => node.kind === "message");
+  }
 
-  if (eventType === "onMessage") stableId = "hook:message";
-  else if (eventType === "onCall") stableId = "hook:call";
-  else if (eventType === "onInit") stableId = "hook:init";
-  else if (eventType === "onTick") stableId = "hook:tick";
-  else if (eventType.startsWith("route:")) stableId = eventType;
-  else if (eventType.startsWith("listener:")) stableId = eventType;
-  else if (eventType.startsWith("schedule:"))
-    stableId = eventType.replace("schedule:", "cron:");
-  else if (eventType.startsWith("steps."))
-    stableId = eventType.replace("steps.", "step:");
-  else if (eventType.startsWith("tools."))
-    stableId = eventType.replace("tools.", "tool:");
+  if (eventType === "onInit") {
+    return findNodeId(ir, (node) => node.kind === "init");
+  }
 
-  const node = ir.nodes[stableId];
-  return node ? node.bundle : null;
+  if (eventType === "onTick") {
+    return findNodeId(ir, (node) => node.kind === "tick");
+  }
+
+  if (eventType.startsWith("contract:")) {
+    const contractName = eventType.slice("contract:".length);
+    return findNodeId(
+      ir,
+      (node) => node.kind === "contract" && node.trigger?.type === "rpc" && node.trigger.contractName === contractName,
+    );
+  }
+
+  if (eventType.startsWith("listener:")) {
+    const eventName = eventType.slice("listener:".length);
+    return findNodeId(
+      ir,
+      (node) => node.kind === "listener" && node.listener?.event === eventName,
+    );
+  }
+
+  if (eventType.startsWith("route:")) {
+    const routeKey = eventType.slice("route:".length);
+    return findNodeId(
+      ir,
+      (node) =>
+        node.kind === "route" &&
+        Boolean(node.http && `${node.http.method}:${node.http.path}` === routeKey),
+    );
+  }
+
+  if (eventType.startsWith("schedule:")) {
+    const scheduleId = eventType.slice("schedule:".length);
+    return findNodeId(
+      ir,
+      (node) =>
+        node.kind === "cron" &&
+        node.trigger?.type === "schedule" &&
+        node.trigger.scheduleId === scheduleId,
+    );
+  }
+
+  return ir.nodes[eventType]?.id ?? null;
 }
 
-/**
- * Calculates the starting sequence number for a new execution or resume.
- * Ensures that the sequence counter starts after the last persisted effect.
- *
- * @param log - The replay log containing existing effects.
- * @param executionId - The unique execution identifier.
- * @returns The maximum sequence number found + 1, or 0 if none.
- */
+export function resolveListenerNodeId(
+  listener: { __runtimeId?: string; event?: string } | null | undefined,
+  ir: IRGraph,
+): string | null {
+  const runtimeId = listener?.__runtimeId;
+  if (runtimeId) {
+    return resolveNodeId(runtimeId, ir);
+  }
+
+  if (listener?.event) {
+    return findNodeId(
+      ir,
+      (node) => node.kind === "listener" && node.listener?.event === listener.event,
+    );
+  }
+
+  return null;
+}
+
+export function resolveBundleBinding(
+  nodeId: string,
+  bundleManifest: BundleManifest,
+  target = "default",
+): BundleNodeBinding | null {
+  return bundleManifest.targets[target]?.nodes[nodeId] ?? null;
+}
+
+function findNodeId(
+  ir: IRGraph,
+  predicate: (node: IRGraph["nodes"][string]) => boolean,
+): string | null {
+  for (const [nodeId, node] of Object.entries(ir.nodes)) {
+    if (predicate(node)) {
+      return nodeId;
+    }
+  }
+
+  return null;
+}
+
 export function calculateStartingSeq(
   log: ReplayLog,
   executionId: string,

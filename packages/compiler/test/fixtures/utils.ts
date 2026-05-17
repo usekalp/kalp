@@ -1,3 +1,3 @@
-export function mockUtil(text: string) {
-  return text.toUpperCase();
+export function mockUtil(input: string): string {
+  return input.toUpperCase();
 }

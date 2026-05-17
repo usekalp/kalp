@@ -1,13 +1,6 @@
 /**
  * Strongly-typed Effect Engine definitions.
- * 
- * Separates External Effects from Runtime Instructions, and defines exact
- * payload and result shapes for every possible effect, eliminating `unknown`.
  */
-
-// ────────────────────────────────────────────────────────────────────────────
-// Effect Maps (Strict Typings)
-// ────────────────────────────────────────────────────────────────────────────
 
 export interface ExternalEffectMap {
   "ai.generate": {
@@ -69,7 +62,7 @@ export interface ExternalEffectMap {
     payload: { server: string; tool: string; args?: unknown };
     result: unknown;
   };
-  "fetch": {
+  fetch: {
     payload: { url: string; method: string; body?: unknown; headers?: Record<string, string> };
     result: { status: number; body: unknown; headers: Record<string, string> };
   };
@@ -89,7 +82,11 @@ export interface InstructionEffectMap {
     result: void;
   };
   "action.emit": {
-    payload: { event: string; data: unknown; options?: unknown };
+    payload: { listener: string; data: unknown; options?: unknown };
+    result: unknown;
+  };
+  "action.dispatch": {
+    payload: { listener: string; data: unknown; options?: unknown };
     result: void;
   };
   "action.schedule": {
@@ -102,7 +99,7 @@ export interface InstructionEffectMap {
   };
   "action.approval": {
     payload: { reason: string; data?: unknown; options?: unknown };
-    result: { approved: boolean; data?: unknown };
+    result: { approved: boolean; data?: unknown } | boolean;
   };
   "action.call": {
     payload: { contract: string; input: unknown };
@@ -114,10 +111,6 @@ export type EffectMap = ExternalEffectMap & InstructionEffectMap;
 export type EffectType = keyof EffectMap;
 export type ExternalEffectType = keyof ExternalEffectMap;
 export type InstructionEffectType = keyof InstructionEffectMap;
-
-// ────────────────────────────────────────────────────────────────────────────
-// Discriminated Unions
-// ────────────────────────────────────────────────────────────────────────────
 
 export interface Effect<T extends EffectType> {
   type: T;
@@ -135,13 +128,6 @@ export interface EffectResult<T extends EffectType = EffectType> {
   error?: { message: string; name: string; stack?: string };
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Resolver Interface
-// ────────────────────────────────────────────────────────────────────────────
-
-/**
- * Platform-provided resolver that executes External Effects.
- */
 export interface EffectResolver {
   resolve<T extends EffectType>(effect: Effect<T>): Promise<EffectMap[T]["result"]>;
 }

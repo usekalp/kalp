@@ -3,7 +3,7 @@ import { buildAgent } from "../src/compiler";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { executeBundleFromCode } from "./test-helpers";
+import { executeBundleFromCode, readCompiledArtifacts } from "./test-helpers";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = path.join(__dirname, "fixtures");
@@ -17,36 +17,16 @@ describe("Primitives Fixture", () => {
     fs.mkdirSync(OUT_DIR, { recursive: true });
   });
 
-  it("should compile agent with date, math, and MCP primitives", async () => {
+  it("should compile agent with date and math tools", async () => {
     const entry = path.join(FIXTURES_DIR, "primitives-agent.ts");
     const outDir = path.join(OUT_DIR, "primitives");
     await buildAgent(entry, outDir);
 
-    const ir = JSON.parse(
-      fs.readFileSync(path.join(outDir, "ir.json"), "utf-8"),
-    );
-
-    // Verify IR structure
-    expect(ir.agent).toBeDefined();
-    expect(ir.agent.name).toBe("primitives-test-agent");
-    expect(ir.nodes).toBeDefined();
-    expect(ir.bundles).toBeDefined();
-
-    // Verify primitive steps exist
-    expect(ir.nodes?.["step:date_step"]).toBeDefined();
-    expect(ir.nodes?.["step:math_step"]).toBeDefined();
-    expect(ir.nodes?.["step:math_advanced"]).toBeDefined();
-
-    // Verify primitive tools exist
-    expect(ir.nodes?.["tool:analytics_tool"]).toBeDefined();
-    expect(ir.nodes?.["tool:mcp_tool"]).toBeDefined();
-
-    // Verify primitives route
-    expect(ir.nodes?.["route:GET:/api/primitives"]).toBeDefined();
-
-    // Verify bundles are referenced by entry hashes
-    const dateHash = ir.nodes["step:date_step"]?.bundle;
-    expect(ir.bundles?.[dateHash]).toBeDefined();
+    const { semanticIr } = readCompiledArtifacts(outDir);
+    expect(semanticIr.agent.name).toBe("primitives-test-agent");
+    expect(Object.values(semanticIr.nodes).some((node) => node.stableName === "tool.date_tool")).toBe(true);
+    expect(Object.values(semanticIr.nodes).some((node) => node.stableName === "tool.math_tool")).toBe(true);
+    expect(Object.values(semanticIr.nodes).some((node) => node.stableName === "route.get.api.primitives")).toBe(true);
   });
 
   it("should execute primitive-based handlers", async () => {
@@ -54,35 +34,20 @@ describe("Primitives Fixture", () => {
     const outDir = path.join(OUT_DIR, "primitives-exec");
     await buildAgent(entry, outDir);
 
-    const ir = JSON.parse(
-      fs.readFileSync(path.join(outDir, "ir.json"), "utf-8"),
+    const { semanticIr, bundleManifest, bundles } = readCompiledArtifacts(outDir);
+    const mathEntry = Object.entries(semanticIr.nodes).find(
+      ([, node]) => node.stableName === "tool.math_tool",
     );
+    expect(mathEntry).toBeDefined();
 
-    // Verify entries exist before executing
-    expect(ir.nodes).toBeDefined();
-    const mathHash = ir.nodes?.["step:math_step"]?.bundle;
-    const advancedHash = ir.nodes?.["step:math_advanced"]?.bundle;
-
-    // Skip execution test if entries don't exist (SDK type compatibility)
-    if (!mathHash || !advancedHash) {
-      console.log("Primitive entries not found - skipping execution test");
-      return;
-    }
-
-    // Execute math step
-    expect(ir.bundles?.[mathHash]).toBeDefined();
-    const mathHandler = executeBundleFromCode(ir.bundles[mathHash].code);
-    const mathResult = await mathHandler({ value: 3.7 }, {});
+    const [nodeId] = mathEntry!;
+    const binding = bundleManifest.targets.default!.nodes[nodeId]!;
+    const mathHandler = await executeBundleFromCode(bundles[binding.bundle]!);
+    const mathResult = (await mathHandler(
+      { value: 3.7 },
+      { math: { random: () => 0.5 } },
+    )) as { rounded: number; random: number };
     expect(mathResult.rounded).toBe(4);
     expect(typeof mathResult.random).toBe("number");
-
-    // Execute advanced math step
-    expect(ir.bundles?.[advancedHash]).toBeDefined();
-    const advancedHandler = executeBundleFromCode(
-      ir.bundles[advancedHash].code,
-    );
-    const advancedResult = await advancedHandler({ values: [10, 5, 8] }, {});
-    expect(advancedResult.max).toBe(10);
-    expect(advancedResult.min).toBe(5);
   });
 });

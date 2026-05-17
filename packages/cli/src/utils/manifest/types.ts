@@ -1,9 +1,25 @@
-import type { IRGraph } from "@kalphq/sdk";
+import type {
+  ArtifactManifest,
+  BundleManifest,
+  IRGraph,
+  SchemaRegistry,
+} from "@kalphq/sdk";
+
+export interface BundledArtifactFile {
+  file: string;
+  code: string;
+  size: number;
+  sha256: string;
+}
 
 export interface AgentManifestV3 {
   format: "kalp-agent-manifest";
   schemaVersion: 3;
-  ir: IRGraph & { bundles?: Record<string, { code: string }> };
+  artifactManifest: ArtifactManifest;
+  semanticIr: IRGraph;
+  schemas: SchemaRegistry;
+  bundleManifest: BundleManifest;
+  bundles: Record<string, BundledArtifactFile>;
   metadata?: {
     generatedAt?: string;
   };
@@ -22,3 +38,4 @@ export function asString(value: unknown): string | undefined {
 export function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
+

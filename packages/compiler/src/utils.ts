@@ -1,9 +1,13 @@
-import { createHash } from "crypto";
-import type { z } from "zod";
-import { buildSchemaIR, sortKeys } from "./ir-generator";
-export { sortKeys };
-import type { getRegistry } from "@kalphq/sdk";
+import { createHash } from "node:crypto";
+import path from "node:path";
 import { CRON_EXPRESSION_PATTERN } from "./constants";
+import { sortKeys } from "./ir-generator";
+import type { BundleTargetManifest, IRGraph, SchemaRegistry } from "@kalphq/sdk";
+import type { getRegistry } from "@kalphq/sdk";
+
+export { sortKeys } from "./ir-generator";
+
+const ROUTE_STABLE_NAME_MAX_LENGTH = 96;
 
 export function deriveLabelFromName(name: string): string {
   return name
@@ -23,7 +27,11 @@ export function isSdkInternalPath(filePath?: string): boolean {
   );
 }
 
-export function assertCronExpression(agentName: string, expression: string, index: number): void {
+export function assertCronExpression(
+  agentName: string,
+  expression: string,
+  index: number,
+): void {
   if (!CRON_EXPRESSION_PATTERN.test(expression.trim())) {
     throw new Error(
       `Invalid cron expression for ${agentName}.cron[${index}]: "${expression}". Expected 5 space-separated fields.`,
@@ -31,51 +39,11 @@ export function assertCronExpression(agentName: string, expression: string, inde
   }
 }
 
-export function serializeEmits(
-  agentName: string,
-  emits: Record<string, z.ZodTypeAny | string> | undefined,
-) {
-  if (!emits) return undefined;
-  const serialized: Record<
-    string,
-    { type: "schema"; schema: unknown } | { type: "description"; description: string }
-  > = {};
-
-  for (const [eventName, schemaOrDescription] of Object.entries(emits)) {
-    if (typeof schemaOrDescription === "string") {
-      serialized[eventName] = {
-        type: "description",
-        description: schemaOrDescription,
-      };
-      continue;
-    }
-
-    try {
-      const { schema, meta } = buildSchemaIR(schemaOrDescription);
-      if (meta.hasRefinements) {
-        throw new Error("Schema contains non-portable refinements");
-      }
-      serialized[eventName] = {
-        type: "schema",
-        schema,
-      };
-    } catch (error) {
-      console.warn(
-        `[kalp compiler] Could not serialize emits.${eventName} for agent "${agentName}". Falling back to description.`,
-      );
-      serialized[eventName] = {
-        type: "description",
-        description: "Non-serializable schema",
-      };
-    }
-  }
-
-  return serialized;
-}
-
-export function assertUniqueIds(registry: ReturnType<typeof getRegistry>) {
+export function assertUniqueRegistryIds(
+  registry: ReturnType<typeof getRegistry>,
+): void {
   const seen = new Set<string>();
-  for (const [_key, entry] of registry.entries()) {
+  for (const [, entry] of registry.entries()) {
     if (seen.has(entry.id)) {
       throw new Error(`Duplicate node id: ${entry.id}`);
     }
@@ -83,55 +51,92 @@ export function assertUniqueIds(registry: ReturnType<typeof getRegistry>) {
   }
 }
 
-export function getSdkVersion(): string {
-  try {
-    // String-based require to avoid esbuild trying to resolve at build time
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const require = (0, eval)("require");
-    const pkgPath = require.resolve("@kalphq/sdk/package.json");
-    const pkg = require(pkgPath);
-    return pkg.version;
-  } catch {
-    return "unknown";
-  }
-}
-
-export function getCompilerVersion(): string {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    const require = (0, eval)("require");
-    const pkgPath = require.resolve("@kalphq/compiler/package.json");
-    const pkg = require(pkgPath);
-    return pkg.version;
-  } catch {
-    return "unknown";
-  }
-}
-
-export function calculateIRHash(ir: any): string {
-  const sortedIR = sortKeys(ir);
-  return createHash("sha256").update(JSON.stringify(sortedIR)).digest("hex");
-}
-
-export function calculateAgentHash(
-  ir: any,
-  handlers: Record<string, { hash: string }>,
+export function normalizeRelativeModulePath(
+  filePath: string,
+  projectRoot: string,
 ): string {
-  const irWithoutMeta = { ...ir };
-  delete irWithoutMeta.meta;
-  delete irWithoutMeta.irHash;
+  const relative = filePath ? path.relative(projectRoot, filePath).replace(/\\/g, "/") : "";
 
-  const sortedIR = sortKeys(irWithoutMeta);
-  const irHash = createHash("sha256")
-    .update(JSON.stringify(sortedIR))
-    .digest("hex");
+  if (!relative) {
+    return "./";
+  }
 
-  const sortedHandlerHashes = Object.keys(handlers)
-    .sort()
-    .map((k) => handlers[k]!.hash)
-    .join("|");
+  return relative.startsWith("./") ? relative : `./${relative}`;
+}
 
-  return createHash("sha256")
-    .update(irHash + "|" + sortedHandlerHashes)
-    .digest("hex");
+export function hashString(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+export function hashJson(value: unknown): string {
+  return hashString(JSON.stringify(sortKeys(value)));
+}
+
+export function createSchemaId(schemaHash: string): string {
+  return `schema_${schemaHash.slice(0, 12)}`;
+}
+
+export function createNodeId(
+  kind: string,
+  relativeModulePath: string,
+  exportName: string,
+): string {
+  return `node_${hashString(`${kind}|${relativeModulePath}|${exportName}`).slice(0, 12)}`;
+}
+
+function sanitizeStableNameSegment(segment: string): string {
+  return segment
+    .toLowerCase()
+    .trim()
+    .replace(/[:*]+/g, ".")
+    .replace(/[^a-z0-9/._-]+/g, "-")
+    .replace(/[\\/]+/g, ".")
+    .replace(/\.+/g, ".")
+    .replace(/^-+|-+$/g, "")
+    .replace(/^\.+|\.+$/g, "");
+}
+
+export function createBaseStableRouteName(method: string, routePath: string): string {
+  const cleanPath = routePath.trim().replace(/^\/+|\/+$/g, "");
+  const pathPart = cleanPath ? sanitizeStableNameSegment(cleanPath) : "root";
+  return `route.${method.toLowerCase()}.${pathPart || "root"}`;
+}
+
+export function normalizeStableRouteName(
+  method: string,
+  routePath: string,
+  existingStableNames: Set<string>,
+): string {
+  const base = createBaseStableRouteName(method, routePath);
+  const routeHash = hashString(`${method}|${routePath}`).slice(0, 8);
+
+  if (base.length <= ROUTE_STABLE_NAME_MAX_LENGTH && !existingStableNames.has(base)) {
+    return base;
+  }
+
+  const truncatedBase =
+    base.length > ROUTE_STABLE_NAME_MAX_LENGTH
+      ? base.slice(0, ROUTE_STABLE_NAME_MAX_LENGTH - routeHash.length - 1).replace(/\.+$/g, "")
+      : base;
+
+  return `${truncatedBase}.${routeHash}`;
+}
+
+export function calculateSemanticHash(ir: IRGraph, schemas: SchemaRegistry): string {
+  return hashJson({
+    semanticIr: ir,
+    schemas,
+  });
+}
+
+export function calculateArtifactHash(targetManifest: BundleTargetManifest): string {
+  return hashJson(targetManifest);
+}
+
+export function calculateDeploymentHash(
+  semanticHash: string,
+  artifactHash: string,
+  abiVersion: number,
+): string {
+  return hashString(`${semanticHash}|${artifactHash}|${abiVersion}`);
 }

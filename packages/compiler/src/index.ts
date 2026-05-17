@@ -1,6 +1,7 @@
-// ────────────────────────────────────────────────────────────────────────────
-// Compiler — Public API
-// ────────────────────────────────────────────────────────────────────────────
-
-export { buildAgent, calculateIRHash, calculateAgentHash } from "./compiler";
+export {
+  buildAgent,
+  calculateArtifactHash,
+  calculateDeploymentHash,
+  calculateSemanticHash,
+} from "./compiler";
 export * from "./analysis";

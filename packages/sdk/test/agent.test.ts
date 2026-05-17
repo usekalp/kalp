@@ -1,148 +1,110 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { defineAgent, defineRoute, defineContract } from "../src";
+import {
+  defineAgent,
+  defineRoute,
+  defineContract,
+  defineHook,
+  defineCron,
+  everySixHours,
+} from "../src";
 import { createMockContext } from "./shared";
-import type { KalpContext } from "../src";
 
 describe("defineAgent", () => {
-  it("returns config with name", () => {
-    const agent = defineAgent({
-      name: "Test Agent",
-      async onMessage(message, ctx) {
-        return { text: message.text };
-      },
-    });
-
-    expect(agent.name).toBe("Test Agent");
+  const stateSchema = z.object({
+    status: z.enum(["idle", "processing"]).default("idle"),
+    processedCount: z.number().default(0),
   });
 
-  it("supports onMessage with unified context", async () => {
-    const mockContext = createMockContext();
-
+  it("returns declarative config with state", () => {
     const agent = defineAgent({
-      name: "Test Agent",
-      async onMessage(message, ctx) {
-        const secret = await ctx.vault.get("KEY" as never);
-        return { text: `${message.text} - ${secret}` };
-      },
+      name: "test-agent",
+      state: stateSchema,
+      hooks: [
+        defineHook({
+          type: "message",
+          async handler(message) {
+            return { text: message.text };
+          },
+        }),
+      ],
     });
 
-    const result = await agent.onMessage?.(
-      { text: "hello", senderId: "u-1" as any },
-      mockContext as any,
-    );
-
-    expect(result).toEqual({ text: "hello - secret-value" });
+    expect(agent.name).toBe("test-agent");
+    expect(agent.state).toBe(stateSchema);
   });
 
-  it("supports systemPrompt as string", () => {
-    const agent = defineAgent({
-      name: "Static Prompt",
-      systemPrompt: "You are a helpful assistant.",
-      async onMessage(message, ctx) {
-        return { text: message.text };
-      },
-    });
-
-    expect(agent.systemPrompt).toBe("You are a helpful assistant.");
-  });
-
-  it("supports systemPrompt as function", async () => {
-    const mockContext = createMockContext();
-    const mockGet = vi.fn().mockResolvedValue("dynamic-prompt");
-    mockContext.vault.get = mockGet;
-
-    const agent = defineAgent({
-      name: "Dynamic Prompt",
-      async systemPrompt(context: KalpContext) {
-        const custom = await context.vault.get("PROMPT" as never);
-        return `You are ${custom}`;
-      },
-      async onMessage(message, ctx) {
-        return { text: message.text };
-      },
-    });
-
-    if (typeof agent.systemPrompt === "function") {
-      const prompt = await agent.systemPrompt(mockContext as any);
-      expect(prompt).toBe("You are dynamic-prompt");
-    }
-  });
-
-  it("supports all lifecycle hooks", () => {
-    const agent = defineAgent({
-      name: "Lifecycle Agent",
-      onInit: async () => {},
-      onTick: async () => {},
-      async onMessage(message, ctx) {
-        return { text: message.text };
-      },
-    });
-
-    expect(agent.onInit).toBeDefined();
-    expect(agent.onTick).toBeDefined();
-    expect(agent.onMessage).toBeDefined();
-  });
-
-  it("supports routes", () => {
+  it("supports hooks, routes, contracts, and cron", () => {
     const route = defineRoute({
       id: "health",
       method: "GET",
       path: "/health",
-      handler: async () => ({ ok: true }),
-    });
-
-    const agent = defineAgent({
-      name: "Agent with Routes",
-      routes: [route],
-      async onMessage(message, ctx) {
-        return { text: message.text };
+      async handler() {
+        return { ok: true };
       },
     });
 
-    expect(agent.routes).toHaveLength(1);
-    expect(agent.routes?.[0]?.id).toBe("health");
-  });
-
-  it("supports contract for RPC", () => {
-    const SalesContract = defineContract("sales-bot", {
-      input: z.object({ leadId: z.string() }),
-      output: z.object({ score: z.number() }),
-    });
-
-    const agent = defineAgent({
-      name: "Sales Bot",
-      contract: SalesContract,
-      async onCall(input, ctx) {
+    const contract = defineContract({
+      name: "sales-bot",
+      inputSchema: z.object({ leadId: z.string() }),
+      outputSchema: z.object({ score: z.number() }),
+      async handler() {
         return { score: 95 };
       },
     });
 
-    expect(agent.contract).toBeDefined();
-    expect(agent.name).toBe("Sales Bot");
+    const cron = defineCron({
+      expression: everySixHours,
+      timezone: "UTC",
+      async handler() {},
+    });
+
+    const agent = defineAgent({
+      name: "sales-agent",
+      state: stateSchema,
+      routes: [route],
+      contracts: [contract],
+      cron: [cron],
+      hooks: [
+        defineHook({ type: "init", async handler() {} }),
+        defineHook({ type: "tick", async handler() {} }),
+        defineHook({
+          type: "message",
+          async handler(message) {
+            return { text: message.text };
+          },
+        }),
+      ],
+    });
+
+    expect(agent.routes).toHaveLength(1);
+    expect(agent.contracts).toHaveLength(1);
+    expect(agent.cron).toHaveLength(1);
+    expect(agent.hooks).toHaveLength(3);
   });
 
-  it("context includes history and state", () => {
-    const ctx = createMockContext();
+  it("supports systemPrompt as function", async () => {
+    const mockContext = createMockContext();
+    const agent = defineAgent({
+      name: "dynamic-prompt-agent",
+      state: stateSchema,
+      async systemPrompt(context) {
+        const custom = await context.vault.get("PROMPT" as never);
+        return `You are ${custom}`;
+      },
+      hooks: [
+        defineHook({
+          type: "message",
+          async handler(message) {
+            return { text: message.text };
+          },
+        }),
+      ],
+    });
 
-    expect(ctx.history).toBeDefined();
-    expect(Array.isArray(ctx.history)).toBe(true);
-    expect(ctx.state).toBeDefined();
-    expect(typeof ctx.state).toBe("object");
-  });
-
-  it("context includes all primitives", () => {
-    const ctx = createMockContext();
-
-    expect(ctx.ai).toBeDefined();
-    expect(ctx.memory).toBeDefined();
-    expect(ctx.vault).toBeDefined();
-    expect(ctx.storage).toBeDefined();
-    expect(ctx.actions).toBeDefined();
-    expect(ctx.log).toBeDefined();
-    expect(ctx.mcp).toBeDefined();
-    expect(ctx.agent).toBeDefined();
-    expect(ctx.date).toBeDefined();
-    expect(ctx.math).toBeDefined();
+    if (typeof agent.systemPrompt === "function") {
+      const prompt = await agent.systemPrompt(mockContext as any);
+      expect(prompt).toBe("You are secret-value");
+    }
   });
 });

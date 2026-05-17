@@ -3,6 +3,10 @@ import type { EffectInterceptor, SyncInterceptor } from "./types";
 export function createActionsContext(
   interceptEffect: EffectInterceptor,
   interceptSync: SyncInterceptor,
+  localActions?: {
+    emit: (listener: any, payload: unknown, options?: unknown) => Promise<unknown>;
+    dispatch: (listener: any, payload: unknown, options?: unknown) => Promise<void>;
+  },
 ): any {
   return {
     run: (node: any, ...args: any[]) =>
@@ -14,14 +18,26 @@ export function createActionsContext(
       interceptEffect("action.wait", { duration }),
     waitUntil: (ts: number, wakeReason?: string) =>
       interceptEffect("action.waitUntil", { until: ts, wakeReason }) as any,
-    emit: (event: string, data: unknown, options?: any) =>
-      interceptEffect("action.emit", { event, data, options }),
+    emit: (listener: any, data: unknown, options?: any) => {
+      if (!localActions?.emit) {
+        throw new Error("Local emit is not available in this runtime context.");
+      }
+      return localActions.emit(listener, data, options);
+    },
+    dispatch: (listener: any, data: unknown, options?: any) => {
+      if (!localActions?.dispatch) {
+        throw new Error("Local dispatch is not available in this runtime context.");
+      }
+      return localActions.dispatch(listener, data, options);
+    },
     ask: (prompt: string, schema?: any, options?: any) =>
       interceptEffect("action.ask", { prompt, schema, options }),
-    requestApproval: (reason: string, options?: any) =>
-      interceptEffect("action.approval", { reason, options }),
+    requestApproval: async (reason: string, options?: any) => {
+      const result = await interceptEffect("action.approval", { reason, options });
+      return Boolean((result as any)?.approved ?? result);
+    },
     callAgent: (contract: any, input: unknown) =>
-      interceptEffect("action.call", { contract: contract.agentId, input }),
+      interceptEffect("action.call", { contract: contract.name, input }),
     fetch: (url: string | URL | Request, init?: RequestInit) =>
       interceptEffect("fetch", {
         url:
@@ -37,7 +53,5 @@ export function createActionsContext(
       void interceptSync("action.loop", { body: "fn" }, () => {}),
     schedule: (_node: any, date: Date | number | string, ...args: any[]) =>
       interceptEffect("action.schedule", { at: date as any, data: args[0] }),
-    waitForEvent: (_name: string, timeout?: string | number) =>
-      interceptEffect("action.wait", { duration: timeout ?? 0 }) as any,
   };
 }

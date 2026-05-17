@@ -305,13 +305,13 @@ async function loadAgentsFromIndexOrPointers(env, requestUrl) {
     const hash = await env.KALP_MANIFESTS.get(`${agentName}:latest`);
     if (!hash) continue;
 
-    const manifestRaw = await env.KALP_MANIFESTS.get(`${agentName}:${hash}`);
+    const manifestRaw = await env.KALP_MANIFESTS.get(`${agentName}:${hash}:semantic-ir`);
     let metadata = null;
     if (manifestRaw) {
       try {
         const manifest = JSON.parse(manifestRaw);
         metadata =
-          manifest && typeof manifest === "object" ? manifest.metadata : null;
+          manifest && typeof manifest === "object" ? manifest.agent : null;
       } catch {}
     }
 
@@ -346,7 +346,7 @@ async function readLatestManifest(env, agentName) {
   const latest = await env.KALP_MANIFESTS.get(`${agentName}:latest`);
   if (!latest) return null;
 
-  const raw = await env.KALP_MANIFESTS.get(`${agentName}:${latest}`);
+  const raw = await env.KALP_MANIFESTS.get(`${agentName}:${latest}:semantic-ir`);
   if (!raw) return null;
 
   try {
@@ -358,11 +358,11 @@ async function readLatestManifest(env, agentName) {
 
 async function resolveAgentAccess(env, agentName, routeKey) {
   const manifest = await readLatestManifest(env, agentName);
-  const metadata = manifest?.metadata || {};
+  const metadata = manifest?.agent || {};
   const routePublic = metadata.routesPublic
     ? metadata.routesPublic[routeKey]
     : undefined;
-  const agentPublic = metadata.public ?? false;
+  const agentPublic = metadata.skipAuth ?? false;
   return { isPublic: routePublic !== undefined ? routePublic : agentPublic };
 }
 
@@ -391,11 +391,11 @@ export class AgentDurableObject extends DurableObject {
     }
 
     const manifestRaw = await this.env.KALP_MANIFESTS.get(
-      `${agentName}:${latestHash}`,
+      `${agentName}:${latestHash}:semantic-ir`,
     );
     if (!manifestRaw) {
       throw new Error(
-        `Manifest "${agentName}:${latestHash}" not found in KALP_MANIFESTS.`,
+        `Manifest "${agentName}:${latestHash}:semantic-ir" not found in KALP_MANIFESTS.`,
       );
     }
 
@@ -584,7 +584,7 @@ app.get("/api/internal/agents/:agentName", async (c) => {
       return c.json({ error: `Agent "${agentName}" not found.` }, 404);
     }
 
-    const metadata = manifest.metadata ?? {};
+    const metadata = manifest.agent ?? {};
     return c.json({
       name: metadata.name ?? agentName,
       label: metadata.label,
@@ -599,9 +599,9 @@ app.get("/api/internal/agents/:agentName", async (c) => {
       workerUrl: `${new URL(c.req.url).origin.replace(/\/$/, "")}/a/${agentName}`,
       localPath: null,
       updatedAt: null,
-      public: metadata.public ?? false,
+      public: metadata.skipAuth ?? false,
       routesPublic: metadata.routesPublic ?? {},
-      listeners: metadata.listeners ?? [],
+      listeners: [],
     });
   }
 
