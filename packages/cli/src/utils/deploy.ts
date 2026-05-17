@@ -99,7 +99,7 @@ export async function ensureKvNamespaceBindingId(
     { cwd },
   );
   const idMatch = createResult.stdout.match(/"id":\s*"([^"]+)"/);
-  if (!idMatch) return null;
+  if (!idMatch || !idMatch[1]) return null;
 
   binding.id = idMatch[1];
   await writeWranglerConfig(configPath, config);

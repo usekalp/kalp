@@ -34,48 +34,56 @@ export class AgentDurableObject extends DurableObject {
     super(ctx, env);
     this.ctx = ctx;
     this.env = env;
-    this.currentAgentName = null;
-    this.currentManifestHash = null;
-    this.currentManifest = null;
+    // NO cache — resolver siempre desde registry binding
   }
 
   async getRuntimeManifest(agentName) {
-    const current = await readSemanticIr(this.env, agentName);
-    if (!current) {
+    // SIEMPRE via registry binding — NO cache local
+    const res = await this.env.KALP_REGISTRY.fetch(
+      "http://registry/resolve",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ agentName }),
+      }
+    );
+
+    if (!res.ok) {
       throw new Error(`No manifest pointer found for agent "${agentName}".`);
     }
 
-    if (
-      this.currentAgentName === agentName &&
-      this.currentManifestHash === current.hash &&
-      this.currentManifest
-    ) {
-      return { hash: current.hash, manifest: this.currentManifest };
+    const { deploymentHash, routingTable, capabilities } = await res.json();
+
+    // Fetch full semantic IR from KV (persistence layer only)
+    const semanticIr = await readSemanticIr(this.env, agentName);
+    if (!semanticIr) {
+      throw new Error(`No semantic IR found for agent "${agentName}".`);
     }
 
-    this.currentAgentName = agentName;
-    this.currentManifestHash = current.hash;
-    this.currentManifest = current.semanticIr;
-    return { hash: current.hash, manifest: current.semanticIr };
+    return {
+      hash: deploymentHash,
+      semanticIr: semanticIr.semanticIr,
+      routingTable,
+      capabilities,
+    };
   }
 
   async fetch(request) {
     const upgradeHeader = request.headers.get("Upgrade");
     if (upgradeHeader === "websocket") {
       const pair = new WebSocketPair();
-      const client = pair[0];
-      const server = pair[1];
-      this.ctx.acceptWebSocket(server);
-      return new Response(null, { status: 101, webSocket: client });
+      this.ctx.acceptWebSocket(pair[1]);
+      return new Response(null, { status: 101, webSocket: pair[0] });
     }
 
     const url = new URL(request.url);
     const agentName = request.headers.get("x-kalp-agent-name") || "default";
-    const { hash, manifest } = await this.getRuntimeManifest(agentName);
-    const payload =
-      request.method.toUpperCase() === "GET"
-        ? Object.fromEntries(url.searchParams)
-        : await request.json().catch(() => null);
+
+    // Fresh lookup via registry binding — no cache
+    const { hash, semanticIr, routingTable, capabilities } = await this.getRuntimeManifest(agentName);
+    const payload = request.method.toUpperCase() === "GET"
+      ? Object.fromEntries(url.searchParams)
+      : await request.json().catch(() => null);
 
     const text = deriveMessageText(payload);
 
@@ -85,10 +93,10 @@ export class AgentDurableObject extends DurableObject {
       result: {
         agentName,
         manifestHash: hash,
-        eventType: deriveEventType(request.method, url.pathname, manifest),
+        eventType: deriveEventType(request.method, url.pathname, semanticIr),
         payload,
         auth: normalizeHeaderRecord(request),
-        entries: Object.keys(manifest.nodes || {}),
+        entries: Object.keys(semanticIr.nodes || {}),
       },
     });
   }

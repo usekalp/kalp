@@ -124,11 +124,11 @@ function createCompilerState() {
   };
 }
 
-function purgeProjectModuleCache(projectRoot: string) {
-  const normalizedRoot = path.resolve(projectRoot);
-  const rootPrefix = `${normalizedRoot}${path.sep}`;
+function purgeProjectModuleCache(projectRoot: string): void {
+  const normalizedRoot = path.resolve(projectRoot).replace(/\\/g, "/");
   for (const cacheKey of Object.keys(require.cache)) {
-    if (cacheKey === normalizedRoot || cacheKey.startsWith(rootPrefix)) {
+    const normalizedKey = cacheKey.replace(/\\/g, "/");
+    if (normalizedKey === normalizedRoot || normalizedKey.startsWith(normalizedRoot + "/")) {
       delete require.cache[cacheKey];
     }
   }
@@ -153,17 +153,10 @@ export async function buildAgent(
     fs.rmSync(artifactsDir, { recursive: true, force: true });
     fs.mkdirSync(bundlesDir, { recursive: true });
 
-    const sdkSource = resolveWorkspaceSdkSource();
     const jiti = createJiti(jitiBase, {
       fsCache: false,
+      moduleCache: true,
       interopDefault: true,
-      alias: sdkSource
-        ? {
-            "@kalphq/sdk": sdkSource.sdkSourceEntry,
-            "@": sdkSource.sdkSourceDir,
-            "@/*": `${sdkSource.sdkSourceDir}/*`,
-          }
-        : undefined,
     });
 
     purgeProjectModuleCache(resolvedProjectRoot);

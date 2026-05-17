@@ -108,7 +108,7 @@ export async function bundleHandler(
     minify: false,
     write: true,
     outfile: tempFile,
-    external: ["zod"],
+    external: [],
     plugins: [
       {
         name: "kalp-sdk-runtime-shim",
