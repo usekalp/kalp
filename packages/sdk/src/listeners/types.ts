@@ -22,9 +22,9 @@ export interface Listener<
 }
 
 export function defineListener<
-  TState extends Record<string, unknown> = Record<string, unknown>,
   const TInput extends z.ZodTypeAny = z.ZodTypeAny,
   const TOutput extends z.ZodTypeAny = z.ZodTypeAny,
+  TState extends Record<string, unknown> = Record<string, unknown>,
 >(config: {
   event: string;
   inputSchema: TInput;
