@@ -180,6 +180,7 @@ export async function processRoutes(agentConfig: any, ctx: CompilerContext) {
       name: route.id ?? `${route.method}:${route.path}`,
       stableName: normalizeStableRouteName(route.method, route.path, ctx.stableNames),
       inputSchema: ctx.registerSchema(route.inputSchema),
+      outputSchema: ctx.registerSchema(route.outputSchema),
       trigger: { type: "http", method: route.method, path: route.path },
       http: {
         method: route.method,

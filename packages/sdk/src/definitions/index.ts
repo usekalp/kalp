@@ -4,5 +4,5 @@
  * @module
  */
 
-export { defineTool } from "@/definitions/nodes";
-export { defineRoute } from "@/definitions/routes";
+export { defineTool, defineToolFor } from "@/definitions/nodes";
+export { defineRoute, defineRouteFor } from "@/definitions/routes";

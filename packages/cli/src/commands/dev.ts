@@ -22,47 +22,24 @@ const LOGO = "🦋";
 const LOCAL_MANIFESTS_DIR = ".kalp/runtime/local-manifests";
 const HOT_RELOAD_DEBOUNCE_MS = 450;
 
-async function putLocalManifest(params: {
-  cwd: string;
-  configPath: string;
-  key: string;
-  manifestPath: string;
-}): Promise<void> {
-  await execa(
-    "npx",
-    [
-      "wrangler",
-      "kv",
-      "key",
-      "put",
-      params.key,
-      "--path",
-      params.manifestPath,
-      "--binding",
-      "KALP_MANIFESTS",
-      "--local",
-      "--config",
-      params.configPath,
-    ],
-    { cwd: params.cwd },
-  );
-}
-
-async function putLocalValue(params: {
-  cwd: string;
-  configPath: string;
+type KvBulkEntry = {
   key: string;
   value: string;
+};
+
+async function putLocalBulkValues(params: {
+  cwd: string;
+  configPath: string;
+  bulkPath: string;
 }): Promise<void> {
   await execa(
     "npx",
     [
       "wrangler",
       "kv",
-      "key",
+      "bulk",
       "put",
-      params.key,
-      params.value,
+      params.bulkPath,
       "--binding",
       "KALP_MANIFESTS",
       "--local",
@@ -87,6 +64,7 @@ async function syncLocalRuntimeState(params: {
 
   const agentNames = await readLocalAgentNames(cwd);
   const failed: string[] = [];
+  const bulkEntries: KvBulkEntry[] = [];
   let synced = 0;
 
   for (const agentName of agentNames) {
@@ -106,56 +84,45 @@ async function syncLocalRuntimeState(params: {
       const schemasKey = `${agentName}:${hash}:schemas`;
       const bundleManifestKey = `${agentName}:${hash}:bundle-manifest`;
       const latestKey = `${agentName}:latest`;
-      const files = await writeLocalArtifactFiles({
+      await writeLocalArtifactFiles({
         manifestDir,
         agentName,
         hash,
         manifest,
       });
 
-      await putLocalManifest({
-        cwd,
-        configPath,
-        key: artifactManifestKey,
-        manifestPath: files.artifactManifestPath,
-      });
-      await putLocalManifest({
-        cwd,
-        configPath,
-        key: semanticIrKey,
-        manifestPath: files.semanticIrPath,
-      });
-      await putLocalManifest({
-        cwd,
-        configPath,
-        key: schemasKey,
-        manifestPath: files.schemasPath,
-      });
-      await putLocalManifest({
-        cwd,
-        configPath,
-        key: bundleManifestKey,
-        manifestPath: files.bundleManifestPath,
-      });
+      bulkEntries.push(
+        { key: artifactManifestKey, value: JSON.stringify(manifest.artifactManifest) },
+        { key: semanticIrKey, value: JSON.stringify(manifest.semanticIr) },
+        { key: schemasKey, value: JSON.stringify(manifest.schemas) },
+        { key: bundleManifestKey, value: JSON.stringify(manifest.bundleManifest) },
+      );
 
       for (const [bundleHash, bundle] of Object.entries(manifest.bundles)) {
-        await putLocalValue({
-          cwd,
-          configPath,
+        bulkEntries.push({
           key: `${agentName}:${hash}:bundle:${bundleHash}`,
           value: bundle.code,
         });
       }
-      await putLocalValue({
-        cwd,
-        configPath,
-        key: latestKey,
-        value: hash,
-      });
+      bulkEntries.push({ key: latestKey, value: hash });
       synced += 1;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       failed.push(`${agentName}: ${reason}`);
+    }
+  }
+
+  if (bulkEntries.length > 0) {
+    const bulkPath = join(manifestDir, "kv-bulk.json");
+    await writeFile(bulkPath, JSON.stringify(bulkEntries), "utf-8");
+    try {
+      await putLocalBulkValues({
+        cwd,
+        configPath,
+        bulkPath,
+      });
+    } finally {
+      await rm(bulkPath, { force: true });
     }
   }
 
@@ -175,6 +142,8 @@ async function writeLocalArtifactFiles(params: {
 }> {
   const outDir = join(params.manifestDir, `${params.agentName}-${params.hash}`);
   await mkdir(outDir, { recursive: true });
+  const bundlesDir = join(outDir, "targets", "default", "bundles");
+  await mkdir(bundlesDir, { recursive: true });
 
   const artifactManifestPath = join(outDir, "artifact-manifest.json");
   const semanticIrPath = join(outDir, "semantic-ir.json");
@@ -194,7 +163,17 @@ async function writeLocalArtifactFiles(params: {
     "utf-8",
   );
 
-  return { artifactManifestPath, semanticIrPath, schemasPath, bundleManifestPath };
+  for (const [bundleHash, bundle] of Object.entries(params.manifest.bundles)) {
+    const bundlePath = join(bundlesDir, `${bundleHash}.js`);
+    await writeFile(bundlePath, bundle.code, "utf-8");
+  }
+
+  return {
+    artifactManifestPath,
+    semanticIrPath,
+    schemasPath,
+    bundleManifestPath,
+  };
 }
 
 export default defineCommand({

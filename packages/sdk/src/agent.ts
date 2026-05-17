@@ -38,7 +38,7 @@ export interface AgentConfig<
     | string
     | ((context: KalpContext<z.infer<TStateSchema>>) => string | Promise<string>);
   state: TStateSchema;
-  routes?: readonly Route<any, any, z.infer<TStateSchema>>[];
+  routes?: readonly Route<any, any, any, z.infer<TStateSchema>, any>[];
   contracts?: readonly AgentContract<any, any, z.infer<TStateSchema>>[];
   cron?: readonly CronDefinition<z.infer<TStateSchema>>[];
   hooks?: EnsureSingleMessageHook<THooks>;

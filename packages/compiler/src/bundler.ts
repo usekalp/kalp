@@ -11,11 +11,20 @@ const SDK_RUNTIME_SHIM = `
   export function defineTool(config) {
     return { ...config, kind: "tool", __runtimeId: \`tool:\${config.id}\` };
   }
+  export function defineToolFor() {
+    return (config) => defineTool(config);
+  }
   export function defineListener(config) {
     return { ...config, kind: "listener", __runtimeId: \`listener:\${config.event}\` };
   }
+  export function defineListenerFor() {
+    return (config) => defineListener(config);
+  }
   export function defineContract(config) {
     return { ...config, kind: "contract", __runtimeId: \`contract:\${config.name}\` };
+  }
+  export function defineContractFor() {
+    return (config) => defineContract(config);
   }
   export function defineRoute(config) {
     return {
@@ -23,6 +32,9 @@ const SDK_RUNTIME_SHIM = `
       kind: "route",
       __runtimeId: \`route:\${config.method}:\${config.path}\`,
     };
+  }
+  export function defineRouteFor() {
+    return (config) => defineRoute(config);
   }
   export function getRegistry() { return new Map(); }
   export function clearRegistry() {}

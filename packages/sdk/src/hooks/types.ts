@@ -4,9 +4,7 @@ import { captureFilePath } from "@/utils";
 export type HookType = "init" | "tick" | "message";
 
 interface HookMeta {
-  __filePath?: string;
-  __internalId?: symbol;
-  __runtimeId?: string;
+  /** @internal runtime metadata is attached non-enumerably */
 }
 
 export interface InitHook<TState extends Record<string, unknown> = Record<string, unknown>>
@@ -45,10 +43,13 @@ export function defineHook<
       ? "hook:message"
       : `hook:${config.type}:${crypto.randomUUID()}`;
 
-  return {
+  const hook = {
     ...config,
-    __filePath: captureFilePath(),
-    __internalId: Symbol(`hook:${config.type}`),
-    __runtimeId: runtimeLabel,
   };
+  Object.defineProperties(hook as object, {
+    __filePath: { value: captureFilePath(), enumerable: false, configurable: false },
+    __internalId: { value: Symbol(`hook:${config.type}`), enumerable: false, configurable: false },
+    __runtimeId: { value: runtimeLabel, enumerable: false, configurable: false },
+  });
+  return hook;
 }

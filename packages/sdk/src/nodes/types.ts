@@ -9,11 +9,10 @@ import type { TypedKalpContext } from "@/context/types";
 
 /** The kind of a node in the agent graph. */
 export type NodeKind = "tool" | "route";
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 interface NodeMeta {
-  __filePath?: string;
-  __internalId?: symbol;
-  __runtimeId?: string;
+  /** @internal runtime metadata is stored out-of-band */
 }
 
 /**
@@ -43,25 +42,32 @@ export interface Tool<
  * An HTTP Route exposed by the agent.
  */
 export interface Route<
+  M extends HttpMethod = HttpMethod,
   I extends z.ZodTypeAny | undefined = undefined,
   R = unknown,
   TState extends Record<string, unknown> = Record<string, unknown>,
+  OSchema extends z.ZodTypeAny | undefined = undefined,
 > extends NodeMeta {
   kind: "route";
   id: string;
-  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  method: M;
   path: string;
   skipAuth?: boolean;
-  inputSchema?: I;
+  inputSchema?: M extends "GET" | "DELETE" ? never : I;
+  outputSchema?: OSchema;
   handler: (args: {
     req: Request;
     res: {
       status: (code: number) => { json: (data: R) => void };
       json: (data: R) => void;
     };
-    body: I extends z.ZodTypeAny ? z.infer<I> : undefined;
+    body: M extends "GET" | "DELETE"
+      ? undefined
+      : I extends z.ZodTypeAny
+        ? z.infer<I>
+        : undefined;
     ctx: TypedKalpContext<TState>;
-  }) => Promise<R> | void | Promise<void>;
+  }) => Promise<OSchema extends z.ZodTypeAny ? z.infer<OSchema> : R> | void | Promise<void>;
 }
 
 /** Convenience types for any tool. */
@@ -84,13 +90,18 @@ export type ToolConfig<
   O = unknown,
   TState extends Record<string, unknown> = Record<string, unknown>,
   OSchema extends z.ZodTypeAny | undefined = undefined,
-> = Omit<Tool<I, O, TState, OSchema>, "kind" | "__filePath" | "__internalId" | "__runtimeId">;
+> = Omit<Tool<I, O, TState, OSchema>, "kind">;
 
 /**
  * Configuration for defining a Route.
  */
 export type RouteConfig<
+  TState extends Record<string, unknown> = Record<string, unknown>,
+  M extends HttpMethod = HttpMethod,
   I extends z.ZodTypeAny | undefined = undefined,
   R = unknown,
-  TState extends Record<string, unknown> = Record<string, unknown>,
-> = Omit<Route<I, R, TState>, "kind" | "__filePath" | "__internalId" | "__runtimeId">;
+  OSchema extends z.ZodTypeAny | undefined = undefined,
+> = Omit<
+  Route<M, I, R, TState, OSchema>,
+  "kind"
+>;

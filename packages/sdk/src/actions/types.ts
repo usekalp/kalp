@@ -66,8 +66,10 @@ export interface KalpActions {
   ) => Promise<{ scheduleId: string }>;
 }
 
+declare const STATE_BRAND: unique symbol;
+
 export type TypedActions<
   TState extends Record<string, unknown> = Record<string, unknown>,
 > = KalpActions & {
-  readonly __stateBrand?: TState;
+  readonly [STATE_BRAND]?: TState;
 };

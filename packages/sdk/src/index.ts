@@ -26,7 +26,7 @@ export type {
 } from "@/identity";
 
 export type { AgentContract } from "@/contracts";
-export { defineContract } from "@/contracts";
+export { defineContract, defineContractFor } from "@/contracts";
 
 export type {
   AIProvider,
@@ -141,10 +141,11 @@ export type {
 } from "@/hooks";
 
 export { defineListener } from "@/listeners";
+export { defineListenerFor } from "@/listeners";
 export type { Listener } from "@/listeners";
 
-export { defineTool } from "@/definitions";
-export { defineRoute } from "@/definitions";
+export { defineTool, defineToolFor } from "@/definitions";
+export { defineRoute, defineRouteFor } from "@/definitions";
 export { defineCron } from "@/cron-definition";
 export type { CronDefinition } from "@/cron-definition";
 export {

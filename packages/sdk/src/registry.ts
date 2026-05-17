@@ -37,8 +37,21 @@ export function registerNode(
   const filePath = captureFilePath();
 
   if (ref && typeof ref === "object") {
-    (ref as any).__internalId = internalId;
-    (ref as any).__filePath = filePath;
+    const target = ref as Record<string, unknown>;
+    if (!Object.prototype.hasOwnProperty.call(target, "__internalId")) {
+      Object.defineProperty(target, "__internalId", {
+        value: internalId,
+        enumerable: false,
+        configurable: false,
+      });
+    }
+    if (!Object.prototype.hasOwnProperty.call(target, "__filePath")) {
+      Object.defineProperty(target, "__filePath", {
+        value: filePath,
+        enumerable: false,
+        configurable: false,
+      });
+    }
   }
 
   map.set(key, { kind, id, ref });
