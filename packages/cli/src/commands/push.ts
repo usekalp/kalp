@@ -346,6 +346,7 @@ export default defineCommand({
       p.log.error(`${pc.cyan("kalp.config.ts")} not found`);
       process.exit(1);
     });
+
     await generateTypes(cwd);
 
     const availableAgents = await readLocalAgentNames(cwd);
@@ -392,9 +393,9 @@ export default defineCommand({
         return;
       }
       const s = p.spinner();
-      s.start("Running initial deploy");
+      s.start("Deploying");
       const deploy = await runInitialDeploy(cwd);
-      s.stop("Initial deploy completed");
+      s.stop("Deployed");
       state = (await readProjectState(cwd)) ?? createInitialState();
       state.workerUrl = deploy.workerUrl;
       state.accountId = deploy.accountId;
@@ -410,7 +411,7 @@ export default defineCommand({
     );
     if (!kvId) {
       p.log.error(
-        `Could not resolve KV namespace ID for KALP_MANIFESTS. Run \`npx wrangler kv namespace create ${runtime.workerName}-kalp-manifests\` manually.`,
+        `Could not resolve storage namespace. Run \`kalp deploy\` first.`,
       );
       process.exit(1);
     }
@@ -469,7 +470,7 @@ export default defineCommand({
 
       if (prune.removedAgents.length > 0) {
         p.log.info(
-          `Pruned stale remote agents: ${pc.cyan(prune.removedAgents.join(", "))} ${pc.dim(`(${prune.deletedKeys} keys cleaned)`)}`,
+          `Pruned stale agents: ${pc.cyan(prune.removedAgents.join(", "))}`,
         );
         remoteIndex = remoteIndex.filter(
           (entry) => !prune.removedAgents.includes(entry.name),

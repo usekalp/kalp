@@ -170,9 +170,9 @@ export const messageHook = defineHook<AgentState>({
   async handler(message, ctx) {
     // Business intent: full rev-ops flow (score -> approve/review -> response).
     const scored = await ctx.actions.run(scoreOpportunity, {
-      transcript: message.text,
+      transcript: message.content,
     });
-    const approval = await ctx.actions.emit(approvalRequested, {
+    const approval = await ctx.actions.call(approvalRequested, {
       score: scored.score,
     });
 
@@ -180,9 +180,10 @@ export const messageHook = defineHook<AgentState>({
     ctx.state.lastDecision = approval.approved ? "approved" : "review";
 
     return {
-      text: approval.approved
+      message: { role: "assistant" as const, content: approval.approved
         ? \`Approved (\${scored.score})\`
-        : \`Review (\${scored.score})\`,
+        : \`Review (\${scored.score})\` },
+      done: true,
     };
   },
 });

@@ -20,5 +20,5 @@ export const tool2 = defineTool({
 export default defineAgent({
   name: "duplicate-tools-agent",
   state: z.object({ ok: z.boolean().default(true) }),
-  hooks: [defineHook({ type: "message", async handler() { return { text: "dup" }; } })],
+  hooks: [defineHook({ type: "message", async handler() { return { message: { role: "assistant" as const, content: "dup" }, done: true }; } })],
 });

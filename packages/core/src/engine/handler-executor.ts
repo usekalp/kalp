@@ -9,7 +9,9 @@ import type {
   BundleNodeBinding,
   IRGraph,
   KalpContext,
+  KalpHistory,
   KalpHistoryMessage,
+  AgentDefinition,
 } from "@kalphq/sdk";
 import type { RuntimeEvent } from "@/engine/types";
 import type { PersistenceAdapter } from "@/adapters/interfaces";
@@ -72,31 +74,31 @@ export function buildHandlerContext(
   resolver: EffectResolver,
   log: ReplayLog,
   frame: ExecutionFrame,
-  history: KalpHistoryMessage[],
+  history: KalpHistory,
   persistence: PersistenceAdapter,
   ir: IRGraph,
   state: Record<string, unknown>,
   localActions: {
-    emit: (listener: any, payload: unknown, options?: unknown) => Promise<unknown>;
-    dispatch: (listener: any, payload: unknown, options?: unknown) => Promise<void>;
+    call: (listener: any, payload: unknown, options?: unknown) => Promise<unknown>;
+    dispatch: (listener: any, payload: unknown, options?: unknown) => Promise<{ eventId: string }>;
   },
 ): KalpContext {
+  const agentDefinition: AgentDefinition = {
+    name: ir.agent?.name ?? "unknown",
+    description: ir.agent?.description,
+    label: ir.agent?.label,
+    tags: ir.agent?.tags,
+    systemPrompt: typeof ir.agent?.systemPrompt === "object" && ir.agent.systemPrompt !== null
+      ? { id: (ir.agent.systemPrompt as any).id, version: (ir.agent.systemPrompt as any).version }
+      : undefined,
+  };
+
   return createProxyContext(
     resolver,
     log,
     frame,
     (effect) => handleEffect(effect, persistence, ir),
-    {
-      agentId: ir.agent?.name ?? frame.ctx.threadId ?? "unknown",
-      runId: frame.executionId,
-      name: ir.agent?.name ?? "unknown",
-      systemPrompt: resolveSystemPrompt(ir),
-      metadata: {
-        label: ir.agent?.label,
-        tags: ir.agent?.tags,
-        skipAuth: ir.agent?.skipAuth,
-      },
-    },
+    agentDefinition,
     history,
     state,
     localActions,
@@ -157,10 +159,11 @@ export async function executeHandlerBundle(
     throw new Error(`Execution failed: bundle binding missing for node ${nodeId}.`);
   }
 
-  const history = historyEntries ?? (await loadHistory(frame.ctx.threadId, persistence));
+  const historyMessages = historyEntries ?? (await loadHistory(frame.ctx.threadId, persistence));
+  const history: KalpHistory = { list: () => Promise.resolve(historyMessages) };
 
   const localActions = {
-    emit: async (listener: any, payload: unknown) => {
+    call: async (listener: any, payload: unknown) => {
       const listenerNodeId = resolveListenerNodeId(listener, ir);
       if (!listenerNodeId) {
         throw new Error(
@@ -187,7 +190,7 @@ export async function executeHandlerBundle(
         bundleManifest,
         bundleLoader,
         state,
-        history,
+        historyMessages,
       );
 
       return result.value;
@@ -200,6 +203,8 @@ export async function executeHandlerBundle(
         );
       }
 
+      const eventId = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
       await persistence.events.append({
         type: "listener.queued",
         listenerNodeId,
@@ -209,6 +214,8 @@ export async function executeHandlerBundle(
         threadId: frame.ctx.threadId,
         timestamp: Date.now(),
       } as any);
+
+      return { eventId };
     },
   };
 

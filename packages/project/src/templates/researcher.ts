@@ -167,18 +167,19 @@ export const messageHook = defineHook<AgentState>({
   type: "message",
   async handler(message, ctx) {
     // Business intent: execute full research response flow for incoming requests.
-    const result = await ctx.actions.run(summarizeResearch, { topic: message.text });
-    const review = await ctx.actions.emit(digestReviewed, {
+    const result = await ctx.actions.run(summarizeResearch, { topic: message.content });
+    const review = await ctx.actions.call(digestReviewed, {
       summary: result.summary,
     });
 
     ctx.state.draftsCreated += 1;
-    ctx.state.lastTopic = message.text;
+    ctx.state.lastTopic = message.content;
 
     return {
-      text: review.publish
+      message: { role: "assistant" as const, content: review.publish
         ? \`\${result.summary}\\nNext: \${result.nextQuestion}\`
-        : \`Draft: \${result.summary}\`,
+        : \`Draft: \${result.summary}\` },
+      done: true,
     };
   },
 });

@@ -59,7 +59,10 @@ export default defineCommand({
     const provider = resolveProvider();
     let remoteSecrets;
     try {
+      const spinner = p.spinner();
+      spinner.start("Loading remote secrets");
       remoteSecrets = await provider.listSecrets({ cwd, configPath });
+      spinner.stop(`Found ${remoteSecrets.length} remote secret${remoteSecrets.length !== 1 ? "s" : ""}`);
     } catch (error) {
       p.log.error(error instanceof Error ? error.message : String(error));
       process.exit(1);

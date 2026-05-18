@@ -39,7 +39,7 @@ export const contractRoute = defineRoute({
 export const messageHook = defineHook({
   type: "message",
   async handler(message) {
-    return { text: message.text };
+    return { message: { role: "assistant" as const, content: message.content }, done: true };
   },
 });
 

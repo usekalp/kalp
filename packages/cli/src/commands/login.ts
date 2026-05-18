@@ -39,13 +39,15 @@ export default defineCommand({
     }
 
     s.stop("Sign-in complete");
-    s.start("Reading runtime identity");
+
+    const s2 = p.spinner();
+    s2.start("Reading runtime identity");
     const identity = await provider.whoami();
     const accountId = identity?.accountId;
     const email = identity?.email;
 
     if (!accountId || !email) {
-      s.stop(pc.red("Could not resolve account identity from wrangler whoami"));
+      s2.stop(pc.red("Could not resolve account identity"));
       process.exit(1);
     }
 
@@ -58,7 +60,7 @@ export default defineCommand({
 
     await saveAuthConfig(authConfig);
 
-    s.stop("Authentication saved");
+    s2.stop("Authentication saved");
     p.log.success(`Logged in as ${pc.cyan(authConfig.email)}`);
     p.note(`Workspace ID: ${pc.cyan(authConfig.accountId)}`, "Runtime");
     p.outro(pc.green("Ready to deploy your agents"));

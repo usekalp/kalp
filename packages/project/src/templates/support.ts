@@ -159,17 +159,17 @@ export const messageHook = defineHook<AgentState>({
   type: "message",
   async handler(message, ctx) {
     // Business intent: classify ticket, draft reply, and persist counters.
-    const classification = await ctx.actions.emit(classifyTicket, {
-      urgency: Math.min(10, Math.ceil(message.text.length / 20)),
+    const classification = await ctx.actions.call(classifyTicket, {
+      urgency: Math.min(10, Math.ceil(message.content.length / 20)),
     });
 
     const drafted = await ctx.actions.run(draftReply, {
-      issue: message.text,
+      issue: message.content,
       priority: classification.priority,
     });
 
     ctx.state.ticketsHandled += 1;
-    return { text: drafted.reply };
+    return { message: { role: "assistant" as const, content: drafted.reply }, done: true };
   },
 });
 `;

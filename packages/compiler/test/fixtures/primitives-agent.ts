@@ -12,15 +12,15 @@ export const dateTool = defineTool<z.infer<typeof stateSchema>>({
   id: "date_tool",
   inputSchema: z.object({}),
   async handler(_input, ctx) {
-    return { iso: ctx.date.toISOString() };
+    return { iso: ctx.time.toISOString() };
   },
 });
 
 export const mathTool = defineTool<z.infer<typeof stateSchema>>({
   id: "math_tool",
   inputSchema: z.object({ value: z.number() }),
-  async handler(input, ctx) {
-    return { rounded: Math.round(input.value), random: ctx.math.random() };
+  async handler(input, _ctx) {
+    return { rounded: Math.round(input.value), random: Math.random() };
   },
 });
 
@@ -36,7 +36,7 @@ export const primitivesRoute = defineRouteFor<z.infer<typeof stateSchema>>()({
 export const messageHook = defineHook<z.infer<typeof stateSchema>>({
   type: "message",
   async handler(message) {
-    return { text: message.text };
+    return { message: { role: "assistant" as const, content: message.content }, done: true };
   },
 });
 

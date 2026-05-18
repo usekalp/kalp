@@ -99,7 +99,7 @@ function createMockArtifacts(): {
         export default async function handler(payload, ctx) {
           const approvalRequested = { event: "approval_requested", __runtimeId: "listener:approval_requested" };
           ctx.state.processedCount = (ctx.state.processedCount ?? 0) + 1;
-          const result = await ctx.actions.emit(approvalRequested, { score: payload.score });
+          const result = await ctx.actions.call(approvalRequested, { score: payload.score });
           return { approved: result.approved, count: ctx.state.processedCount };
         }
       `,

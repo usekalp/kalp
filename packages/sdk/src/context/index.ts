@@ -5,7 +5,6 @@
  */
 
 export type {
-  InferNodes,
   InferAgentState,
   KalpAuth,
   KalpContext,

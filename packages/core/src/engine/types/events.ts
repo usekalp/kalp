@@ -64,8 +64,8 @@ export type ExecutionEvent =
       timestamp: number;
     }
   | {
-      type: "action.wait";
-      duration: string | number;
+      type: "action.sleep";
+      duration: number;
       executionId: string;
       traceId: string;
       threadId: string;
@@ -107,9 +107,18 @@ export type ExecutionEvent =
       timestamp: number;
     }
   | {
-      type: "action.emit";
-      event: string;
+      type: "action.call.started";
+      listener: string;
       data: unknown;
+      executionId: string;
+      traceId: string;
+      threadId: string;
+      timestamp: number;
+    }
+  | {
+      type: "action.call.completed";
+      listener: string;
+      result: unknown;
       executionId: string;
       traceId: string;
       threadId: string;

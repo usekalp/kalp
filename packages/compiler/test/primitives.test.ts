@@ -45,7 +45,7 @@ describe("Primitives Fixture", () => {
     const mathHandler = await executeBundleFromCode(bundles[binding.bundle]!);
     const mathResult = (await mathHandler(
       { value: 3.7 },
-      { math: { random: () => 0.5 } },
+      {},
     )) as { rounded: number; random: number };
     expect(mathResult.rounded).toBe(4);
     expect(typeof mathResult.random).toBe("number");

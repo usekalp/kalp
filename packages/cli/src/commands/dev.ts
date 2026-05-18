@@ -1,7 +1,6 @@
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import { setTimeout as delay } from "node:timers/promises";
 import open from "open";
 import { createRuntime } from "@/runtime/create-runtime";
 
@@ -31,15 +30,10 @@ export default defineCommand({
       });
 
       // Bootstrap: generateTypes, compile agents, start Miniflare
-      await runtime.start();
-
-      // Show boot completion
       const bootSpinner = p.spinner();
       bootSpinner.start("Starting development server...");
-      await delay(1800);
-      bootSpinner.stop(
-        "Development server is running at http://localhost:8787",
-      );
+      await runtime.start();
+      bootSpinner.stop("Development server is running at http://localhost:8787");
 
       const studioUrl = `${STUDIO_ORIGIN}/studio/login`;
       await open(studioUrl);

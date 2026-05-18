@@ -35,7 +35,6 @@ export type {
   ProviderName,
   KalpModelId,
   AIParams,
-  KalpHistoryMessage,
   MemoryListParams,
   MemoryListResult,
   SecretsRegistry,
@@ -88,6 +87,16 @@ export type {
   ListenerDispatchOptions,
   KalpActions,
   TypedActions,
+  CallAction,
+  DispatchAction,
+  DispatchReceipt,
+  SleepAction,
+  WaitUntilAction,
+  LoopAction,
+  LoopContext,
+  ScheduleAction,
+  ScheduledTask,
+  TimestampInput,
 } from "@/actions";
 
 export type {
@@ -102,7 +111,6 @@ export type {
 } from "@/nodes";
 
 export type {
-  InferNodes,
   InferAgentState,
   KalpAuth,
   KalpContext,
@@ -127,6 +135,39 @@ export type {
 } from "@/ir";
 
 export type { InputOf, OutputOf, Simplify } from "@/utils";
+
+export type {
+  Duration,
+  KalpTime,
+} from "@/primitives";
+
+export {
+  toMs,
+  normalizeDuration,
+  ms,
+  seconds,
+  minutes,
+  hours,
+  days,
+  assertTimestampInput,
+} from "@/primitives";
+
+export type {
+  KalpSchedules,
+  ScheduleStatus,
+} from "@/schedules";
+
+export type { KalpRuntime } from "@/runtime";
+
+export type {
+  KalpHistory,
+  KalpHistoryMessage,
+} from "@/primitives";
+
+export type {
+  KalpAgent,
+  AgentDefinition,
+} from "@/agent";
 
 export { defineAgent } from "@/agent";
 export type { AgentConfig } from "@/agent";

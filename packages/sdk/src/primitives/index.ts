@@ -14,7 +14,6 @@ export type {
   KalpModelId,
   AIParams,
   KalpAI,
-  KalpHistoryMessage,
 } from "@/primitives/ai";
 
 export type {
@@ -46,3 +45,27 @@ export type { AgentIntrospection } from "@/primitives/agent-meta";
 export type { KalpDate, TimezoneFormatter } from "@/primitives/date";
 
 export type { KalpMath } from "@/primitives/math";
+
+export type {
+  Duration,
+} from "@/primitives/duration";
+
+export {
+  toMs,
+  normalizeDuration,
+  ms,
+  seconds,
+  minutes,
+  hours,
+  days,
+} from "@/primitives/duration";
+
+export type { KalpTime, TimezoneFormatter as TimeTimezoneFormatter } from "@/primitives/time";
+
+export { assertTimestampInput } from "@/primitives/time";
+
+export type {
+  KalpHistory,
+  KalpHistoryMessage,
+  HistoryListOptions,
+} from "@/primitives/history";

@@ -17,7 +17,6 @@ export default defineCommand({
     const cwd = process.cwd();
 
     p.intro(`${LOGO} ${pc.bold("kalp deploy")}`);
-    await generateTypes(cwd);
 
     await requireAuth().catch(() => {
       p.log.error("Not authenticated. Run `kalp login` first.");
@@ -38,7 +37,9 @@ export default defineCommand({
     }
 
     const s = p.spinner();
-    s.start("Deploying your agents runtime");
+    s.start("Generating types");
+    await generateTypes(cwd);
+    s.message("Deploying your agents runtime");
 
     try {
       const result = await runInitialDeploy(cwd);

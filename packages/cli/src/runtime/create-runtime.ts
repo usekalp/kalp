@@ -70,7 +70,6 @@ export async function createRuntime(options: CreateRuntimeOptions): Promise<Runt
     async start() {
       lifecycle.transition("starting");
 
-      ui?.logInfo("Generating types...");
       await generateTypes(cwd);
       await ensureSecretKey(cwd);
 
@@ -167,7 +166,7 @@ export async function createRuntime(options: CreateRuntimeOptions): Promise<Runt
       const stopPromise = mfServer.stop();
       const timeoutPromise = new Promise<void>((resolve) => {
         setTimeout(() => {
-          ui?.logError("Miniflare shutdown timed out after 5s, forcing exit");
+          ui?.logError("Server shutdown timed out after 5s, forcing exit");
           resolve();
         }, 5000);
       });

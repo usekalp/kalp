@@ -150,8 +150,8 @@ export const messageHook = defineHook<AgentState>({
   type: "message",
   async handler(message, ctx) {
     // Business intent: end-to-end message flow (summarize -> review -> answer).
-    const result = await ctx.actions.run(summarizeTool, { text: message.text });
-    const review = await ctx.actions.emit(summaryReviewed, {
+    const result = await ctx.actions.run(summarizeTool, { text: message.content });
+    const review = await ctx.actions.call(summaryReviewed, {
       summary: result.summary,
     });
 
@@ -159,9 +159,10 @@ export const messageHook = defineHook<AgentState>({
     ctx.state.lastSummary = result.summary;
 
     return {
-      text: review.accepted
+      message: { role: "assistant" as const, content: review.accepted
         ? result.summary
-        : \`Needs review: \${result.summary}\`,
+        : \`Needs review: \${result.summary}\` },
+      done: true,
     };
   },
 });

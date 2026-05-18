@@ -73,21 +73,29 @@ export interface InstructionEffectMap {
     payload: { target: string; input: unknown; idempotencyKey?: string };
     result: unknown;
   };
-  "action.wait": {
-    payload: { duration: string | number; wakeReason?: string };
+  "action.sleep": {
+    payload: { duration: number | Record<string, number>; wakeReason?: string };
     result: void;
   };
   "action.waitUntil": {
     payload: { until: number; wakeReason?: string };
     result: void;
   };
-  "action.emit": {
-    payload: { listener: string; data: unknown; options?: unknown };
-    result: unknown;
-  };
   "action.dispatch": {
     payload: { listener: string; data: unknown; options?: unknown };
+    result: { eventId: string };
+  };
+  "action.schedule.cancel": {
+    payload: { id: string };
     result: void;
+  };
+  "action.schedule.reschedule": {
+    payload: { id: string; when: number };
+    result: void;
+  };
+  "action.schedule.status": {
+    payload: { id: string };
+    result: string;
   };
   "action.schedule": {
     payload: { at: number | string; data: unknown };

@@ -69,15 +69,15 @@ describe("Compiler E2E", () => {
     const messageBinding = bundleManifest.targets.default!.nodes[messageNode.nodeId]!;
     const messageHandler = await executeBundleFromCode(bundles[messageBinding.bundle]!);
     const messageResult = await messageHandler(
-      { text: "hello" },
+      { role: "user", content: "hello" },
       {
         actions: {
           run: async () => ({ summary: "HELLO" }),
-          emit: async () => ({ approved: true }),
+          call: async () => ({ approved: true }),
         },
       },
     );
-    expect(messageResult).toEqual({ text: "HELLO" });
+    expect(messageResult).toEqual({ message: { role: "assistant", content: "HELLO" }, done: true });
 
     const routeNode = getNodeByStableName(semanticIr, "route.get.health");
     const routeBinding = bundleManifest.targets.default!.nodes[routeNode.nodeId]!;

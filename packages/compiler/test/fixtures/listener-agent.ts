@@ -20,8 +20,8 @@ export default defineAgent({
     defineHook<z.infer<typeof stateSchema>>({
       type: "message",
       async handler(message, ctx) {
-        const result = await ctx.actions.emit(onTicketCreated, { ticketId: message.text });
-        return { text: result.consumed ? "ok" : "fail" };
+        const result = await ctx.actions.call(onTicketCreated, { ticketId: message.content });
+        return { message: { role: "assistant" as const, content: result.consumed ? "ok" : "fail" }, done: true };
       },
     }),
   ],

@@ -7,6 +7,8 @@ import type { KalpContext } from "@/context";
 
 import type { Simplify } from "@/utils/types";
 
+export type { AgentDefinition, KalpAgent } from "@/agent/types";
+
 type HasDuplicateMessageHook<
   THooks extends readonly Hook<any>[],
   SeenMessage extends boolean = false,
@@ -27,7 +29,7 @@ type EnsureSingleMessageHook<THooks extends readonly Hook<any>[]> =
 
 export interface AgentConfig<
   TStateSchema extends z.ZodTypeAny = z.ZodTypeAny,
-  THooks extends readonly Hook<z.infer<TStateSchema>>[] = readonly Hook<z.infer<TStateSchema>>[],
+  THooks extends readonly Hook<any>[] = readonly Hook<any>[],
 > {
   name: string;
   label?: string;
@@ -46,12 +48,12 @@ export interface AgentConfig<
 
 export type DefinedAgent<
   TStateSchema extends z.ZodTypeAny = z.ZodTypeAny,
-  THooks extends readonly Hook<z.infer<TStateSchema>>[] = readonly Hook<z.infer<TStateSchema>>[],
+  THooks extends readonly Hook<any>[] = readonly Hook<any>[],
 > = Simplify<AgentConfig<TStateSchema, THooks>>;
 
 export function defineAgent<
   TStateSchema extends z.ZodTypeAny,
-  THooks extends readonly Hook<z.infer<TStateSchema>>[] = readonly Hook<z.infer<TStateSchema>>[],
+  THooks extends readonly Hook<any>[] = readonly Hook<any>[],
 >(config: AgentConfig<TStateSchema, THooks>): DefinedAgent<TStateSchema, THooks> {
   return config as DefinedAgent<TStateSchema, THooks>;
 }

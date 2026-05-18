@@ -1,8 +1,8 @@
 import type {
   KalpContext,
   KalpAuth,
-  AgentIntrospection,
-  KalpHistoryMessage,
+  AgentDefinition,
+  KalpHistory,
 } from "@kalphq/sdk";
 import type { EffectResolver, EffectType, EffectMap } from "./types";
 import type { ReplayLog, PersistedEffect } from "../state/replay-log";
@@ -13,12 +13,14 @@ import {
   createAIContext,
   createStorageContext,
   createMathContext,
-  createDateContext,
+  createTimeContext,
   createMemoryContext,
   createMcpContext,
   createLogContext,
   createVaultContext,
   createActionsContext,
+  createRuntimeContext,
+  createSchedulesContext,
 } from "./primitives";
 
 export function createProxyContext(
@@ -26,12 +28,20 @@ export function createProxyContext(
   log: ReplayLog,
   frame: ExecutionFrame,
   onEffectResolved: (effect: PersistedEffect) => Promise<void>,
-  agent: AgentIntrospection,
-  history: KalpHistoryMessage[],
+  agentDefinition: AgentDefinition,
+  history: KalpHistory,
   state: Record<string, unknown>,
   localActions: {
-    emit: (listener: any, payload: unknown, options?: unknown) => Promise<unknown>;
-    dispatch: (listener: any, payload: unknown, options?: unknown) => Promise<void>;
+    call: (
+      listener: any,
+      payload: unknown,
+      options?: unknown,
+    ) => Promise<unknown>;
+    dispatch: (
+      listener: any,
+      payload: unknown,
+      options?: unknown,
+    ) => Promise<{ eventId: string }>;
   },
   auth?: KalpAuth,
 ): KalpContext {
@@ -74,7 +84,7 @@ export function createProxyContext(
   }
 
   async function interceptLocalEffect<T>(
-    type: "action.emit" | "action.dispatch",
+    type: "action.call" | "action.dispatch",
     payload: EffectMap[typeof type]["payload"],
     execute: () => Promise<T>,
   ): Promise<T> {
@@ -113,7 +123,11 @@ export function createProxyContext(
     }
   }
 
-  function interceptSync<T>(type: string, payload: unknown, compute: () => T): T {
+  function interceptSync<T>(
+    type: string,
+    payload: unknown,
+    compute: () => T,
+  ): T {
     const seq = frame.seqCounter++;
     const cached = log.get(frame.executionId, seq);
     if (cached?.result !== undefined) {
@@ -134,42 +148,55 @@ export function createProxyContext(
     return result;
   }
 
-  const baseTime = interceptSync("date.baseTime", {}, () => Date.now());
+  const baseTime = interceptSync("time.baseTime", {}, () => Date.now());
 
   return {
     ai: createAIContext(interceptEffect),
     storage: createStorageContext(interceptEffect),
     state,
     math: createMathContext(interceptSync),
-    date: createDateContext(baseTime),
+    time: createTimeContext(baseTime),
     memory: createMemoryContext(interceptEffect),
     mcp: createMcpContext(interceptEffect),
     log: createLogContext(interceptSync),
     vault: createVaultContext(interceptEffect),
     actions: createActionsContext(interceptEffect, interceptSync, {
-      emit: (listener, payload, options) =>
+      call: (listener, payload, options) =>
         interceptLocalEffect(
-          "action.emit",
+          "action.call",
           {
-            listener: listener?.__runtimeId ?? `listener:${listener?.event ?? "unknown"}`,
+            listener:
+              listener?.__runtimeId ??
+              `listener:${listener?.event ?? "unknown"}`,
             data: payload,
             options,
           },
-          () => localActions.emit(listener, payload, options),
+          () => localActions.call(listener, payload, options),
         ),
       dispatch: (listener, payload, options) =>
         interceptLocalEffect(
           "action.dispatch",
           {
-            listener: listener?.__runtimeId ?? `listener:${listener?.event ?? "unknown"}`,
+            listener:
+              listener?.__runtimeId ??
+              `listener:${listener?.event ?? "unknown"}`,
             data: payload,
             options,
           },
           () => localActions.dispatch(listener, payload, options),
         ),
     }),
-    auth,
-    agent,
+    schedules: createSchedulesContext(interceptEffect),
+    runtime: createRuntimeContext({
+      runId: frame.executionId,
+      executionId: frame.executionId,
+      traceId: frame.ctx.traceId,
+      threadId: frame.ctx.threadId,
+      environment: "dev",
+      startedAt: Date.now(),
+    }),
+    agent: { definition: agentDefinition },
     history,
+    auth,
   } as unknown as KalpContext;
 }

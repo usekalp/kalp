@@ -63,12 +63,12 @@ export const messageHook = defineHook<z.infer<typeof agentState>>({
   type: "message",
   async handler(message, ctx) {
     const result = (await ctx.actions.run(summarizeTool as any, {
-      text: message.text,
+      text: message.content,
     })) as { summary: string };
-    const approval = (await ctx.actions.emit(approvalRequested as any, {
+    const approval = await ctx.actions.call(approvalRequested, {
       score: 91,
-    })) as { approved: boolean };
-    return { text: approval.approved ? result.summary : "blocked" };
+    });
+    return { message: { role: "assistant" as const, content: approval.approved ? result.summary : "blocked" }, done: true };
   },
 });
 

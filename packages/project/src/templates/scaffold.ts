@@ -218,13 +218,14 @@ export const messageHook = defineHook<AgentState>({
   type: "message",
   async handler(message, ctx) {
     // Business intent: run summarize + review flow and persist metrics.
-    const result = await ctx.actions.run(exampleTool, { text: message.text });
-    const review = await ctx.actions.emit(reviewSummary, {
+    const result = await ctx.actions.run(exampleTool, { text: message.content });
+    const review = await ctx.actions.call(reviewSummary, {
       summary: result.summary,
     });
     ctx.state.processedCount += 1;
     return {
-      text: review.accepted ? result.summary : \`Needs review: \${result.summary}\`,
+      message: { role: "assistant" as const, content: review.accepted ? result.summary : \`Needs review: \${result.summary}\` },
+      done: true,
     };
   },
 });

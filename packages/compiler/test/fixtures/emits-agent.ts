@@ -12,7 +12,7 @@ export const supportContract = defineContract({
 export const messageHook = defineHook({
   type: "message",
   async handler() {
-    return { text: "ok" };
+    return { message: { role: "assistant" as const, content: "ok" }, done: true };
   },
 });
 

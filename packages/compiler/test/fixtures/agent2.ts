@@ -12,5 +12,15 @@ export const stepB = defineTool({
 export default defineAgent({
   name: "agent-2",
   state: z.object({ ok: z.boolean().default(true) }),
-  hooks: [defineHook({ type: "message", async handler() { return { text: "b" }; } })],
+  hooks: [
+    defineHook({
+      type: "message",
+      async handler() {
+        return {
+          message: { role: "assistant" as const, content: "b" },
+          done: true,
+        };
+      },
+    }),
+  ],
 });
