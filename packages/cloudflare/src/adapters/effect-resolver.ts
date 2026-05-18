@@ -4,6 +4,8 @@ import type {
   EffectMap,
   EffectType,
 } from "@kalphq/core";
+import { McpTransport } from "@kalphq/core";
+import type { McpServerRuntimeConfig } from "@kalphq/sdk";
 
 export interface CloudflareProviders {
   ai?: {
@@ -12,15 +14,12 @@ export interface CloudflareProviders {
     defaultModel?: string;
   };
   vault?: Record<string, string>;
+  mcp?: Record<string, McpServerRuntimeConfig>;
 }
 
-/**
- * Cloudflare effect resolver for executing external effects.
- *
- * Currently provides stub implementations - real implementations
- * would connect to AI APIs, KV storage, etc.
- */
 export class CloudflareEffectResolver implements EffectResolver {
+  private mcpTransports = new Map<string, McpTransport>();
+
   constructor(private providers?: CloudflareProviders) {}
 
   async resolve<T extends EffectType>(
@@ -104,7 +103,29 @@ export class CloudflareEffectResolver implements EffectResolver {
       }
 
       case "mcp.call": {
-        return undefined as EffectMap[T]["result"];
+        const serverName = p.server as string;
+        const toolName = p.tool as string;
+
+        const config = this.providers?.mcp?.[serverName];
+        if (!config) {
+          throw new Error(
+            `MCP server "${serverName}" is not configured. Add it to the mcp section of your project config and run \`kalp sync\`.`,
+          );
+        }
+
+        const transport = this.getMcpTransport(serverName, config);
+        const result = await transport.callTool(toolName, p.args);
+
+        const textContent = result.content?.find((c) => c.type === "text");
+        if (textContent?.text) {
+          try {
+            return JSON.parse(textContent.text);
+          } catch {
+            return textContent.text;
+          }
+        }
+
+        return result.content;
       }
 
       case "fetch": {
@@ -125,5 +146,25 @@ export class CloudflareEffectResolver implements EffectResolver {
       default:
         throw new Error(`Unknown effect type: ${effect.type}`);
     }
+  }
+
+  private getMcpTransport(
+    serverName: string,
+    config: McpServerRuntimeConfig,
+  ): McpTransport {
+    const existing = this.mcpTransports.get(serverName);
+    if (existing) return existing;
+
+    const transport = new McpTransport(config);
+    this.mcpTransports.set(serverName, transport);
+    return transport;
+  }
+
+  async disconnectAll(): Promise<void> {
+    const transports = Array.from(this.mcpTransports.values());
+    this.mcpTransports.clear();
+    await Promise.allSettled(
+      transports.map((t) => t.disconnect()),
+    );
   }
 }

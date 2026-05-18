@@ -26,6 +26,7 @@ export {
 } from "./state/replay-log";
 export { SuspensionException, type SuspensionState } from "@/engine/suspension";
 export { createProxyContext } from "./effects/context";
+export { McpTransport, type McpTransportConfig, type McpToolCallResult, type McpToolDefinition } from "./effects/primitives/mcp-transport";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types

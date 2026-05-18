@@ -12,7 +12,7 @@ import type { KalpSchedules } from "@/schedules/types";
 import type { KalpTime } from "@/primitives/time";
 import type { KalpRuntime } from "@/runtime/types";
 import type { KalpAgent } from "@/agent/types";
-import type { KalpAI, KalpLog, KalpMemory, KalpVault, KalpHistory, KalpMath } from "@/primitives";
+import type { KalpAI, KalpLog, KalpMemory, KalpVault, KalpHistory, KalpMath, KalpMcp } from "@/primitives";
 
 export interface AgentMessage {
   role: "user" | "assistant" | "system";
@@ -63,6 +63,7 @@ export interface KalpContext<TState = unknown> {
   vault: KalpVault;
   math: KalpMath;
   auth: KalpAuth;
+  mcp: KalpMcp;
   state: TState;
 }
 

@@ -12,6 +12,7 @@ export type {
   McpServerInput,
   McpAuthInput,
   NormalizedMcpServer,
+  McpServerRuntimeConfig,
 } from "@/project/types";
 export { env } from "@/project/types";
 export { defineConfig } from "@/project/config";

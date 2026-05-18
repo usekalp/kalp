@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loadProjectConfig } from "@/utils/project-config";
 import { compile } from "json-schema-to-typescript";
-import { normalizeMcpServer, type NormalizedMcpServer } from "@kalphq/sdk";
+import { normalizeMcpServer, type NormalizedMcpServer, type McpServerRuntimeConfig } from "@kalphq/sdk";
 import type { ProjectGenerator, GeneratorResult } from "./sync";
 
 const MCP_CLIENT_NAME = "kalp-cli";
@@ -505,6 +505,7 @@ export class McpTypesGenerator implements ProjectGenerator {
   async generate(cwd: string): Promise<GeneratorResult> {
     const generatedDir = join(cwd, ".kalp", "generated");
     const mcpPath = join(generatedDir, "mcp.d.ts");
+    const mcpConfigPath = join(generatedDir, "mcp-config.json");
 
     await mkdir(generatedDir, { recursive: true });
 
@@ -538,13 +539,21 @@ export class McpTypesGenerator implements ProjectGenerator {
     const compiled = await compileServerToolTypes(serverResults, warnings);
     const content = renderMcpTypes(compiled.declarations, compiled.servers);
 
+    const runtimeConfig: Record<string, McpServerRuntimeConfig> = {};
+    for (const [name, config] of Object.entries(servers)) {
+      runtimeConfig[name] = { url: config.url, headers: config.headers };
+    }
+    const configJson = JSON.stringify(runtimeConfig, null, 2);
+
     // Check if update is needed
     const existing = await readFile(mcpPath, "utf-8").catch(() => null);
-    if (existing === content) {
+    const existingConfig = await readFile(mcpConfigPath, "utf-8").catch(() => null);
+    if (existing === content && existingConfig === configJson) {
       return { updated: false, warnings };
     }
 
     await writeFile(mcpPath, content, "utf-8");
+    await writeFile(mcpConfigPath, configJson, "utf-8");
     return { updated: true, warnings };
   }
 }

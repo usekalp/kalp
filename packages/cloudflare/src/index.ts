@@ -16,6 +16,7 @@ export { AgentDurableObject } from "./runtime/durable-object";
 
 // Wiring
 export { wireRuntime } from "./wiring";
+export type { CloudflareProviders } from "./adapters/effect-resolver";
 
 // DO Adapters
 export {

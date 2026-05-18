@@ -55,8 +55,13 @@ export interface NormalizedMcpServer {
   } | {
     type: "headers";
     headers: Record<string, string>;
-    headersEnv: Record<string, string>; // Maps header name to env var name if applicable
+    headersEnv: Record<string, string>;
   };
+}
+
+export interface McpServerRuntimeConfig {
+  url: string;
+  headers?: Record<string, string>;
 }
 
 /**

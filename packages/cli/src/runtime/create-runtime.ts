@@ -15,6 +15,7 @@ import { ensureSecretKey } from "@/utils/secret";
 import { AsyncLock } from "./utils/async-lock";
 import { join } from "node:path";
 import { readFile, writeFile, copyFile } from "node:fs/promises";
+import type { McpServerRuntimeConfig } from "@kalphq/sdk";
 import { RestartTimeoutError } from "./errors";
 import pc from "picocolors";
 
@@ -87,6 +88,15 @@ export async function createRuntime(options: CreateRuntimeOptions): Promise<Runt
       runtimePaths = await materializeRuntime(cwd, { mode: "local", studioMode: "bundled-artifact" });
 
       const devVarsForBindings = parseDevVars(await readFile(devVarsPath, "utf-8"));
+
+      const mcpConfigPath = join(cwd, ".kalp", "generated", "mcp-config.json");
+      const mcpConfigRaw = await readFile(mcpConfigPath, "utf-8").catch(() => null);
+      if (mcpConfigRaw) {
+        const mcpConfig = JSON.parse(mcpConfigRaw) as Record<string, McpServerRuntimeConfig>;
+        if (Object.keys(mcpConfig).length > 0) {
+          devVarsForBindings.KALP_MCP_CONFIG = mcpConfigRaw;
+        }
+      }
 
       const eventBus = new EventBus();
       const metrics = new MetricsCollector();

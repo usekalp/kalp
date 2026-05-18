@@ -1,4 +1,4 @@
-import { access, rm, writeFile } from "node:fs/promises";
+import { access, rm, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defineCommand } from "citty";
 import * as p from "@clack/prompts";
@@ -453,6 +453,21 @@ export default defineCommand({
     }
 
     let remoteIndex = await readRemoteAgentsIndex(cwd, runtime.wranglerConfigPath);
+
+    // Upload MCP runtime config to KV
+    const mcpConfigPath = join(cwd, ".kalp", "generated", "mcp-config.json");
+    const mcpConfigRaw = await readFile(mcpConfigPath, "utf-8").catch(() => null);
+    if (mcpConfigRaw) {
+      const provider = resolveProvider();
+      await provider.putValue({
+        cwd,
+        configPath: runtime.wranglerConfigPath,
+        key: "mcp:config",
+        value: mcpConfigRaw,
+      }).catch(() => {
+        p.log.warn("Could not upload MCP config to KV");
+      });
+    }
 
     for (const agentName of availableAgents) {
       const agentPath = join(cwd, "agents", agentName, "index.ts");

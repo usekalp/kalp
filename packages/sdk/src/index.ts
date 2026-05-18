@@ -200,6 +200,7 @@ export type {
   KalpProjectConfig,
   McpServerInput,
   NormalizedMcpServer,
+  McpServerRuntimeConfig,
   KalpAIEnvironment,
 } from "@/project";
 

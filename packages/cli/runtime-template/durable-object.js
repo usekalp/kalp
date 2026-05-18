@@ -34,7 +34,22 @@ export class AgentDurableObject extends DurableObject {
     super(ctx, env);
     this.ctx = ctx;
     this.env = env;
-    // NO cache — resolver siempre desde registry binding
+    /** @type {Record<string, { url: string; headers?: Record<string, string> }>|null} */
+    this._mcpConfig = null;
+  }
+
+  /** @returns {Record<string, { url: string; headers?: Record<string, string> }>} */
+  getMcpConfig() {
+    if (!this._mcpConfig) {
+      try {
+        this._mcpConfig = this.env.KALP_MCP_CONFIG
+          ? JSON.parse(this.env.KALP_MCP_CONFIG)
+          : {};
+      } catch {
+        this._mcpConfig = {};
+      }
+    }
+    return this._mcpConfig;
   }
 
   async getRuntimeManifest(agentName) {

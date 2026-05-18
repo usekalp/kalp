@@ -21,16 +21,7 @@ import type {
   SchemaRegistry,
 } from "@kalphq/sdk";
 import { DurableObjectPersistence } from "./adapters/durable-object";
-import { CloudflareEffectResolver } from "./adapters/effect-resolver";
-
-export interface CloudflareProviders {
-  ai?: {
-    baseUrl?: string;
-    apiKey?: string;
-    defaultModel?: string;
-  };
-  vault?: Record<string, string>;
-}
+import { CloudflareEffectResolver, type CloudflareProviders } from "./adapters/effect-resolver";
 
 /**
  * Wires Cloudflare-specific adapters to the core runtime factory.
