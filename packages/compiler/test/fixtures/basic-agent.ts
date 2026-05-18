@@ -43,7 +43,7 @@ export const approvalRequested = defineListener<z.infer<typeof agentState>>({
   },
 });
 
-export const healthRoute = defineRoute<z.infer<typeof agentState>>({
+export const healthRoute = defineRoute<z.infer<typeof agentState>, any>({
   id: "GET:/health",
   method: "GET",
   path: "/health",

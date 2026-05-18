@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { defineAgent, defineTool, defineHook, defineRoute } from "@kalphq/sdk";
+import {
+  defineAgent,
+  defineTool,
+  defineHook,
+  defineRouteFor,
+} from "@kalphq/sdk";
 
 export const stateSchema = z.object({ ticks: z.number().default(0) });
 
@@ -19,7 +24,7 @@ export const mathTool = defineTool<z.infer<typeof stateSchema>>({
   },
 });
 
-export const primitivesRoute = defineRoute<z.infer<typeof stateSchema>>({
+export const primitivesRoute = defineRouteFor<z.infer<typeof stateSchema>>()({
   id: "primitives_route",
   method: "GET",
   path: "/api/primitives",
