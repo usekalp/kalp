@@ -32,9 +32,9 @@ export { McpTransport, type McpTransportConfig, type McpToolCallResult, type Mcp
 // Types
 // ────────────────────────────────────────────────────────────────────────────
 
+export type { ExecutionContext } from "@/execution/frame";
 export type {
   ExecutionEvent,
-  ExecutionContext,
   UntrackedIOSource,
   RuntimeEvent,
   RuntimeEventType,

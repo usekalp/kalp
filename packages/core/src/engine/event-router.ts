@@ -1,6 +1,5 @@
-import type { BundleManifest, BundleNodeBinding, IRGraph } from "@kalphq/sdk";
+import type { IRGraph } from "@kalphq/sdk";
 import type { EventDispatchEnvelope } from "./types";
-import type { ReplayLog } from "../state/replay-log";
 
 export function isDispatchEnvelope(
   payload: unknown,
@@ -89,14 +88,6 @@ export function resolveListenerNodeId(
   return null;
 }
 
-export function resolveBundleBinding(
-  nodeId: string,
-  bundleManifest: BundleManifest,
-  target = "default",
-): BundleNodeBinding | null {
-  return bundleManifest.targets[target]?.nodes[nodeId] ?? null;
-}
-
 function findNodeId(
   ir: IRGraph,
   predicate: (node: IRGraph["nodes"][string]) => boolean,
@@ -108,20 +99,4 @@ function findNodeId(
   }
 
   return null;
-}
-
-export function calculateStartingSeq(
-  log: ReplayLog,
-  executionId: string,
-): number {
-  const events = log.getAll(executionId);
-  if (!events) return 0;
-
-  let maxSeq = 0;
-  for (const event of events) {
-    if (event && event.seq !== undefined) {
-      maxSeq = Math.max(maxSeq, event.seq);
-    }
-  }
-  return maxSeq > 0 ? maxSeq + 1 : 0;
 }

@@ -7,40 +7,40 @@
  * @module
  */
 
-/**
- * Serializable suspension state for persistence.
- */
 import type { ExecutionTask } from "@/engine/types";
 
+/**
+ * Serializable suspension state for checkpointing and resuming a paused execution.
+ */
 export interface SuspensionState {
-  /** Timestamp when to resume execution. */
+  /** Timestamp in milliseconds when to resume execution. */
   resumeAt: number;
   /** Reason for waking ("timer", "external", etc.). */
   wakeReason: string;
-  /** Serializable checkpoint state to restore execution context. */
+  /** Serializable checkpoint state to restore the execution context on resume. */
   checkpoint: unknown;
   /** Unique execution identifier. */
   executionId: string;
-  /** Per-handleEvent call identifier. */
+  /** Per-handleEvent call trace identifier. */
   traceId: string;
-  /** Opaque actor identifier. */
+  /** Thread identifier for the suspended execution. */
   threadId: string;
-  /** Hash of the handler code at suspension time (Sequence Key Drift protection). */
+  /** Hash of the handler code at suspension time for sequence key drift protection. */
   handlerHash: string;
-  /** Node ID that was executing when suspended. */
+  /** Node ID that was executing when the suspension occurred. */
   nodeId: string;
-  /** The task to re-enqueue when resuming. */
+  /** The execution task to re-enqueue when resuming. */
   task: ExecutionTask;
   /** Sequence counter at suspension time for exact replay positioning. */
   seqCounter: number;
 }
 
 /**
- * Controlled suspension exception.
+ * Controlled suspension exception for durable execution.
  *
- * Thrown when a handler needs to pause execution (e.g., after waitUntil).
- * The reactor catches this, persists state, and stops processing.
- * The host adapter later calls resumeFromSuspension to continue.
+ * Thrown when a handler needs to pause execution (e.g., after waitUntil or suspend).
+ * The reactor catches this exception, persists the suspension state, and halts processing.
+ * The host adapter resumes execution at a later time.
  */
 export class SuspensionException extends Error {
   /**

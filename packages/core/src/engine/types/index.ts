@@ -1,25 +1,35 @@
 /**
- * Engine types barrel exports.
+ * Shared engine type definitions.
+ *
+ * Central re-export point for all runtime types consumed across the core
+ * package: execution events, dispatch envelopes, runtime stimuli, internal
+ * tasks, and the full effect-type hierarchy.
  *
  * @module
  */
 
-// Execution model
-export type { ExecutionContext, UntrackedIOSource } from "./execution";
+/** Best-effort categories of IO that the effect system cannot intercept. */
+export type { UntrackedIOSource } from "./events";
 
-// Envelope
-export type { EventDispatchEnvelope } from "./envelope";
-
-// Execution events
+/** All structured events emitted during agent execution — the system's source of truth. */
 export type { ExecutionEvent } from "./events";
 
-// Runtime events
+/**
+ * Envelope propagated across asynchronous event dispatch boundaries.
+ * Preserves causal traceability when an emit wakes listener handlers.
+ */
+export type { EventDispatchEnvelope } from "./envelope";
+
+/** External stimulus entering the reactor (onMessage, onTick, resume, etc.). */
 export type { RuntimeEvent, RuntimeEventType } from "./runtime";
 
-// Tasks
+/** Internal work items in the reactor queue and their associated types. */
 export type { ExecutionTask, ContractValidation, HandlerModule } from "./tasks";
 
-// Effects (re-exported from effects module)
+/**
+ * Strongly-typed effect descriptors: runtime descriptors, resolvers, and
+ * the full type-level map of every supported effect (external + instruction).
+ */
 export type {
   Effect,
   EffectResult,
@@ -30,4 +40,4 @@ export type {
   ExternalEffectMap,
   InstructionEffectType,
   InstructionEffectMap,
-} from "./effects";
+} from "@/effects/types";

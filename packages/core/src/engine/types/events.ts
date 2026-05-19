@@ -4,7 +4,10 @@
  * @module
  */
 
-import type { UntrackedIOSource } from "./execution";
+/**
+ * Categories of untracked IO that Kalp can detect (best-effort).
+ */
+export type UntrackedIOSource = "network" | "timer" | "fs" | "unknown";
 
 /**
  * Union of all structured events emitted during agent execution.

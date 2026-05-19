@@ -4,10 +4,9 @@ import type {
   AgentDefinition,
   KalpHistory,
 } from "@kalphq/sdk";
-import type { EffectResolver, EffectType, EffectMap } from "./types";
+import type { EffectResolver } from "./types";
 import type { ReplayLog, PersistedEffect } from "../state/replay-log";
 import type { ExecutionFrame } from "../execution/frame";
-import { serializeError } from "../state/replay-log";
 
 import {
   createAIContext,
@@ -21,8 +20,29 @@ import {
   createActionsContext,
   createRuntimeContext,
   createSchedulesContext,
+  type LocalActions,
 } from "./primitives";
+import {
+  createInterceptEffect,
+  createInterceptLocalEffect,
+  createInterceptSync,
+} from "./interceptors";
 
+/**
+ * Create the full agent execution context by wiring all primitives to the effect resolution pipeline.
+ * Assembles AI, storage, time, memory, MCP, log, vault, actions, schedules, and runtime into a single
+ * {@link KalpContext} used throughout agent execution.
+ *
+ * @param resolver - Effect resolver that processes each effect.
+ * @param log - Replay log for deterministic replay of effect sequences.
+ * @param frame - Current execution frame containing sequencing and tracing state.
+ * @param onEffectResolved - Callback invoked after each effect is persisted.
+ * @param agentDefinition - Agent metadata including name and configuration.
+ * @param history - Conversation history for the current execution.
+ * @param state - Agent-level state bag shared across primitives.
+ * @param localActions - Local action handlers for call and dispatch within the same process.
+ * @param auth - Optional authentication context for the current user.
+ */
 export function createProxyContext(
   resolver: EffectResolver,
   log: ReplayLog,
@@ -31,122 +51,12 @@ export function createProxyContext(
   agentDefinition: AgentDefinition,
   history: KalpHistory,
   state: Record<string, unknown>,
-  localActions: {
-    call: (
-      listener: any,
-      payload: unknown,
-      options?: unknown,
-    ) => Promise<unknown>;
-    dispatch: (
-      listener: any,
-      payload: unknown,
-      options?: unknown,
-    ) => Promise<{ eventId: string }>;
-  },
+  localActions: LocalActions,
   auth?: KalpAuth,
 ): KalpContext {
-  async function interceptEffect<T extends EffectType>(
-    type: T,
-    payload: EffectMap[T]["payload"],
-  ): Promise<EffectMap[T]["result"]> {
-    const seq = frame.seqCounter++;
-    const cached = log.get(frame.executionId, seq);
-    if (cached) {
-      if (cached.error) {
-        const error = new Error(cached.error.message);
-        error.name = cached.error.name;
-        if (cached.error.stack) error.stack = cached.error.stack;
-        throw error;
-      }
-      if (cached.result !== undefined) {
-        return cached.result as EffectMap[T]["result"];
-      }
-    }
-
-    const effectData = {
-      type,
-      seq,
-      payload,
-      executionId: frame.executionId,
-      traceId: frame.ctx.traceId,
-      threadId: frame.ctx.threadId,
-      timestamp: Date.now(),
-    };
-
-    try {
-      const result = await resolver.resolve(effectData as any);
-      await onEffectResolved({ ...effectData, result });
-      return result as EffectMap[T]["result"];
-    } catch (err) {
-      await onEffectResolved({ ...effectData, error: serializeError(err) });
-      throw err;
-    }
-  }
-
-  async function interceptLocalEffect<T>(
-    type: "action.call" | "action.dispatch",
-    payload: EffectMap[typeof type]["payload"],
-    execute: () => Promise<T>,
-  ): Promise<T> {
-    const seq = frame.seqCounter++;
-    const cached = log.get(frame.executionId, seq);
-    if (cached) {
-      if (cached.error) {
-        const error = new Error(cached.error.message);
-        error.name = cached.error.name;
-        if (cached.error.stack) error.stack = cached.error.stack;
-        throw error;
-      }
-      if (cached.result !== undefined) {
-        return cached.result as T;
-      }
-      return undefined as T;
-    }
-
-    const effectData = {
-      type,
-      seq,
-      payload,
-      executionId: frame.executionId,
-      traceId: frame.ctx.traceId,
-      threadId: frame.ctx.threadId,
-      timestamp: Date.now(),
-    };
-
-    try {
-      const result = await execute();
-      await onEffectResolved({ ...effectData, result });
-      return result;
-    } catch (err) {
-      await onEffectResolved({ ...effectData, error: serializeError(err) });
-      throw err;
-    }
-  }
-
-  function interceptSync<T>(
-    type: string,
-    payload: unknown,
-    compute: () => T,
-  ): T {
-    const seq = frame.seqCounter++;
-    const cached = log.get(frame.executionId, seq);
-    if (cached?.result !== undefined) {
-      return cached.result as T;
-    }
-    const result = compute();
-    void (resolver as any)
-      .resolve({
-        type,
-        seq,
-        payload,
-        executionId: frame.executionId,
-        traceId: frame.ctx.traceId,
-        threadId: frame.ctx.threadId,
-        timestamp: Date.now(),
-      })
-      .catch(() => {});
-    return result;
-  }
+  const interceptEffect = createInterceptEffect(resolver, log, frame, onEffectResolved);
+  const interceptLocalEffect = createInterceptLocalEffect(resolver, log, frame, onEffectResolved);
+  const interceptSync = createInterceptSync(resolver, log, frame, onEffectResolved);
 
   const baseTime = interceptSync("time.baseTime", {}, () => Date.now());
 
@@ -197,6 +107,6 @@ export function createProxyContext(
     }),
     agent: { definition: agentDefinition },
     history,
-    auth,
+    auth: auth ?? { userId: null, email: null, name: null, claims: null, isAuthenticated: false, getToken: () => null },
   } as unknown as KalpContext;
 }

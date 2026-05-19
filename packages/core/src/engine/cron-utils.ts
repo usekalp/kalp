@@ -1,25 +1,20 @@
+import { parseCronExpression, type ParsedCronExpression } from "./cron-parser";
+
+export type { ParsedCronExpression };
+
 /**
- * Cron parsing and matching utilities.
+ * Decomposed time components used for cron expression matching against a parsed expression.
  */
-
-export interface CronField {
-  any: boolean;
-  values: Set<number>;
-}
-
-export interface ParsedCronExpression {
-  minute: CronField;
-  hour: CronField;
-  dayOfMonth: CronField;
-  month: CronField;
-  dayOfWeek: CronField;
-}
-
 export interface TimeParts {
+  /** Minute (0-59). */
   minute: number;
+  /** Hour (0-23). */
   hour: number;
+  /** Day of month (1-31). */
   dayOfMonth: number;
+  /** Month (1-12). */
   month: number;
+  /** Day of week (0-6, where 0 is Sunday). */
   dayOfWeek: number;
 }
 
@@ -34,113 +29,6 @@ const WEEKDAY_TO_INDEX: Record<string, number> = {
 };
 
 const formatterCache = new Map<string, Intl.DateTimeFormat>();
-const cronCache = new Map<string, ParsedCronExpression>();
-
-/**
- * Parses a single cron field (e.g., "0", "*", "1-5").
- */
-function parseCronField(
-  rawField: string,
-  min: number,
-  max: number,
-  fieldName: string,
-): CronField {
-  const field = rawField.trim();
-
-  if (!field) {
-    throw new Error(`Invalid cron: empty ${fieldName} field`);
-  }
-
-  if (field === "*") {
-    return { any: true, values: new Set<number>() };
-  }
-
-  const values = new Set<number>();
-  const segments = field.split(",");
-
-  for (const segment of segments) {
-    const token = segment.trim();
-    if (!token) {
-      throw new Error(`Invalid cron: malformed ${fieldName} field "${rawField}"`);
-    }
-
-    const [basePart, stepPart] = token.split("/");
-    if (!basePart) {
-      throw new Error(`Invalid cron: malformed ${fieldName} token "${token}"`);
-    }
-
-    const step = stepPart !== undefined ? Number.parseInt(stepPart, 10) : undefined;
-
-    if (stepPart !== undefined && (step === undefined || !Number.isInteger(step) || step <= 0)) {
-      throw new Error(`Invalid cron: invalid step "${stepPart}" in ${fieldName}`);
-    }
-
-    let rangeStart: number;
-    let rangeEnd: number;
-
-    if (basePart === "*") {
-      rangeStart = min;
-      rangeEnd = max;
-    } else if (basePart.includes("-")) {
-      const [rawStart, rawEnd] = basePart.split("-");
-      const start = Number.parseInt(rawStart ?? "", 10);
-      const end = Number.parseInt(rawEnd ?? "", 10);
-      if (!Number.isInteger(start) || !Number.isInteger(end)) {
-        throw new Error(`Invalid cron: malformed range "${basePart}" in ${fieldName}`);
-      }
-      rangeStart = Math.min(start, end);
-      rangeEnd = Math.max(start, end);
-    } else {
-      const value = Number.parseInt(basePart, 10);
-      if (!Number.isInteger(value)) {
-        throw new Error(`Invalid cron: invalid value "${basePart}" in ${fieldName}`);
-      }
-      rangeStart = value;
-      rangeEnd = value;
-    }
-
-    if (rangeStart < min || rangeEnd > max) {
-      throw new Error(`Invalid cron: ${fieldName} value out of range (${min}-${max}) in "${token}"`);
-    }
-
-    const increment = step ?? 1;
-    for (let value = rangeStart; value <= rangeEnd; value += increment) {
-      values.add(value);
-    }
-  }
-
-  return { any: false, values };
-}
-
-/**
- * Parses a standard 5-field cron expression.
- */
-export function parseCronExpression(cron: string): ParsedCronExpression {
-  const cached = cronCache.get(cron);
-  if (cached) return cached;
-
-  const parts = cron.trim().split(/\s+/);
-  if (parts.length !== 5) {
-    throw new Error(`Invalid cron: expected 5 fields, received ${parts.length}`);
-  }
-
-  const parsed: ParsedCronExpression = {
-    minute: parseCronField(parts[0]!, 0, 59, "minute"),
-    hour: parseCronField(parts[1]!, 0, 23, "hour"),
-    dayOfMonth: parseCronField(parts[2]!, 1, 31, "day-of-month"),
-    month: parseCronField(parts[3]!, 1, 12, "month"),
-    dayOfWeek: parseCronField(parts[4]!, 0, 7, "day-of-week"),
-  };
-
-  // Normalize Sunday aliases (0 and 7)
-  if (!parsed.dayOfWeek.any && parsed.dayOfWeek.values.has(7)) {
-    parsed.dayOfWeek.values.delete(7);
-    parsed.dayOfWeek.values.add(0);
-  }
-
-  cronCache.set(cron, parsed);
-  return parsed;
-}
 
 function getFormatter(timezone: string): Intl.DateTimeFormat {
   const cached = formatterCache.get(timezone);
@@ -161,7 +49,11 @@ function getFormatter(timezone: string): Intl.DateTimeFormat {
 }
 
 /**
- * Extracts time components from a timestamp for a given timezone.
+ * Decomposes a Unix timestamp into time components, optionally adjusted to a specific timezone.
+ *
+ * @param timestamp - The Unix timestamp in milliseconds.
+ * @param timezone - An IANA timezone string (e.g. "America/New_York"). Defaults to UTC.
+ * @returns The time parts for cron evaluation.
  */
 export function getTimeParts(timestamp: number, timezone?: string): TimeParts {
   if (!timezone) {
@@ -199,7 +91,14 @@ export function getTimeParts(timestamp: number, timezone?: string): TimeParts {
 }
 
 /**
- * Checks if a parsed cron expression matches the given time parts.
+ * Tests whether the given time parts match a parsed cron expression.
+ *
+ * When both day-of-month and day-of-week constraints are specified, either one
+ * matching is sufficient (OR semantics).
+ *
+ * @param cron - The parsed cron expression to test against.
+ * @param timeParts - The time components to evaluate.
+ * @returns True if the time matches the cron expression.
  */
 export function matchesCron(
   cron: ParsedCronExpression,
@@ -212,7 +111,6 @@ export function matchesCron(
   const dayOfMonthMatch = cron.dayOfMonth.any || cron.dayOfMonth.values.has(timeParts.dayOfMonth);
   const dayOfWeekMatch = cron.dayOfWeek.any || cron.dayOfWeek.values.has(timeParts.dayOfWeek);
 
-  // POSIX semantics for DOM/DOW
   if (!cron.dayOfMonth.any && !cron.dayOfWeek.any) {
     return dayOfMonthMatch || dayOfWeekMatch;
   }
@@ -221,7 +119,14 @@ export function matchesCron(
 }
 
 /**
- * Calculates the next occurrence of a cron expression after a given timestamp.
+ * Calculates the next Unix timestamp (in milliseconds) when a cron expression will match,
+ * starting from the given reference time. Searches minute-by-minute within a 5-year window.
+ *
+ * @param cron - A standard 5-field cron expression string.
+ * @param fromTimestamp - The reference timestamp in milliseconds.
+ * @param timezone - An optional IANA timezone string for evaluation.
+ * @returns The next matching timestamp in milliseconds.
+ * @throws If no matching time is found within the lookahead window.
  */
 export function calculateNextOccurrence(
   cron: string,
@@ -230,10 +135,9 @@ export function calculateNextOccurrence(
 ): number {
   const parsed = parseCronExpression(cron);
   const MINUTE_MS = 60_000;
-  
-  // Start searching from the next minute
+
   let current = Math.floor((fromTimestamp + MINUTE_MS) / MINUTE_MS) * MINUTE_MS;
-  const maxLookahead = fromTimestamp + (5 * 366 * 24 * 60 * MINUTE_MS); // 5 years
+  const maxLookahead = fromTimestamp + (5 * 366 * 24 * 60 * MINUTE_MS);
 
   while (current <= maxLookahead) {
     const parts = getTimeParts(current, timezone);

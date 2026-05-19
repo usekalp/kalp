@@ -1,41 +1,56 @@
 import type { UntrackedIOSource } from "@/engine/types";
 
 /**
- * Global execution context for an entire `handleEvent` trace.
+ * Captures the causal scope of a single `handleEvent` stimulus.
+ *
+ * Provides a globally unique trace identity and tracks side-effect purity
+ * across the entire execution tree rooted at one external input.
  */
 export interface ExecutionContext {
-  /** Per `handleEvent()` call. Groups all executions from one external stimulus. */
+  /** Groups all frames, effects, and events produced by one external stimulus into a single trace for replay and observability. */
   traceId: string;
-  /** Opaque actor identifier. Adapter maps to infrastructure (CF: DO id, tests: in-memory). */
+  /** Identifies the actor executing this trace. Maps to infrastructure primitives (e.g. Cloudflare DO, test in-memory actor) via the adapter layer. */
   threadId: string;
-  /** Total count of detected untracked IO operations. */
+  /** Accumulates best-effort detections of IO that bypassed the effect system, compromising deterministic replay guarantees. */
   untrackedIOCount: number;
-  /** Breakdown of untracked IO by source type. */
+  /** Breaks down untracked IO detections by source category for debugging replay fidelity. */
   untrackedIOByType: Record<UntrackedIOSource, number>;
-  /** Whether any plugin has been loaded (observability may be incomplete). */
+  /** Flags whether untrusted plugin code was loaded, which may have performed IO outside the tracked effect system. */
   hasUntrustedPlugins: boolean;
 }
 
 /**
- * Local scope for a specific handler invocation.
- * Supports nested executions by isolating sequence scopes.
+ * Isolates a single handler invocation's sequencing state.
+ *
+ * Nested executions (e.g. `action.run`, listener dispatch) each get their own
+ * frame so that effect sequences remain independently scoped and deterministic
+ * replay does not drift across nesting levels.
  */
 export interface ExecutionFrame {
-  /** Unique per handler invocation (UUID). Distinguishes retries, loop iterations. */
+  /** UUID uniquely identifying this handler invocation. Changes on retries and loop iterations to prevent sequence collision. */
   executionId: string;
   /** 
-   * Synchronous sequence counter for deterministic replay inside this frame.
+   * Monotonically increasing counter scoped to this frame.
+   * Determines the ordering of effect emission for deterministic replay.
    * Scoped locally to prevent drift from nested child executions.
    */
   seqCounter: number;
-  /** The trace context this frame belongs to. */
+  /** Reference to the parent execution context that owns this frame. */
   ctx: ExecutionContext;
-  /** Parent execution frame if nested (e.g. action.run) */
+  /** Links to the frame that spawned this nested execution, or absent if this is a root frame. */
   parentExecutionId?: string;
 }
 
 /**
- * Initialize a root frame.
+ * Creates the initial {@link ExecutionFrame} for a new handler invocation.
+ *
+ * Establishes the execution identity and sequence scope that all effects
+ * emitted by this handler will anchor to for deterministic replay.
+ *
+ * @param ctx - The execution context this frame belongs to.
+ * @param executionId - Unique identifier for this handler invocation.
+ * @param startingSeq - Initial sequence counter value (default 0).
+ * @returns A new root frame with no parent.
  */
 export function createRootFrame(
   ctx: ExecutionContext,
@@ -47,13 +62,4 @@ export function createRootFrame(
     seqCounter: startingSeq,
     ctx,
   };
-}
-
-/**
- * Claim the next sequence number in this frame.
- */
-export function nextSeq(frame: ExecutionFrame): number {
-  const seq = frame.seqCounter;
-  frame.seqCounter += 1;
-  return seq;
 }
