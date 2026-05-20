@@ -25,6 +25,7 @@
     "@tanstack/react-router-devtools": "latest",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "framer-motion": "^12.39.0",
     "lucide-react": "^0.545.0",
     "radix-ui": "^1.4.3",
     "react": "^19.2.0",
@@ -60,6 +61,11 @@
     "onlyBuiltDependencies": [
       "esbuild",
       "lightningcss"
+    ]
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
     ]
   }
 }

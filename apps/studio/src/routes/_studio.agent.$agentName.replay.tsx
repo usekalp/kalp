@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Activity, ArrowUpRight, Clock3, Radar } from 'lucide-react'
-import { Badge } from '#/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
-import { Skeleton } from '#/components/ui/skeleton'
+import { Badge } from '@kalphq/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@kalphq/ui/card'
+import { Skeleton } from '@kalphq/ui/skeleton'
 import { useRuntimeExecutions } from '#/hooks/useRuntimeSubscriptions'
 
 export const Route = createFileRoute('/_studio/agent/$agentName/replay')({

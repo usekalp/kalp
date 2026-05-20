@@ -5,9 +5,9 @@
  * @module
  */
 
-import { Button } from '#/components/ui/button'
-import { Slider } from '#/components/ui/slider'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
+import { Button } from '@kalphq/ui/button'
+import { Slider } from '@kalphq/ui/slider'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@kalphq/ui/select'
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react'
 import type { ReplayState } from '#/types/events'
 

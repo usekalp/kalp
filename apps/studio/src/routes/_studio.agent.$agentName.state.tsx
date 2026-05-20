@@ -1,10 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { MemoryStick, ShieldAlert } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
-import { Skeleton } from '#/components/ui/skeleton'
+import { Card, CardContent, CardHeader, CardTitle } from '@kalphq/ui/card'
+import { Skeleton } from '@kalphq/ui/skeleton'
 import { useRuntimeAgentState } from '#/hooks/useRuntimeSubscriptions'
 
-export const Route = createFileRoute('/_studio/agent/$agentName/memory')({
+export const Route = createFileRoute('/_studio/agent/$agentName/state')({
   component: AgentMemoryPage,
 })
 

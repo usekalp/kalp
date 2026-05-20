@@ -13,13 +13,22 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as StudioRouteImport } from './routes/_studio'
 import { Route as StudioIndexRouteImport } from './routes/_studio.index'
 import { Route as ReplayExecutionIdRouteImport } from './routes/replay.$executionId'
+import { Route as StudioStorageRouteImport } from './routes/_studio.storage'
 import { Route as StudioSettingsRouteImport } from './routes/_studio.settings'
+import { Route as StudioSecretsRouteImport } from './routes/_studio.secrets'
 import { Route as StudioMembersRouteImport } from './routes/_studio.members'
+import { Route as StudioAccountRouteImport } from './routes/_studio.account'
+import { Route as StudioSettingsIndexRouteImport } from './routes/_studio.settings.index'
+import { Route as StudioSettingsSecretsRouteImport } from './routes/_studio.settings.secrets'
+import { Route as StudioSettingsMcpRouteImport } from './routes/_studio.settings.mcp'
+import { Route as StudioSettingsAiRouteImport } from './routes/_studio.settings.ai'
 import { Route as StudioAgentAgentNameRouteImport } from './routes/_studio.agent.$agentName'
 import { Route as StudioAgentAgentNameIndexRouteImport } from './routes/_studio.agent.$agentName.index'
-import { Route as StudioAgentAgentNameTriggersRouteImport } from './routes/_studio.agent.$agentName.triggers'
+import { Route as StudioAgentAgentNameTopologyRouteImport } from './routes/_studio.agent.$agentName.topology'
+import { Route as StudioAgentAgentNameStateRouteImport } from './routes/_studio.agent.$agentName.state'
 import { Route as StudioAgentAgentNameReplayRouteImport } from './routes/_studio.agent.$agentName.replay'
-import { Route as StudioAgentAgentNameMemoryRouteImport } from './routes/_studio.agent.$agentName.memory'
+import { Route as StudioAgentAgentNameChatRouteImport } from './routes/_studio.agent.$agentName.chat'
+import { Route as StudioAgentAgentNameActivityRouteImport } from './routes/_studio.agent.$agentName.activity'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -40,15 +49,50 @@ const ReplayExecutionIdRoute = ReplayExecutionIdRouteImport.update({
   path: '/replay/$executionId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StudioStorageRoute = StudioStorageRouteImport.update({
+  id: '/storage',
+  path: '/storage',
+  getParentRoute: () => StudioRoute,
+} as any)
 const StudioSettingsRoute = StudioSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => StudioRoute,
+} as any)
+const StudioSecretsRoute = StudioSecretsRouteImport.update({
+  id: '/secrets',
+  path: '/secrets',
   getParentRoute: () => StudioRoute,
 } as any)
 const StudioMembersRoute = StudioMembersRouteImport.update({
   id: '/members',
   path: '/members',
   getParentRoute: () => StudioRoute,
+} as any)
+const StudioAccountRoute = StudioAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => StudioRoute,
+} as any)
+const StudioSettingsIndexRoute = StudioSettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => StudioSettingsRoute,
+} as any)
+const StudioSettingsSecretsRoute = StudioSettingsSecretsRouteImport.update({
+  id: '/secrets',
+  path: '/secrets',
+  getParentRoute: () => StudioSettingsRoute,
+} as any)
+const StudioSettingsMcpRoute = StudioSettingsMcpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => StudioSettingsRoute,
+} as any)
+const StudioSettingsAiRoute = StudioSettingsAiRouteImport.update({
+  id: '/ai',
+  path: '/ai',
+  getParentRoute: () => StudioSettingsRoute,
 } as any)
 const StudioAgentAgentNameRoute = StudioAgentAgentNameRouteImport.update({
   id: '/agent/$agentName',
@@ -61,10 +105,16 @@ const StudioAgentAgentNameIndexRoute =
     path: '/',
     getParentRoute: () => StudioAgentAgentNameRoute,
   } as any)
-const StudioAgentAgentNameTriggersRoute =
-  StudioAgentAgentNameTriggersRouteImport.update({
-    id: '/triggers',
-    path: '/triggers',
+const StudioAgentAgentNameTopologyRoute =
+  StudioAgentAgentNameTopologyRouteImport.update({
+    id: '/topology',
+    path: '/topology',
+    getParentRoute: () => StudioAgentAgentNameRoute,
+  } as any)
+const StudioAgentAgentNameStateRoute =
+  StudioAgentAgentNameStateRouteImport.update({
+    id: '/state',
+    path: '/state',
     getParentRoute: () => StudioAgentAgentNameRoute,
   } as any)
 const StudioAgentAgentNameReplayRoute =
@@ -73,48 +123,80 @@ const StudioAgentAgentNameReplayRoute =
     path: '/replay',
     getParentRoute: () => StudioAgentAgentNameRoute,
   } as any)
-const StudioAgentAgentNameMemoryRoute =
-  StudioAgentAgentNameMemoryRouteImport.update({
-    id: '/memory',
-    path: '/memory',
+const StudioAgentAgentNameChatRoute =
+  StudioAgentAgentNameChatRouteImport.update({
+    id: '/chat',
+    path: '/chat',
+    getParentRoute: () => StudioAgentAgentNameRoute,
+  } as any)
+const StudioAgentAgentNameActivityRoute =
+  StudioAgentAgentNameActivityRouteImport.update({
+    id: '/activity',
+    path: '/activity',
     getParentRoute: () => StudioAgentAgentNameRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof StudioIndexRoute
   '/login': typeof LoginRoute
+  '/account': typeof StudioAccountRoute
   '/members': typeof StudioMembersRoute
-  '/settings': typeof StudioSettingsRoute
+  '/secrets': typeof StudioSecretsRoute
+  '/settings': typeof StudioSettingsRouteWithChildren
+  '/storage': typeof StudioStorageRoute
   '/replay/$executionId': typeof ReplayExecutionIdRoute
   '/agent/$agentName': typeof StudioAgentAgentNameRouteWithChildren
-  '/agent/$agentName/memory': typeof StudioAgentAgentNameMemoryRoute
+  '/settings/ai': typeof StudioSettingsAiRoute
+  '/settings/mcp': typeof StudioSettingsMcpRoute
+  '/settings/secrets': typeof StudioSettingsSecretsRoute
+  '/settings/': typeof StudioSettingsIndexRoute
+  '/agent/$agentName/activity': typeof StudioAgentAgentNameActivityRoute
+  '/agent/$agentName/chat': typeof StudioAgentAgentNameChatRoute
   '/agent/$agentName/replay': typeof StudioAgentAgentNameReplayRoute
-  '/agent/$agentName/triggers': typeof StudioAgentAgentNameTriggersRoute
+  '/agent/$agentName/state': typeof StudioAgentAgentNameStateRoute
+  '/agent/$agentName/topology': typeof StudioAgentAgentNameTopologyRoute
   '/agent/$agentName/': typeof StudioAgentAgentNameIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
+  '/account': typeof StudioAccountRoute
   '/members': typeof StudioMembersRoute
-  '/settings': typeof StudioSettingsRoute
+  '/secrets': typeof StudioSecretsRoute
+  '/storage': typeof StudioStorageRoute
   '/replay/$executionId': typeof ReplayExecutionIdRoute
   '/': typeof StudioIndexRoute
-  '/agent/$agentName/memory': typeof StudioAgentAgentNameMemoryRoute
+  '/settings/ai': typeof StudioSettingsAiRoute
+  '/settings/mcp': typeof StudioSettingsMcpRoute
+  '/settings/secrets': typeof StudioSettingsSecretsRoute
+  '/settings': typeof StudioSettingsIndexRoute
+  '/agent/$agentName/activity': typeof StudioAgentAgentNameActivityRoute
+  '/agent/$agentName/chat': typeof StudioAgentAgentNameChatRoute
   '/agent/$agentName/replay': typeof StudioAgentAgentNameReplayRoute
-  '/agent/$agentName/triggers': typeof StudioAgentAgentNameTriggersRoute
+  '/agent/$agentName/state': typeof StudioAgentAgentNameStateRoute
+  '/agent/$agentName/topology': typeof StudioAgentAgentNameTopologyRoute
   '/agent/$agentName': typeof StudioAgentAgentNameIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_studio': typeof StudioRouteWithChildren
   '/login': typeof LoginRoute
+  '/_studio/account': typeof StudioAccountRoute
   '/_studio/members': typeof StudioMembersRoute
-  '/_studio/settings': typeof StudioSettingsRoute
+  '/_studio/secrets': typeof StudioSecretsRoute
+  '/_studio/settings': typeof StudioSettingsRouteWithChildren
+  '/_studio/storage': typeof StudioStorageRoute
   '/replay/$executionId': typeof ReplayExecutionIdRoute
   '/_studio/': typeof StudioIndexRoute
   '/_studio/agent/$agentName': typeof StudioAgentAgentNameRouteWithChildren
-  '/_studio/agent/$agentName/memory': typeof StudioAgentAgentNameMemoryRoute
+  '/_studio/settings/ai': typeof StudioSettingsAiRoute
+  '/_studio/settings/mcp': typeof StudioSettingsMcpRoute
+  '/_studio/settings/secrets': typeof StudioSettingsSecretsRoute
+  '/_studio/settings/': typeof StudioSettingsIndexRoute
+  '/_studio/agent/$agentName/activity': typeof StudioAgentAgentNameActivityRoute
+  '/_studio/agent/$agentName/chat': typeof StudioAgentAgentNameChatRoute
   '/_studio/agent/$agentName/replay': typeof StudioAgentAgentNameReplayRoute
-  '/_studio/agent/$agentName/triggers': typeof StudioAgentAgentNameTriggersRoute
+  '/_studio/agent/$agentName/state': typeof StudioAgentAgentNameStateRoute
+  '/_studio/agent/$agentName/topology': typeof StudioAgentAgentNameTopologyRoute
   '/_studio/agent/$agentName/': typeof StudioAgentAgentNameIndexRoute
 }
 export interface FileRouteTypes {
@@ -122,37 +204,63 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/account'
     | '/members'
+    | '/secrets'
     | '/settings'
+    | '/storage'
     | '/replay/$executionId'
     | '/agent/$agentName'
-    | '/agent/$agentName/memory'
+    | '/settings/ai'
+    | '/settings/mcp'
+    | '/settings/secrets'
+    | '/settings/'
+    | '/agent/$agentName/activity'
+    | '/agent/$agentName/chat'
     | '/agent/$agentName/replay'
-    | '/agent/$agentName/triggers'
+    | '/agent/$agentName/state'
+    | '/agent/$agentName/topology'
     | '/agent/$agentName/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
+    | '/account'
     | '/members'
-    | '/settings'
+    | '/secrets'
+    | '/storage'
     | '/replay/$executionId'
     | '/'
-    | '/agent/$agentName/memory'
+    | '/settings/ai'
+    | '/settings/mcp'
+    | '/settings/secrets'
+    | '/settings'
+    | '/agent/$agentName/activity'
+    | '/agent/$agentName/chat'
     | '/agent/$agentName/replay'
-    | '/agent/$agentName/triggers'
+    | '/agent/$agentName/state'
+    | '/agent/$agentName/topology'
     | '/agent/$agentName'
   id:
     | '__root__'
     | '/_studio'
     | '/login'
+    | '/_studio/account'
     | '/_studio/members'
+    | '/_studio/secrets'
     | '/_studio/settings'
+    | '/_studio/storage'
     | '/replay/$executionId'
     | '/_studio/'
     | '/_studio/agent/$agentName'
-    | '/_studio/agent/$agentName/memory'
+    | '/_studio/settings/ai'
+    | '/_studio/settings/mcp'
+    | '/_studio/settings/secrets'
+    | '/_studio/settings/'
+    | '/_studio/agent/$agentName/activity'
+    | '/_studio/agent/$agentName/chat'
     | '/_studio/agent/$agentName/replay'
-    | '/_studio/agent/$agentName/triggers'
+    | '/_studio/agent/$agentName/state'
+    | '/_studio/agent/$agentName/topology'
     | '/_studio/agent/$agentName/'
   fileRoutesById: FileRoutesById
 }
@@ -192,11 +300,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReplayExecutionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_studio/storage': {
+      id: '/_studio/storage'
+      path: '/storage'
+      fullPath: '/storage'
+      preLoaderRoute: typeof StudioStorageRouteImport
+      parentRoute: typeof StudioRoute
+    }
     '/_studio/settings': {
       id: '/_studio/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof StudioSettingsRouteImport
+      parentRoute: typeof StudioRoute
+    }
+    '/_studio/secrets': {
+      id: '/_studio/secrets'
+      path: '/secrets'
+      fullPath: '/secrets'
+      preLoaderRoute: typeof StudioSecretsRouteImport
       parentRoute: typeof StudioRoute
     }
     '/_studio/members': {
@@ -205,6 +327,41 @@ declare module '@tanstack/react-router' {
       fullPath: '/members'
       preLoaderRoute: typeof StudioMembersRouteImport
       parentRoute: typeof StudioRoute
+    }
+    '/_studio/account': {
+      id: '/_studio/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof StudioAccountRouteImport
+      parentRoute: typeof StudioRoute
+    }
+    '/_studio/settings/': {
+      id: '/_studio/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof StudioSettingsIndexRouteImport
+      parentRoute: typeof StudioSettingsRoute
+    }
+    '/_studio/settings/secrets': {
+      id: '/_studio/settings/secrets'
+      path: '/secrets'
+      fullPath: '/settings/secrets'
+      preLoaderRoute: typeof StudioSettingsSecretsRouteImport
+      parentRoute: typeof StudioSettingsRoute
+    }
+    '/_studio/settings/mcp': {
+      id: '/_studio/settings/mcp'
+      path: '/mcp'
+      fullPath: '/settings/mcp'
+      preLoaderRoute: typeof StudioSettingsMcpRouteImport
+      parentRoute: typeof StudioSettingsRoute
+    }
+    '/_studio/settings/ai': {
+      id: '/_studio/settings/ai'
+      path: '/ai'
+      fullPath: '/settings/ai'
+      preLoaderRoute: typeof StudioSettingsAiRouteImport
+      parentRoute: typeof StudioSettingsRoute
     }
     '/_studio/agent/$agentName': {
       id: '/_studio/agent/$agentName'
@@ -220,11 +377,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioAgentAgentNameIndexRouteImport
       parentRoute: typeof StudioAgentAgentNameRoute
     }
-    '/_studio/agent/$agentName/triggers': {
-      id: '/_studio/agent/$agentName/triggers'
-      path: '/triggers'
-      fullPath: '/agent/$agentName/triggers'
-      preLoaderRoute: typeof StudioAgentAgentNameTriggersRouteImport
+    '/_studio/agent/$agentName/topology': {
+      id: '/_studio/agent/$agentName/topology'
+      path: '/topology'
+      fullPath: '/agent/$agentName/topology'
+      preLoaderRoute: typeof StudioAgentAgentNameTopologyRouteImport
+      parentRoute: typeof StudioAgentAgentNameRoute
+    }
+    '/_studio/agent/$agentName/state': {
+      id: '/_studio/agent/$agentName/state'
+      path: '/state'
+      fullPath: '/agent/$agentName/state'
+      preLoaderRoute: typeof StudioAgentAgentNameStateRouteImport
       parentRoute: typeof StudioAgentAgentNameRoute
     }
     '/_studio/agent/$agentName/replay': {
@@ -234,27 +398,56 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioAgentAgentNameReplayRouteImport
       parentRoute: typeof StudioAgentAgentNameRoute
     }
-    '/_studio/agent/$agentName/memory': {
-      id: '/_studio/agent/$agentName/memory'
-      path: '/memory'
-      fullPath: '/agent/$agentName/memory'
-      preLoaderRoute: typeof StudioAgentAgentNameMemoryRouteImport
+    '/_studio/agent/$agentName/chat': {
+      id: '/_studio/agent/$agentName/chat'
+      path: '/chat'
+      fullPath: '/agent/$agentName/chat'
+      preLoaderRoute: typeof StudioAgentAgentNameChatRouteImport
+      parentRoute: typeof StudioAgentAgentNameRoute
+    }
+    '/_studio/agent/$agentName/activity': {
+      id: '/_studio/agent/$agentName/activity'
+      path: '/activity'
+      fullPath: '/agent/$agentName/activity'
+      preLoaderRoute: typeof StudioAgentAgentNameActivityRouteImport
       parentRoute: typeof StudioAgentAgentNameRoute
     }
   }
 }
 
+interface StudioSettingsRouteChildren {
+  StudioSettingsAiRoute: typeof StudioSettingsAiRoute
+  StudioSettingsMcpRoute: typeof StudioSettingsMcpRoute
+  StudioSettingsSecretsRoute: typeof StudioSettingsSecretsRoute
+  StudioSettingsIndexRoute: typeof StudioSettingsIndexRoute
+}
+
+const StudioSettingsRouteChildren: StudioSettingsRouteChildren = {
+  StudioSettingsAiRoute: StudioSettingsAiRoute,
+  StudioSettingsMcpRoute: StudioSettingsMcpRoute,
+  StudioSettingsSecretsRoute: StudioSettingsSecretsRoute,
+  StudioSettingsIndexRoute: StudioSettingsIndexRoute,
+}
+
+const StudioSettingsRouteWithChildren = StudioSettingsRoute._addFileChildren(
+  StudioSettingsRouteChildren,
+)
+
 interface StudioAgentAgentNameRouteChildren {
-  StudioAgentAgentNameMemoryRoute: typeof StudioAgentAgentNameMemoryRoute
+  StudioAgentAgentNameActivityRoute: typeof StudioAgentAgentNameActivityRoute
+  StudioAgentAgentNameChatRoute: typeof StudioAgentAgentNameChatRoute
   StudioAgentAgentNameReplayRoute: typeof StudioAgentAgentNameReplayRoute
-  StudioAgentAgentNameTriggersRoute: typeof StudioAgentAgentNameTriggersRoute
+  StudioAgentAgentNameStateRoute: typeof StudioAgentAgentNameStateRoute
+  StudioAgentAgentNameTopologyRoute: typeof StudioAgentAgentNameTopologyRoute
   StudioAgentAgentNameIndexRoute: typeof StudioAgentAgentNameIndexRoute
 }
 
 const StudioAgentAgentNameRouteChildren: StudioAgentAgentNameRouteChildren = {
-  StudioAgentAgentNameMemoryRoute: StudioAgentAgentNameMemoryRoute,
+  StudioAgentAgentNameActivityRoute: StudioAgentAgentNameActivityRoute,
+  StudioAgentAgentNameChatRoute: StudioAgentAgentNameChatRoute,
   StudioAgentAgentNameReplayRoute: StudioAgentAgentNameReplayRoute,
-  StudioAgentAgentNameTriggersRoute: StudioAgentAgentNameTriggersRoute,
+  StudioAgentAgentNameStateRoute: StudioAgentAgentNameStateRoute,
+  StudioAgentAgentNameTopologyRoute: StudioAgentAgentNameTopologyRoute,
   StudioAgentAgentNameIndexRoute: StudioAgentAgentNameIndexRoute,
 }
 
@@ -262,15 +455,21 @@ const StudioAgentAgentNameRouteWithChildren =
   StudioAgentAgentNameRoute._addFileChildren(StudioAgentAgentNameRouteChildren)
 
 interface StudioRouteChildren {
+  StudioAccountRoute: typeof StudioAccountRoute
   StudioMembersRoute: typeof StudioMembersRoute
-  StudioSettingsRoute: typeof StudioSettingsRoute
+  StudioSecretsRoute: typeof StudioSecretsRoute
+  StudioSettingsRoute: typeof StudioSettingsRouteWithChildren
+  StudioStorageRoute: typeof StudioStorageRoute
   StudioIndexRoute: typeof StudioIndexRoute
   StudioAgentAgentNameRoute: typeof StudioAgentAgentNameRouteWithChildren
 }
 
 const StudioRouteChildren: StudioRouteChildren = {
+  StudioAccountRoute: StudioAccountRoute,
   StudioMembersRoute: StudioMembersRoute,
-  StudioSettingsRoute: StudioSettingsRoute,
+  StudioSecretsRoute: StudioSecretsRoute,
+  StudioSettingsRoute: StudioSettingsRouteWithChildren,
+  StudioStorageRoute: StudioStorageRoute,
   StudioIndexRoute: StudioIndexRoute,
   StudioAgentAgentNameRoute: StudioAgentAgentNameRouteWithChildren,
 }

@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
-import { Separator } from '#/components/ui/separator'
+import { Card, CardContent, CardHeader, CardTitle } from '@kalphq/ui/card'
+import { Separator } from '@kalphq/ui/separator'
 import { EventLogViewer } from '#/components/EventLogViewer'
 import { ReplayControls } from '#/components/ReplayControls'
 import { useEventLog } from '#/hooks/useEventLog'

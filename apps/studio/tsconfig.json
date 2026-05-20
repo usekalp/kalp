@@ -15,7 +15,9 @@
       "#/*": ["./src/*"],
       "@/*": ["./src/*"],
       "@kalphq/core": ["../../packages/core/src/index.ts"],
-      "@kalphq/sdk": ["../../packages/sdk/src/index.ts"]
+      "@kalphq/sdk": ["../../packages/sdk/src/index.ts"],
+      "@kalphq/ui": ["../../packages/ui/src/index.ts"],
+      "@kalphq/ui/*": ["../../packages/ui/src/ui/*.tsx"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],

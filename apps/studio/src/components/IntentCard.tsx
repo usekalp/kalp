@@ -1,11 +1,11 @@
-import { Badge } from '#/components/ui/badge'
-import { Card, CardContent, CardHeader } from '#/components/ui/card'
+import { Badge } from '@kalphq/ui/badge'
+import { Card, CardContent, CardHeader } from '@kalphq/ui/card'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '#/components/ui/tooltip'
+} from '@kalphq/ui/tooltip'
 import type { ExecutionEvent } from '#/types/events'
 
 interface IntentCardProps {

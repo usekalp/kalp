@@ -8,11 +8,15 @@ import path from 'node:path'
 const config = defineConfig({
   resolve: {
     tsconfigPaths: true,
+    dedupe: ['react', 'react-dom'],
     alias: {
       '#': path.resolve(__dirname, './src'),
     },
   },
   plugins: [devtools(), tailwindcss(), tanstackRouter(), viteReact()],
+  ssr: {
+    noExternal: ['@kalphq/ui'],
+  },
   server: {
     proxy: {
       '/api': {

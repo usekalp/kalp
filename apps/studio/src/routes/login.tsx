@@ -3,9 +3,9 @@ import { useEffect, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { KeyRound, Loader2, LogIn, UserRound } from 'lucide-react'
 import { login } from '#/lib/api'
-import { Button } from '#/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
-import { Input } from '#/components/ui/input'
+import { Button } from '@kalphq/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@kalphq/ui/card'
+import { Input } from '@kalphq/ui/input'
 import { useSession } from '#/hooks/useAuth'
 
 export const Route = createFileRoute('/login')({

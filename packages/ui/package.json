@@ -1,26 +1,54 @@
 {
-  "name": "@repo/ui",
+  "name": "@kalphq/ui",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "exports": {
-    "./*": "./src/*.tsx"
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css",
+    "./badge": "./src/ui/badge.tsx",
+    "./button": "./src/ui/button.tsx",
+    "./card": "./src/ui/card.tsx",
+    "./dialog": "./src/ui/dialog.tsx",
+    "./dropdown-menu": "./src/ui/dropdown-menu.tsx",
+    "./input": "./src/ui/input.tsx",
+    "./scroll-area": "./src/ui/scroll-area.tsx",
+    "./select": "./src/ui/select.tsx",
+    "./separator": "./src/ui/separator.tsx",
+    "./skeleton": "./src/ui/skeleton.tsx",
+    "./slider": "./src/ui/slider.tsx",
+    "./switch": "./src/ui/switch.tsx",
+    "./tabs": "./src/ui/tabs.tsx",
+    "./tooltip": "./src/ui/tooltip.tsx",
+    "./table": "./src/ui/table.tsx"
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",
-    "generate:component": "turbo gen react-component",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "ladle": "ladle serve --theme dark",
+    "ladle:build": "ladle build --theme dark"
   },
   "devDependencies": {
+    "@fontsource-variable/geist": "^5.2.8",
+    "@fontsource-variable/geist-mono": "^5.2.7",
+    "@ladle/react": "^5.1.1",
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@tailwindcss/vite": "^4.1.18",
     "@types/node": "^22.15.3",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
     "eslint": "^9.39.1",
-    "typescript": "5.9.2"
+    "typescript": "^6.0.2",
+    "vite": "^8.0.0"
   },
   "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.545.0",
+    "radix-ui": "^1.4.3",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^3.5.0"
   }
 }
