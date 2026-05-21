@@ -17,7 +17,10 @@ async function request<T>(
     },
   })
 
-  if (response.status === 401 && !options.skipUnauthorizedRedirect) {
+  if (response.status === 401) {
+    if (options.skipUnauthorizedRedirect) {
+      return response.json()
+    }
     if (typeof window !== 'undefined') {
       window.location.href = '/studio/login'
     }

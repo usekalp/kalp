@@ -5,6 +5,22 @@ import { useSession } from '#/features/auth/hooks/use-session'
 import { Lock } from 'lucide-react'
 import { AnimatedPage } from '../animated-page'
 
+function navigateToRedirect(
+  redirectTo: string,
+  navigate: ReturnType<typeof useNavigate>,
+) {
+  const [path, searchString] = redirectTo.split('?')
+  if (searchString) {
+    const search: Record<string, string> = {}
+    for (const [k, v] of new URLSearchParams(searchString).entries()) {
+      search[k] = v
+    }
+    navigate({ to: path, search, replace: true })
+  } else {
+    navigate({ to: path, replace: true })
+  }
+}
+
 export function LoginView() {
   const navigate = useNavigate()
   const { redirectTo } = useSearch({ from: '/login' })
@@ -13,9 +29,9 @@ export function LoginView() {
   useEffect(() => {
     if (sessionQuery.data?.authenticated) {
       if (redirectTo) {
-        navigate({ to: redirectTo as any, replace: true })
+        navigateToRedirect(redirectTo, navigate)
       } else {
-        navigate({ to: '/', search: { status: '', tags: '' } })
+        navigate({ to: '/', search: { status: '', tags: '', search: '' }, replace: true })
       }
     }
   }, [navigate, sessionQuery.data?.authenticated, redirectTo])
@@ -23,9 +39,9 @@ export function LoginView() {
   const onSuccess = async () => {
     await sessionQuery.refetch()
     if (redirectTo) {
-      navigate({ to: redirectTo as any, replace: true })
+      navigateToRedirect(redirectTo, navigate)
     } else {
-      navigate({ to: '/', search: { status: '', tags: '' } })
+      navigate({ to: '/', search: { status: '', tags: '', search: '' }, replace: true })
     }
   }
 
@@ -50,12 +66,15 @@ export function LoginView() {
               <div className="mt-10 max-w-2xl">
                 <h1 className="text-5xl font-semibold tracking-[-0.06em] text-white sm:text-6xl">
                   Control your
-                  <span className="block text-zinc-500">AI infrastructure.</span>
+                  <span className="block text-zinc-500">
+                    AI infrastructure.
+                  </span>
                 </h1>
 
                 <p className="mt-6 max-w-xl text-base text-balance leading-relaxed text-zinc-400 sm:text-lg">
                   Deploy, orchestrate, and manage production-grade AI systems
-                  through a modern control surface built for teams and enterprises.
+                  through a modern control surface built for teams and
+                  enterprises.
                 </p>
               </div>
             </div>
@@ -94,4 +113,3 @@ export function LoginView() {
     </AnimatedPage>
   )
 }
-

@@ -6,7 +6,7 @@ export const Route = createFileRoute('/_studio')({
   beforeLoad: async ({ location }) => {
     const session = await getSession()
     if (!session.authenticated) {
-      const redirectTo = location.pathname
+      const redirectTo = location.href
       throw redirect({ to: '/login', search: { redirectTo } })
     }
   },

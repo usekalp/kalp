@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { AgentSearch } from '#/features/agents/components/agent-search'
 import { AgentFilters } from '#/features/agents/components/agent-filters'
 import { AgentGrid } from '#/features/agents/components/agent-grid'
 import { useAgents } from '#/features/agents/hooks/use-agents'
+import { useDebounce } from '#/lib/hooks/use-debounce'
 import { Label } from '#/ui'
 import { AnimatedPage } from '../animated-page'
 import DashboardSkeleton from './dashboard-skeleton'
@@ -12,7 +13,8 @@ export function DashboardView() {
   const agentsQuery = useAgents()
   const navigate = useNavigate()
   const searchParams = useSearch({ from: '/_studio/' })
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(searchParams.search)
+  const debouncedQuery = useDebounce(query, 200)
   const agents = agentsQuery.data?.agents ?? []
 
   const activeStatuses = useMemo(
@@ -34,8 +36,8 @@ export function DashboardView() {
 
   const filtered = useMemo(() => {
     return agents.filter((a) => {
-      if (query) {
-        const q = query.toLowerCase()
+      if (searchParams.search) {
+        const q = searchParams.search.toLowerCase()
         const name = (a.label ?? a.name).toLowerCase()
         if (!name.includes(q)) return false
       }
@@ -45,19 +47,32 @@ export function DashboardView() {
         return false
       return true
     })
-  }, [agents, query, activeStatuses, activeTags])
+  }, [agents, searchParams.search, activeStatuses, activeTags])
+
+  useEffect(() => {
+    if (debouncedQuery === searchParams.search) return
+    navigate({
+      to: '/',
+      search: { status: searchParams.status, tags: searchParams.tags, search: debouncedQuery },
+      replace: true,
+    })
+  }, [debouncedQuery, searchParams.status, searchParams.tags, navigate])
+
+  useEffect(() => {
+    setQuery(searchParams.search)
+  }, [searchParams.search])
 
   const onStatusChange = (next: string[]) => {
     navigate({
       to: '/',
-      search: { status: next.join(','), tags: searchParams.tags },
+      search: { status: next.join(','), tags: searchParams.tags, search: searchParams.search },
     })
   }
 
   const onTagChange = (next: string[]) => {
     navigate({
       to: '/',
-      search: { status: searchParams.status, tags: next.join(',') },
+      search: { status: searchParams.status, tags: next.join(','), search: searchParams.search },
     })
   }
 
