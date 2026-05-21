@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Copy, KeyRound, Plus } from 'lucide-react'
+import { Button } from '@/ui/button'
 
 export const Route = createFileRoute('/_studio/secrets')({
   component: SecretsPage,
@@ -23,17 +24,14 @@ function SecretsPage() {
             Centralized API Keys for your agents
           </p>
         </div>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:border-white/[0.12] hover:bg-white/[0.04] hover:text-white"
-        >
-          <Plus className="h-3.5 w-3.5" />
+        <Button type="button" variant="outline" size="lg">
+          <Plus className="h-3 w-3" />
           Add Secret
-        </button>
+        </Button>
       </div>
 
       {MOCK_SECRETS.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-white/[0.06] py-16">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 py-16">
           <KeyRound className="mb-3 h-8 w-8 text-zinc-600" />
           <p className="text-sm text-zinc-500">
             No secrets configured. Add your first API key.
@@ -44,7 +42,7 @@ function SecretsPage() {
           {MOCK_SECRETS.map((secret) => (
             <div
               key={secret.key}
-              className="group flex items-center gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] px-4 py-3 transition-colors hover:border-white/[0.1]"
+              className="group flex items-center gap-3 rounded-xl border border-zinc-800 bg-white/2 px-4 py-3 transition-colors hover:border-zinc-700"
             >
               <KeyRound className="h-4 w-4 shrink-0 text-zinc-500" />
               <code className="min-w-0 flex-1 text-sm font-medium text-white">
@@ -56,13 +54,14 @@ function SecretsPage() {
               <span className="shrink-0 text-[11px] text-zinc-600">
                 {secret.updated}
               </span>
-              <button
+              <Button
                 type="button"
-                className="shrink-0 rounded p-1 text-zinc-600 opacity-0 transition-opacity hover:text-zinc-300 group-hover:opacity-100"
+                variant="ghost"
+                size="icon"
                 title="Copy key name"
               >
                 <Copy className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             </div>
           ))}
         </div>

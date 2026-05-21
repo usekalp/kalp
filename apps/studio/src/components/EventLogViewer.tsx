@@ -1,5 +1,5 @@
-import { ScrollArea } from '@kalphq/ui/scroll-area'
-import { Skeleton } from '@kalphq/ui/skeleton'
+import { ScrollArea } from '@/ui/scroll-area'
+import { Skeleton } from '@/ui/skeleton'
 import { IntentCard } from './IntentCard'
 import type { ExecutionEvent } from '#/types/events'
 
@@ -18,13 +18,17 @@ export function EventLogViewer({
 }: EventLogViewerProps) {
   if (isLoading) {
     return (
-      <ScrollArea className="h-[calc(100vh-12rem)]">
-        <div className="space-y-2 p-4">
-          {Array.from({ length: 10 }).map((_, index) => (
-            <Skeleton key={index} className="h-16 w-full" />
-          ))}
-        </div>
-      </ScrollArea>
+      <div className="h-[calc(100vh-12rem)]">
+        <ScrollArea>
+          <div className="space-y-2 p-4">
+            {Array.from({ length: 10 }).map((_, index) => (
+              <div key={index} className="h-16 w-full">
+                <Skeleton />
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
     )
   }
 
@@ -37,18 +41,20 @@ export function EventLogViewer({
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-12rem)]">
-      <div className="space-y-2 p-4">
-        {events.map((event, index) => (
-          <IntentCard
-            key={event.id}
-            event={event}
-            index={index}
-            isActive={index + 1 === currentSeq}
-            onClick={() => onSeek(index + 1)}
-          />
-        ))}
-      </div>
-    </ScrollArea>
+    <div className="h-[calc(100vh-12rem)]">
+      <ScrollArea>
+        <div className="space-y-2 p-4">
+          {events.map((event, index) => (
+            <IntentCard
+              key={event.id}
+              event={event}
+              index={index}
+              isActive={index + 1 === currentSeq}
+              onClick={() => onSeek(index + 1)}
+            />
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
   )
 }

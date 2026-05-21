@@ -38,20 +38,18 @@ function StoragePage() {
           return (
             <div
               key={store.name}
-              className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-4 transition-colors hover:border-white/[0.1]"
+              className="rounded-xl border border-zinc-800 bg-white/[0.02] p-4 transition-colors hover:border-zinc-700"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500/10">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/10">
                     <Icon className="h-4 w-4 text-indigo-400" />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-white">
                       {store.name}
                     </p>
-                    <p className="text-xs text-zinc-500">
-                      {store.description}
-                    </p>
+                    <p className="text-xs text-zinc-500">{store.description}</p>
                   </div>
                 </div>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400">

@@ -9,19 +9,24 @@ import {
   Sparkles,
   Zap,
 } from 'lucide-react'
-import { Skeleton } from '@kalphq/ui/skeleton'
+import { Skeleton } from '@/ui/skeleton'
+import { Button } from '@/ui/button'
 import { useRuntimeAgent } from '#/hooks/useRuntimeSubscriptions'
 
 export const Route = createFileRoute('/_studio/agent/$agentName/')({
   component: AgentOverviewPage,
 })
 
-const ENTRYPOINT_ICONS: Record<string, { icon: typeof Globe; color: string }> = {
-  route: { icon: Globe, color: 'bg-blue-500/10 text-blue-400' },
-  hook: { icon: MessageSquareText, color: 'bg-purple-500/10 text-purple-400' },
-  listener: { icon: Zap, color: 'bg-amber-500/10 text-amber-400' },
-  contract: { icon: Sparkles, color: 'bg-indigo-500/10 text-indigo-400' },
-}
+const ENTRYPOINT_ICONS: Record<string, { icon: typeof Globe; color: string }> =
+  {
+    route: { icon: Globe, color: 'bg-blue-500/10 text-blue-400' },
+    hook: {
+      icon: MessageSquareText,
+      color: 'bg-purple-500/10 text-purple-400',
+    },
+    listener: { icon: Zap, color: 'bg-amber-500/10 text-amber-400' },
+    contract: { icon: Sparkles, color: 'bg-indigo-500/10 text-indigo-400' },
+  }
 
 const METHOD_COLORS: Record<string, string> = {
   GET: 'bg-emerald-500/10 text-emerald-400',
@@ -42,10 +47,18 @@ function AgentOverviewPage() {
     <div className="space-y-6">
       {agentQuery.isLoading ? (
         <div className="flex gap-6">
-          <Skeleton className="h-16 flex-1" />
-          <Skeleton className="h-16 flex-1" />
-          <Skeleton className="h-16 flex-1" />
-          <Skeleton className="h-16 flex-1" />
+          <div className="h-16 flex-1">
+            <Skeleton />
+          </div>
+          <div className="h-16 flex-1">
+            <Skeleton />
+          </div>
+          <div className="h-16 flex-1">
+            <Skeleton />
+          </div>
+          <div className="h-16 flex-1">
+            <Skeleton />
+          </div>
         </div>
       ) : agent ? (
         <>
@@ -84,7 +97,10 @@ function AgentOverviewPage() {
             ) : (
               <div className="space-y-2">
                 {recentEntrypoints.map((entry) => {
-                  const iconConfig = ENTRYPOINT_ICONS[entry.kind] ?? { icon: CalendarClock, color: 'bg-zinc-500/10 text-zinc-400' }
+                  const iconConfig = ENTRYPOINT_ICONS[entry.kind] ?? {
+                    icon: CalendarClock,
+                    color: 'bg-zinc-500/10 text-zinc-400',
+                  }
                   const Icon = iconConfig.icon
                   const color = iconConfig.color
 
@@ -100,10 +116,10 @@ function AgentOverviewPage() {
                   return (
                     <div
                       key={entry.id}
-                      className="group flex items-center gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-3 transition-all hover:border-white/[0.1] hover:bg-white/[0.03]"
+                      className="group flex items-center gap-3 rounded-xl border border-zinc-800 bg-white/[0.02] px-3 py-3 transition-all hover:border-zinc-700 hover:bg-white/[0.03]"
                     >
                       <div
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${color}`}
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${color}`}
                       >
                         <Icon className="h-4 w-4" />
                       </div>
@@ -118,21 +134,27 @@ function AgentOverviewPage() {
                       </div>
 
                       <div className="hidden shrink-0 items-center gap-2 group-hover:flex">
-                        <button
-                          type="button"
-                          className="rounded-md border border-white/[0.06] p-1.5 text-zinc-500 hover:text-zinc-300"
-                          title="Copy"
-                        >
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        <Button variant="ghost" size="icon" title="Copy">
+                          <svg
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                            />
                           </svg>
-                        </button>
+                        </Button>
                       </div>
 
                       <div className="flex shrink-0 items-center gap-2">
                         {entry.method ? (
                           <span
-                            className={`rounded-md px-2 py-0.5 text-[11px] font-mono font-medium ${
+                            className={`rounded-xl px-2 py-0.5 text-[11px] font-mono font-medium ${
                               METHOD_COLORS[entry.method] ??
                               'bg-zinc-500/10 text-zinc-400'
                             }`}

@@ -14,9 +14,6 @@ const config = defineConfig({
     },
   },
   plugins: [devtools(), tailwindcss(), tanstackRouter(), viteReact()],
-  ssr: {
-    noExternal: ['@kalphq/ui'],
-  },
   server: {
     proxy: {
       '/api': {

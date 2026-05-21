@@ -5,9 +5,9 @@
  * @module
  */
 
-import { Button } from '@kalphq/ui/button'
-import { Slider } from '@kalphq/ui/slider'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@kalphq/ui/select'
+import { Button } from '@/ui/button'
+import { Slider } from '@/ui/slider'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
 import { Play, Pause, SkipBack, SkipForward } from 'lucide-react'
 import type { ReplayState } from '#/types/events'
 
@@ -35,7 +35,7 @@ export function ReplayControls({
   onSpeedChange,
 }: ReplayControlsProps) {
   return (
-    <div className="flex items-center gap-4 border-t border-border bg-muted/50 p-4">
+    <div className="flex items-center gap-4 border-t border-zinc-800 bg-[#0A0A0A] p-4">
       {/* Play/Pause Button */}
       <Button
         variant="outline"
@@ -56,14 +56,15 @@ export function ReplayControls({
 
       {/* Progress Slider */}
       <div className="flex flex-1 items-center gap-4">
-        <Slider
-          value={[state.currentSeq]}
-          max={state.totalEvents}
-          min={0}
-          step={1}
-          onValueChange={([v]) => onSeek(v)}
-          className="flex-1"
-        />
+        <div className="flex-1">
+          <Slider
+            value={[state.currentSeq]}
+            max={state.totalEvents}
+            min={0}
+            step={1}
+            onValueChange={([v]) => onSeek(v)}
+          />
+        </div>
         <span className="text-sm text-muted-foreground w-24 text-right font-mono">
           {state.currentSeq} / {state.totalEvents}
         </span>
@@ -79,9 +80,11 @@ export function ReplayControls({
         value={state.speed.toString()}
         onValueChange={(v) => onSpeedChange(Number(v) as ReplayState['speed'])}
       >
-        <SelectTrigger className="w-20">
-          <SelectValue placeholder="Speed" />
-        </SelectTrigger>
+        <div className="w-20">
+          <SelectTrigger>
+            <SelectValue placeholder="Speed" />
+          </SelectTrigger>
+        </div>
         <SelectContent>
           <SelectItem value="0.5">0.5x</SelectItem>
           <SelectItem value="1">1x</SelectItem>

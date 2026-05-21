@@ -1,0 +1,28 @@
+export { cn } from '../lib/utils'
+
+// Kalp runtime primitive registry & components
+export * from '../primitives'
+
+// UI primitives (shadcn)
+export { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPortal, AlertDialogTitle, AlertDialogTrigger } from './alert-dialog'
+export { Avatar, AvatarImage, AvatarFallback, AvatarBadge, AvatarGroup, AvatarGroupCount } from './avatar'
+export { Badge, badgeVariants } from './badge'
+export { Button, buttonVariants } from './button'
+export { Card, CardHeader, CardFooter, CardTitle, CardAction, CardDescription, CardContent } from './card'
+export { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogOverlay, DialogPortal, DialogTitle, DialogTrigger } from './dialog'
+export { Drawer, DrawerPortal, DrawerOverlay, DrawerTrigger, DrawerClose, DrawerContent, DrawerHeader, DrawerFooter, DrawerTitle, DrawerDescription } from './drawer'
+export { DropdownMenu, DropdownMenuPortal, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from './dropdown-menu'
+export { Input } from './input'
+export { InputGroup, InputGroupAddon, InputGroupButton, InputGroupText, InputGroupInput, InputGroupTextarea } from './input-group'
+export { Label } from './label'
+export { ScrollArea, ScrollBar } from './scroll-area'
+export { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectScrollDownButton, SelectScrollUpButton, SelectSeparator, SelectTrigger, SelectValue } from './select'
+export { Separator } from './separator'
+export { Skeleton } from './skeleton'
+export { Slider } from './slider'
+export { Spinner } from './spinner'
+export { Switch } from './switch'
+export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption } from './table'
+export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants } from './tabs'
+export { Textarea } from './textarea'
+export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip'

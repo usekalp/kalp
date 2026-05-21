@@ -27,14 +27,13 @@ function AgentLayoutPage() {
 
   return (
     <div className="flex min-h-[calc(100vh-3rem)] flex-col">
-      <header className="sticky top-12 z-20 flex h-12 items-center border-b border-zinc-800 bg-[#0A0A0A] px-6">
+      <header className="sticky top-12 z-20 flex h-12 items-center border-b border-zinc-800 bg-[#080A0A] px-6">
         <h1 className="text-sm font-medium text-white">
-          {agentName}
-          <span className="ml-1.5 text-zinc-500">— {viewLabel}</span>
+          {viewLabel}
         </h1>
       </header>
 
-      <div className="flex-1 p-6">
+      <div className="flex-1">
         <Outlet />
       </div>
     </div>

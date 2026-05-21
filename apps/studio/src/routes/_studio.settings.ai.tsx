@@ -1,25 +1,28 @@
 import { useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { AnimatePresence, motion } from 'framer-motion'
-import { Bot, Check, Clipboard } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Globe } from 'lucide-react'
+import { SiAnthropic, SiCloudflare, SiOpenai, SiVercel } from 'react-icons/si'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@kalphq/ui'
+} from '@/ui'
+import { Button } from '@/ui/button'
+import CopyButton from '#/components/CopyButton'
 
 export const Route = createFileRoute('/_studio/settings/ai')({
   component: AiSettingsPage,
 })
 
 const PROVIDERS = [
-  { id: 'openai', label: 'OpenAI' },
-  { id: 'anthropic', label: 'Anthropic' },
-  { id: 'openrouter', label: 'OpenRouter' },
-  { id: 'cloudflare-ai', label: 'Cloudflare AI Gateway' },
-  { id: 'vercel-ai', label: 'Vercel AI Gateway' },
+  { id: 'openai', label: 'OpenAI', icon: SiOpenai },
+  { id: 'anthropic', label: 'Anthropic', icon: SiAnthropic },
+  { id: 'openrouter', label: 'OpenRouter', icon: Globe },
+  { id: 'cloudflare-ai', label: 'Cloudflare AI Gateway', icon: SiCloudflare },
+  { id: 'vercel-ai', label: 'Vercel AI Gateway', icon: SiVercel },
 ] as const
 
 const PROVIDER_CLI: Record<string, { flag: string; env: string }> = {
@@ -29,58 +32,6 @@ const PROVIDER_CLI: Record<string, { flag: string; env: string }> = {
   'cloudflare-ai': { flag: 'cloudflare-ai', env: 'CLOUDFLARE_API_KEY' },
   'vercel-ai': { flag: 'vercel-ai', env: 'VERCEL_AI_API_KEY' },
 }
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      const el = document.createElement('textarea')
-      el.value = text
-      document.body.appendChild(el)
-      el.select()
-      document.execCommand('copy')
-      document.body.removeChild(el)
-    }
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      className="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-zinc-600 transition-colors hover:text-zinc-300"
-    >
-      <AnimatePresence mode="wait">
-        {copied ? (
-          <motion.span
-            key="check"
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.5, opacity: 0 }}
-            transition={{ duration: 0.12, ease: 'easeOut' }}
-          >
-            <Check className="h-3.5 w-3.5 text-emerald-400" />
-          </motion.span>
-        ) : (
-          <motion.span
-            key="clipboard"
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.5, opacity: 0 }}
-            transition={{ duration: 0.12, ease: 'easeOut' }}
-          >
-            <Clipboard className="h-3.5 w-3.5" />
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </button>
-  )
-}
-
 function AiSettingsPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState('openai')
@@ -90,14 +41,19 @@ function AiSettingsPage() {
     setDialogOpen(true)
   }
 
-  const cliInfo = PROVIDER_CLI[selectedProvider] as { flag: string; env: string } | undefined
-  const selectedLabel = PROVIDERS.find((p) => p.id === selectedProvider)?.label ?? selectedProvider
+  const cliInfo = PROVIDER_CLI[selectedProvider] as
+    | { flag: string; env: string }
+    | undefined
+
+  const selectedProviderDef = PROVIDERS.find((p) => p.id === selectedProvider)!
+  const SelectedIcon = selectedProviderDef.icon
+
   const aiChangeCmd = `kalp ai change --${cliInfo?.flag}`
   const deployCmd = 'kalp deploy'
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-zinc-800 bg-white/[0.02] p-4">
+      <div className="rounded-xl border border-zinc-800 bg-white/2 p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-xs font-medium text-white">
@@ -107,74 +63,107 @@ function AiSettingsPage() {
               Default LLM provider for all agents in this workspace.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={openChange}
-            className="cursor-pointer rounded-xl border border-zinc-800 px-3 py-1.5 text-xs text-zinc-400 transition-colors hover:border-zinc-700 hover:text-zinc-200"
-          >
+          <Button variant="outline" size="sm" onClick={openChange}>
             Change
-          </button>
+          </Button>
         </div>
 
-        <div className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-white/[0.02] px-3 py-2">
-          <Bot className="h-4 w-4 text-zinc-500" />
-          <code className="text-sm text-white">OpenAI</code>
+        <div className="inline-flex items-center gap-2 rounded-xl border border-zinc-800 bg-white/2 px-3 py-2">
+          <SelectedIcon className="h-4 w-4" />
+          <code className="text-xs text-white">OpenAI</code>
         </div>
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="border-zinc-800 bg-[#0D0D0D] text-zinc-300 sm:max-w-2xl">
+        <DialogContent className="max-w-3xl!">
           <DialogHeader>
-            <DialogTitle className="text-white">Change AI Provider</DialogTitle>
-            <DialogDescription className="text-zinc-500">
-              Select your default LLM provider and follow the setup instructions.
+            <DialogTitle>Change AI Provider</DialogTitle>
+            <DialogDescription>
+              Select your default LLM provider and follow the setup
+              instructions.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1">
+          <div className="grid gap-4 grid-cols-[1fr_2fr]">
+            <div className="space-y-2.5">
               {PROVIDERS.map((provider) => {
                 const isActive = selectedProvider === provider.id
                 return (
-                  <button
-                    key={provider.id}
-                    type="button"
-                    onClick={() => setSelectedProvider(provider.id)}
-                    className={`w-full cursor-pointer rounded-xl px-3 py-2 text-left text-xs transition-colors ${
-                      isActive
-                        ? 'bg-white/[0.05] text-white'
-                        : 'text-zinc-500 hover:bg-white/[0.02] hover:text-zinc-300'
-                    }`}
-                  >
-                    {provider.label}
-                  </button>
+                  <div key={provider.id} className="w-full">
+                    <Button
+                      variant={isActive ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setSelectedProvider(provider.id)}
+                      className="w-full justify-start gap-2"
+                    >
+                      <provider.icon className="h-3.5 w-3.5 shrink-0" />
+                      {provider.label}
+                    </Button>
+                  </div>
                 )
               })}
             </div>
 
             <motion.div
               key={selectedProvider}
-              initial={{ opacity: 0, x: 5 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.15, ease: 'easeOut' }}
-              className="rounded-xl border border-zinc-800 bg-black/40 p-4 font-mono text-xs leading-relaxed"
+              initial={{ opacity: 0, y: 8, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -6, scale: 0.985 }}
+              transition={{
+                duration: 0.22,
+                ease: [0.16, 1, 0.3, 1],
+              }}
+              className="relative overflow-hidden rounded-2xl border border-white/05 bg-neutral-900 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_20px_60px_rgba(0,0,0,0.55)]"
             >
-              <p className="mb-2 text-zinc-600"># Set provider to {selectedLabel}</p>
-              <p className="flex items-center gap-2 text-zinc-300">
-                <span>
-                  kalp ai change{' '}
-                  <span className="text-amber-400">--{cliInfo?.flag}</span>
-                </span>
-                <CopyButton text={aiChangeCmd} />
-              </p>
-              <p className="mt-3 text-zinc-600">
-                # Add <span className="text-zinc-300">{cliInfo?.env}</span> to your .env
-              </p>
-              <p className="mt-3 text-zinc-600"># Deploy changes</p>
-              <p className="flex items-center gap-2 text-emerald-400">
-                <span>{deployCmd}</span>
-                <CopyButton text={deployCmd} />
-              </p>
+              <div className="relative space-y-5 font-mono text-[12px] leading-relaxed">
+                {/* step 1 */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+                    Step 1 · Configure provider
+                  </div>
+
+                  <div className="group flex items-center justify-between rounded-xl border border-white/5 bg-black/40 px-4 py-3 transition-colors hover:border-white/10">
+                    <div className="overflow-x-auto whitespace-nowrap text-zinc-200">
+                      <span className="text-zinc-500">~</span>{' '}
+                      <span className="text-zinc-100">kalp ai change</span>{' '}
+                      <span className="text-amber-400">--{cliInfo?.flag}</span>
+                    </div>
+
+                    <CopyButton text={aiChangeCmd} />
+                  </div>
+                </div>
+
+                {/* step 2 */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+                    Step 2 · Environment variable
+                  </div>
+
+                  <div className="group flex items-center justify-between rounded-xl border border-white/5 bg-black/40 px-4 py-3 transition-colors hover:border-white/10">
+                    <div className="overflow-x-auto whitespace-nowrap">
+                      <span className="text-cyan-300">{cliInfo?.env}</span>
+                      <span className="text-zinc-500">=...</span>
+                    </div>
+
+                    <CopyButton text={cliInfo?.env || ''} />
+                  </div>
+                </div>
+
+                {/* step 3 */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+                    Step 3 · Deploy
+                  </div>
+
+                  <div className="group flex items-center justify-between rounded-xl border border-white/5 bg-black/40 px-4 py-3 transition-colors hover:border-white/10">
+                    <div className="overflow-x-auto whitespace-nowrap text-emerald-400">
+                      {deployCmd}
+                    </div>
+
+                    <CopyButton text={deployCmd} />
+                  </div>
+                </div>
+              </div>
             </motion.div>
           </div>
         </DialogContent>

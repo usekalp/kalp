@@ -1,12 +1,14 @@
 import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { KeyRound, Loader2, LogIn, UserRound } from 'lucide-react'
+import { ArrowRight, Loader2, Lock, ShieldCheck, Sparkles } from 'lucide-react'
+
 import { login } from '#/lib/api'
-import { Button } from '@kalphq/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@kalphq/ui/card'
-import { Input } from '@kalphq/ui/input'
 import { useSession } from '#/hooks/useAuth'
+
+import { Button } from '@/ui/button'
+import { Input } from '@/ui/input'
+import { Label } from '@/ui/label'
 
 export const Route = createFileRoute('/login')({
   component: LoginPage,
@@ -15,112 +17,154 @@ export const Route = createFileRoute('/login')({
 function LoginPage() {
   const navigate = useNavigate()
   const sessionQuery = useSession()
-  const [username, setUsername] = useState('admin')
-  const [password, setPassword] = useState('••••••••')
+
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
     if (sessionQuery.data?.authenticated) {
-      navigate({ to: '/' })
+      navigate({ to: '/', search: { status: '', tags: '' } })
     }
   }, [navigate, sessionQuery.data?.authenticated])
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+
     setIsLoading(true)
     setError(null)
+
     try {
       await login({ username, password })
+
       await sessionQuery.refetch()
-      navigate({ to: '/' })
+
+      navigate({
+        to: '/',
+        search: { status: '', tags: '' },
+      })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
-    } finally {
       setIsLoading(false)
+      setError('Invalid credentials. Please try again.')
     }
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden px-4 py-10 md:px-10">
-      <div className="studio-halo pointer-events-none absolute left-[16%] top-1/2 h-[24rem] w-[24rem] -translate-y-1/2" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_35%,rgba(148,163,184,0.08),transparent_38%),radial-gradient(circle_at_75%_55%,rgba(99,102,241,0.08),transparent_32%)]" />
+    <div className="relative min-h-screen overflow-hidden bg-[#050505] text-white">
+      {/* background */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.06),transparent_30%)]" />
 
-      <div className="relative mx-auto grid min-h-[calc(100vh-5rem)] w-full max-w-[1200px] grid-cols-1 items-center gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-        <Card className="studio-tile relative overflow-hidden p-1">
-          <CardHeader className="space-y-5 pb-2">
-            <img src="/studio/kalp-logo.png" alt="Kalp" className="h-12 w-auto object-contain" />
-            <div>
-              <CardTitle className="text-xl font-semibold tracking-tight">
-                Secure Studio Login
-              </CardTitle>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Authenticate into your private control surface.
+      <div className="absolute left-1/2 top-0 h-130 w-130 -translate-x-1/2 rounded-full bg-white/2.5 blur-3xl" />
+
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-size-[72px_72px] mask-[radial-gradient(circle_at_center,black,transparent_85%)]" />
+
+      <div className="relative mx-auto flex min-h-screen w-full max-w-350 items-center px-6 py-10 lg:px-10">
+        <div className="grid w-full grid-cols-1 gap-16 lg:grid-cols-[1.1fr_0.9fr]">
+          {/* LEFT SIDE */}
+          <div className="flex flex-col justify-center">
+            <div className="mt-8">
+              <img
+                src="/studio/kalp-logo.png"
+                alt="Kalp"
+                className="h-14 w-auto opacity-95"
+              />
+            </div>
+
+            <div className="mt-10 max-w-2xl">
+              <h1 className="text-5xl font-semibold tracking-[-0.06em] text-white sm:text-6xl">
+                Control your
+                <span className="block text-zinc-500">AI infrastructure.</span>
+              </h1>
+
+              <p className="mt-6 max-w-xl text-base text-balance leading-relaxed text-zinc-400 sm:text-lg">
+                Deploy, orchestrate, and manage production-grade AI systems
+                through a modern control surface built for teams and
+                enterprises.
               </p>
             </div>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={onSubmit}>
-              <div className="space-y-2">
-                <label className="text-3xs uppercase tracking-tightest2 text-zinc-400">Username</label>
-                <div className="relative">
-                  <UserRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                  <Input
-                    value={username}
-                    onChange={(event) => setUsername(event.target.value)}
-                    autoComplete="username"
-                    className="studio-input h-11 rounded-5 pl-9"
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-3xs uppercase tracking-tightest2 text-zinc-400">Password</label>
-                <div className="relative">
-                  <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                  <Input
-                    value={password}
-                    type="password"
-                    onChange={(event) => setPassword(event.target.value)}
-                    autoComplete="current-password"
-                    className="studio-input h-11 rounded-5 pl-9 font-mono tracking-widest"
-                  />
-                </div>
-              </div>
-              {error && (
-                <p className="rounded-5 border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {error}
-                </p>
-              )}
-              <Button
-                type="submit"
-                className="h-11 w-full rounded-5 border border-zinc-200/20 bg-gradient-to-r from-zinc-100/20 via-zinc-200/15 to-zinc-100/20 text-zinc-100 transition-all duration-300 hover:shadow-[0_0_28px_-12px_rgba(203,213,225,0.9)]"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="mr-2 h-4 w-4" />
-                    Sign In
-                  </>
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+          </div>
 
-        <div className="relative hidden h-full min-h-[560px] items-center justify-center lg:flex">
-          <div className="absolute inset-0 rounded-6 border border-white/5 bg-gradient-to-br from-white/[0.03] to-transparent" />
-          <div className="relative h-[340px] w-[340px]">
-            <img
-              src="/studio/kalp-logo.png"
-              alt="Kalp mark"
-              className="absolute inset-0 h-full w-full object-contain opacity-35 [filter:drop-shadow(0_0_24px_rgba(148,163,184,0.22))] animate-pulse-slow"
-            />
-            <div className="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-zinc-200/30 bg-gradient-to-br from-zinc-100/40 via-zinc-400/25 to-zinc-100/15 blur-xs" />
+          {/* RIGHT SIDE */}
+          <div className="relative flex items-center justify-center">
+            <div className="relative w-full max-w-md">
+              {/* glow */}
+              <div className="absolute inset-0 rounded-2xl bg-white/3 blur-2xl" />
+
+              <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/3 p-8 shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_40px_120px_rgba(0,0,0,0.9)] backdrop-blur-2xl">
+                {/* top shine */}
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_35%)]" />
+
+                <div className="relative">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/4">
+                      <Lock className="h-5 w-5 text-zinc-300" />
+                    </div>
+
+                    <div>
+                      <h2 className="text-xl font-semibold tracking-tight text-white">
+                        Studio Access
+                      </h2>
+
+                      <p className="mt-1 text-sm text-zinc-500">
+                        Authenticate into your workspace
+                      </p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={onSubmit} className="mt-10 space-y-5">
+                    <div className="space-y-1.5">
+                      <Label>Username</Label>
+
+                      <Input
+                        value={username}
+                        onChange={(event) => setUsername(event.target.value)}
+                        autoComplete="username"
+                        className="h-12 rounded-2xl border-white/10 bg-white/3 px-4 text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white/20"
+                        placeholder="admin"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label>Password</Label>
+
+                      <Input
+                        type="password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        autoComplete="current-password"
+                        className="h-12 rounded-2xl border-white/10 bg-white/3 px-4 text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-white/20"
+                        placeholder="***********"
+                      />
+                    </div>
+
+                    {error && (
+                      <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                        {error}
+                      </div>
+                    )}
+
+                    <Button
+                      type="submit"
+                      disabled={isLoading}
+                      className="group h-12 w-full rounded-2xl bg-white text-sm font-medium text-black transition-all hover:bg-zinc-200"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Authenticating...
+                        </>
+                      ) : (
+                        <>
+                          Sign In
+                          <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                        </>
+                      )}
+                    </Button>
+                  </form>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

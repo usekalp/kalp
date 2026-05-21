@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { CheckCircle, X, XCircle } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { Button } from '@/ui/button'
 import { createContext, useCallback, useContext, useState } from 'react'
 import type { ReactNode } from 'react'
 
@@ -53,8 +54,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ toast: addToast }}>
       {children}
 
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
-        <AnimatePresence mode="popLayout">
+      <div className="fixed bottom-4 right-4 z-100 flex flex-col gap-2">
+        <AnimatePresence>
           {toasts.map((t) => {
             const Icon = ICONS[t.type]
             return (
@@ -69,13 +70,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               >
                 <Icon className={`h-4 w-4 shrink-0 ${ICON_COLORS[t.type]}`} />
                 <p className="flex-1 text-xs text-zinc-300">{t.message}</p>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={() => removeToast(t.id)}
-                  className="shrink-0 cursor-pointer text-zinc-600 transition-colors hover:text-zinc-400"
                 >
                   <X className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               </motion.div>
             )
           })}

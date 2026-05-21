@@ -110,6 +110,7 @@ export interface RuntimeAgentExecutionStats {
   total: number
   running: number
   failed: number
+  successful: number
   latest: {
     id: string
     status: string

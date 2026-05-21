@@ -213,23 +213,28 @@ const mockExecutionEvents: Record<string, { id: string; executionId: string; typ
   ],
 }
 
+let mockSession: { authenticated: boolean; user: { username: string } } | null = null
+
 export const handlers = [
   http.get('/api/internal/session', () => {
-    return HttpResponse.json({
-      authenticated: true,
-      user: { username: 'admin' },
-    })
+    if (!mockSession) {
+      return HttpResponse.json({ authenticated: false }, { status: 401 })
+    }
+    return HttpResponse.json(mockSession)
   }),
 
   http.post('/api/internal/auth', async ({ request }) => {
     const body = await request.json() as { username?: string; password?: string }
+    const username = body?.username ?? 'admin'
+    mockSession = { authenticated: true, user: { username } }
     return HttpResponse.json({
       ok: true,
-      user: { username: body?.username ?? 'admin' },
+      user: { username },
     })
   }),
 
   http.post('/api/internal/logout', () => {
+    mockSession = null
     return HttpResponse.json({ ok: true })
   }),
 

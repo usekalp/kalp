@@ -3,120 +3,142 @@
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/geist';
 @import '@fontsource-variable/geist-mono';
-@import "@kalphq/ui/styles.css";
-@source "../../packages/ui/src";
 
 @custom-variant dark (&:is(.dark *));
 
+@theme inline {
+  --font-heading: 'Geist Variable', sans-serif;
+  --font-sans: 'Geist Variable', sans-serif;
+  --font-mono: 'Geist Mono Variable', monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.375rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(14.479% 0.00002 271.152);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(14.479% 0.00002 271.152);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(16.376% 0.00002 271.152);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 6%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+}
+
 * {
   box-sizing: border-box;
+}
+
+body:has([data-radix-popper-content-wrapper]) {
+  overflow: auto !important;
 }
 
 html,
 body,
 #app {
   min-height: 100%;
-}
-
-body {
-  margin: 0;
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-sans;
-  }
-
-  body {
-    background:
-      radial-gradient(
-        1200px circle at 20% -10%,
-        rgba(82, 95, 127, 0.16),
-        transparent 40%
-      ),
-      radial-gradient(
-        900px circle at 80% 10%,
-        rgba(77, 90, 136, 0.1),
-        transparent 42%
-      ),
-      linear-gradient(180deg, #060708 0%, #050608 45%, #030405 100%);
-  }
-}
-
-:root {
-  --glass-bg: rgb(255 255 255 / 0.02);
-  --glass-border: rgb(255 255 255 / 0.06);
-  --glass-hover-bg: rgb(255 255 255 / 0.04);
-  --glass-hover-border: rgb(255 255 255 / 0.12);
-  --glass-active-bg: rgb(255 255 255 / 0.05);
-  --timeline-line: rgb(255 255 255 / 0.06);
-  --kpi-label: rgb(255 255 255 / 0.35);
-  --kpi-value: rgb(255 255 255 / 0.85);
-}
-
-@utility glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--glass-border);
-}
-
-@utility glass-heavy {
-  background: rgb(0 0 0 / 0.6);
-  backdrop-filter: blur(24px);
-  border: 1px solid var(--glass-border);
-}
-
-@utility timeline-line {
-  position: relative;
-  padding-left: 2.5rem;
-}
-
-.timeline-line::before {
-  content: '';
-  position: absolute;
-  left: 0.75rem;
-  top: 0.5rem;
-  height: 100%;
-  width: 1px;
-  background: var(--timeline-line);
-}
-
-@utility kv-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding-top: 0.375rem;
-  padding-bottom: 0.375rem;
-  font-size: 0.875rem;
-  border-bottom: 1px solid rgb(255 255 255 / 0.03);
-}
-
-@utility badge-tag {
-  border-radius: 9999px;
-  border: 1px solid rgb(255 255 255 / 0.06);
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
-  padding-top: 0.125rem;
-  padding-bottom: 0.125rem;
-  font-size: 11px;
-  color: rgb(161 161 170);
-}
-
-@utility kpi-value {
-  font-size: 1.125rem;
-  font-weight: 500;
-  color: var(--kpi-value);
-}
-
-@utility kpi-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--kpi-label);
 }
