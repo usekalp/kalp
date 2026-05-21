@@ -13,9 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as StudioRouteImport } from './routes/_studio'
 import { Route as StudioIndexRouteImport } from './routes/_studio.index'
 import { Route as ReplayExecutionIdRouteImport } from './routes/replay.$executionId'
-import { Route as StudioStorageRouteImport } from './routes/_studio.storage'
 import { Route as StudioSettingsRouteImport } from './routes/_studio.settings'
-import { Route as StudioSecretsRouteImport } from './routes/_studio.secrets'
 import { Route as StudioMembersRouteImport } from './routes/_studio.members'
 import { Route as StudioAccountRouteImport } from './routes/_studio.account'
 import { Route as StudioSettingsIndexRouteImport } from './routes/_studio.settings.index'
@@ -49,19 +47,9 @@ const ReplayExecutionIdRoute = ReplayExecutionIdRouteImport.update({
   path: '/replay/$executionId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const StudioStorageRoute = StudioStorageRouteImport.update({
-  id: '/storage',
-  path: '/storage',
-  getParentRoute: () => StudioRoute,
-} as any)
 const StudioSettingsRoute = StudioSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => StudioRoute,
-} as any)
-const StudioSecretsRoute = StudioSecretsRouteImport.update({
-  id: '/secrets',
-  path: '/secrets',
   getParentRoute: () => StudioRoute,
 } as any)
 const StudioMembersRoute = StudioMembersRouteImport.update({
@@ -141,9 +129,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/account': typeof StudioAccountRoute
   '/members': typeof StudioMembersRoute
-  '/secrets': typeof StudioSecretsRoute
   '/settings': typeof StudioSettingsRouteWithChildren
-  '/storage': typeof StudioStorageRoute
   '/replay/$executionId': typeof ReplayExecutionIdRoute
   '/agent/$agentName': typeof StudioAgentAgentNameRouteWithChildren
   '/settings/ai': typeof StudioSettingsAiRoute
@@ -161,8 +147,6 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/account': typeof StudioAccountRoute
   '/members': typeof StudioMembersRoute
-  '/secrets': typeof StudioSecretsRoute
-  '/storage': typeof StudioStorageRoute
   '/replay/$executionId': typeof ReplayExecutionIdRoute
   '/': typeof StudioIndexRoute
   '/settings/ai': typeof StudioSettingsAiRoute
@@ -182,9 +166,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_studio/account': typeof StudioAccountRoute
   '/_studio/members': typeof StudioMembersRoute
-  '/_studio/secrets': typeof StudioSecretsRoute
   '/_studio/settings': typeof StudioSettingsRouteWithChildren
-  '/_studio/storage': typeof StudioStorageRoute
   '/replay/$executionId': typeof ReplayExecutionIdRoute
   '/_studio/': typeof StudioIndexRoute
   '/_studio/agent/$agentName': typeof StudioAgentAgentNameRouteWithChildren
@@ -206,9 +188,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/account'
     | '/members'
-    | '/secrets'
     | '/settings'
-    | '/storage'
     | '/replay/$executionId'
     | '/agent/$agentName'
     | '/settings/ai'
@@ -226,8 +206,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/account'
     | '/members'
-    | '/secrets'
-    | '/storage'
     | '/replay/$executionId'
     | '/'
     | '/settings/ai'
@@ -246,9 +224,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_studio/account'
     | '/_studio/members'
-    | '/_studio/secrets'
     | '/_studio/settings'
-    | '/_studio/storage'
     | '/replay/$executionId'
     | '/_studio/'
     | '/_studio/agent/$agentName'
@@ -300,25 +276,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReplayExecutionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_studio/storage': {
-      id: '/_studio/storage'
-      path: '/storage'
-      fullPath: '/storage'
-      preLoaderRoute: typeof StudioStorageRouteImport
-      parentRoute: typeof StudioRoute
-    }
     '/_studio/settings': {
       id: '/_studio/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof StudioSettingsRouteImport
-      parentRoute: typeof StudioRoute
-    }
-    '/_studio/secrets': {
-      id: '/_studio/secrets'
-      path: '/secrets'
-      fullPath: '/secrets'
-      preLoaderRoute: typeof StudioSecretsRouteImport
       parentRoute: typeof StudioRoute
     }
     '/_studio/members': {
@@ -457,9 +419,7 @@ const StudioAgentAgentNameRouteWithChildren =
 interface StudioRouteChildren {
   StudioAccountRoute: typeof StudioAccountRoute
   StudioMembersRoute: typeof StudioMembersRoute
-  StudioSecretsRoute: typeof StudioSecretsRoute
   StudioSettingsRoute: typeof StudioSettingsRouteWithChildren
-  StudioStorageRoute: typeof StudioStorageRoute
   StudioIndexRoute: typeof StudioIndexRoute
   StudioAgentAgentNameRoute: typeof StudioAgentAgentNameRouteWithChildren
 }
@@ -467,9 +427,7 @@ interface StudioRouteChildren {
 const StudioRouteChildren: StudioRouteChildren = {
   StudioAccountRoute: StudioAccountRoute,
   StudioMembersRoute: StudioMembersRoute,
-  StudioSecretsRoute: StudioSecretsRoute,
   StudioSettingsRoute: StudioSettingsRouteWithChildren,
-  StudioStorageRoute: StudioStorageRoute,
   StudioIndexRoute: StudioIndexRoute,
   StudioAgentAgentNameRoute: StudioAgentAgentNameRouteWithChildren,
 }

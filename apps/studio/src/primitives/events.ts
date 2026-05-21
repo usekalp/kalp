@@ -1,8 +1,3 @@
-/// Timeline event types — structure reserved for runtime integration
-/// These types are defined now so the Activity tab can be built
-/// against a stable contract. Records will be populated when the
-/// runtime emits typed events.
-
 export type TimelineEventType =
   | 'execution_started'
   | 'execution_finished'
@@ -23,15 +18,6 @@ export type TimelineEventType =
   | 'ask'
   | 'stream_chunk'
 
-export type WakeReason =
-  | 'timer'
-  | 'event'
-  | 'message'
-  | 'approval'
-  | 'error'
+export type WakeReason = 'timer' | 'event' | 'message' | 'approval' | 'error'
 
-export type TransportType =
-  | 'internal'
-  | 'http'
-  | 'ws'
-  | 'sse'
+export type TransportType = 'internal' | 'http' | 'ws' | 'sse'
