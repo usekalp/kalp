@@ -122,7 +122,7 @@ function AgentActivityPage() {
             return (
               <div
                 key={event.id}
-                className="group flex items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-white/[0.03]"
+                className="group flex items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-white/3"
               >
                 <div className="flex h-5 w-5 shrink-0 items-center justify-center">
                   {isRunning ? (

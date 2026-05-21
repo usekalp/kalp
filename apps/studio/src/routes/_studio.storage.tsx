@@ -38,7 +38,7 @@ function StoragePage() {
           return (
             <div
               key={store.name}
-              className="rounded-xl border border-zinc-800 bg-white/[0.02] p-4 transition-colors hover:border-zinc-700"
+              className="rounded-xl border border-zinc-800 bg-white/2 p-4 transition-colors hover:border-zinc-700"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
