@@ -78,7 +78,7 @@ export class MiniflareServer {
       compatibilityDate: "2026-05-10",
       compatibilityFlags: ["nodejs_compat"],
       kvNamespaces: { KALP_MANIFESTS: "kalp-manifests" },
-      durableObjects: { KALP_RUNTIME_CLOUDFLARE: "AgentDurableObject" },
+      durableObjects: { KALP_RUNTIME_CLOUDFLARE: "KalpAgent" },
       bindings: this.bindings,
       serviceBindings: {
         ...ServiceBindings.create(this.registry, this.drain),

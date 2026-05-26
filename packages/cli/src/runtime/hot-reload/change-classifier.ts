@@ -20,8 +20,8 @@ export function classifyChange(
     return { domain: "env", restartReason: "env-change", requiresRematerialize: false };
   }
 
-  const runtimeTemplateDir = join(runtimePaths.runtimeDir, "..", "..", "runtime-template").replace(/\\/g, "/");
-  if (normalized.startsWith(runtimeTemplateDir) || normalized.includes("/runtime-template/")) {
+  const runtimeTemplateDir = join(runtimePaths.runtimeDir, "..", "..", "..", "packages", "cloudflare", "src").replace(/\\/g, "/");
+  if (normalized.startsWith(runtimeTemplateDir) || normalized.includes("/cloudflare/src/")) {
     return { domain: "runtime-template", restartReason: "runtime-template-change", requiresRematerialize: true };
   }
 

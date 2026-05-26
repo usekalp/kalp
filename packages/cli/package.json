@@ -16,9 +16,8 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsup && pnpm run build:studio && pnpm run build:runtime-template",
+    "build": "tsup && pnpm run build:studio",
     "build:studio": "pnpm --filter=@kalphq/studio build",
-    "build:runtime-template": "node ./scripts/prepare-runtime-template.mjs",
     "dev": "tsup --watch",
     "lint": "tsc --noEmit",
     "prepublishOnly": "pnpm build"
@@ -26,6 +25,7 @@
   "dependencies": {
     "@antfu/ni": "24.4.0",
     "@clack/prompts": "0.9.1",
+    "@kalphq/cloudflare": "workspace:*",
     "@kalphq/compiler": "workspace:*",
     "@kalphq/project": "workspace:*",
     "@kalphq/sdk": "workspace:*",

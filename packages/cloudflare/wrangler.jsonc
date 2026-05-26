@@ -5,20 +5,20 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "kalp-runtime",
-  "main": "src/runtime/worker.ts",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-05-10",
   "compatibility_flags": ["nodejs_compat"],
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["AgentDurableObject"],
+      "new_sqlite_classes": ["KalpAgent"],
     },
   ],
   "durable_objects": {
     "bindings": [
       {
         "name": "KALP_RUNTIME_CLOUDFLARE",
-        "class_name": "AgentDurableObject",
+        "class_name": "KalpAgent",
       },
     ],
   },

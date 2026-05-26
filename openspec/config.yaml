@@ -1,0 +1,56 @@
+schema: spec-driven
+context: |
+  Tech stack: TypeScript PNPM monorepo (Turbo + Vite + tsup)
+  Architecture: Workspace packages (`packages/*`) + app (`apps/studio`)
+  Testing: Vitest across core/compiler/sdk/studio workspaces
+  Style: ESLint + TypeScript checks + Prettier
+strict_tdd: true
+testing:
+  detected: 2026-05-26
+  test_runner:
+    framework: vitest
+    command: "pnpm -r --if-present test"
+  layers:
+    unit:
+      available: true
+      tool: vitest
+    integration:
+      available: true
+      tool: "@testing-library/react"
+    e2e:
+      available: false
+      tool: "—"
+  coverage:
+    available: true
+    command: "vitest --coverage"
+  quality_tools:
+    linter:
+      available: true
+      command: "pnpm lint"
+    type_checker:
+      available: true
+      command: "pnpm check-types"
+    formatter:
+      available: true
+      command: "pnpm format"
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Identify affected modules/packages
+  specs:
+    - Use Given/When/Then format for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group tasks by phase (infrastructure, implementation, testing)
+    - Use hierarchical numbering (1.1, 1.2, etc.)
+    - Keep tasks small enough to complete in one session
+  apply:
+    - Follow existing code patterns and conventions
+  verify:
+    - Run tests if test infrastructure exists
+    - Compare implementation against every spec scenario
+  archive:
+    - Warn before merging destructive deltas (large removals)

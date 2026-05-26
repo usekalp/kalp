@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { build } from "esbuild";
 import {
   access,
   cp,
@@ -25,7 +24,7 @@ const RUNTIME_ROOT = ".kalp";
 const RUNTIME_DIR = "runtime";
 const STUDIO_DIR = "studio";
 const WRANGLER_CONFIG_FILE = "wrangler.jsonc";
-const WORKER_ENTRY_FILE = "worker-entry.js";
+const WORKER_ENTRY_FILE = "worker.js";
 const COMPATIBILITY_DATE = "2026-05-10";
 
 export interface RuntimePaths {
@@ -169,14 +168,14 @@ function createRuntimeConfig(
     migrations: [
       {
         tag: "v1",
-        new_sqlite_classes: ["AgentDurableObject"],
+        new_sqlite_classes: ["KalpAgent"],
       },
     ],
     durable_objects: {
       bindings: [
         {
           name: "KALP_RUNTIME_CLOUDFLARE",
-          class_name: "AgentDurableObject",
+          class_name: "KalpAgent",
         },
       ],
     },
@@ -208,28 +207,33 @@ function runtimeTemplateCandidates(studioMode: "bundled-artifact" | "live-worksp
 }> {
   const here = dirname(fileURLToPath(import.meta.url));
   const distTemplateRoot = resolve(here, "runtime-template");
-  const packageRootTemplate = resolve(here, "..", "runtime-template");
-  const sourceTemplateRoot = resolve(here, "..", "..", "runtime-template");
-  const monorepoStudioDist = resolve(
+  const monorepoCloudflareDist = resolve(
     here,
     "..",
+    "..",
+    "..",
+    "packages",
+    "cloudflare",
+    "dist",
+  );
+  const monorepoStudioDist = resolve(
+    here,
     "..",
     "..",
     "..",
     "apps",
     "studio",
     "dist",
-    "client",
   );
 
   return [
     ...(studioMode === "live-workspace"
       ? [
           {
-            templateRoot: packageRootTemplate,
+            templateRoot: monorepoCloudflareDist,
+            workerEntryPath: join(monorepoCloudflareDist, WORKER_ENTRY_FILE),
             studioTemplateDir: resolve(
               here,
-              "..",
               "..",
               "..",
               "..",
@@ -237,7 +241,6 @@ function runtimeTemplateCandidates(studioMode: "bundled-artifact" | "live-worksp
               "studio",
               "public",
             ),
-            workerEntryPath: join(packageRootTemplate, WORKER_ENTRY_FILE),
           },
         ]
       : []),
@@ -247,13 +250,8 @@ function runtimeTemplateCandidates(studioMode: "bundled-artifact" | "live-worksp
       studioTemplateDir: join(distTemplateRoot, STUDIO_DIR),
     },
     {
-      templateRoot: packageRootTemplate,
-      workerEntryPath: join(packageRootTemplate, WORKER_ENTRY_FILE),
-      studioTemplateDir: join(packageRootTemplate, STUDIO_DIR),
-    },
-    {
-      templateRoot: sourceTemplateRoot,
-      workerEntryPath: join(sourceTemplateRoot, WORKER_ENTRY_FILE),
+      templateRoot: monorepoCloudflareDist,
+      workerEntryPath: join(monorepoCloudflareDist, WORKER_ENTRY_FILE),
       studioTemplateDir: monorepoStudioDist,
     },
   ];
@@ -352,46 +350,10 @@ async function copyTemplateRootContents(
 ): Promise<void> {
   const entries = await readdir(templateRoot, { withFileTypes: true });
   for (const entry of entries) {
+    if (entry.name === "studio") continue;
     const sourcePath = join(templateRoot, entry.name);
     const targetPath = join(runtimeDir, entry.name);
     await cp(sourcePath, targetPath, { recursive: true, force: true });
-  }
-}
-
-const REQUIRED_RUNTIME_MODULES = [
-  "shared.js",
-  "constants.js",
-  "assets.js",
-  "studio-routes.js",
-  "durable-object.js",
-  "auth.js",
-  "storage.js",
-  "resolvers.js",
-  "agent-runtime.js",
-  "executions.js",
-  "chat.js",
-];
-
-async function ensureRuntimeWorkerModules(params: {
-  runtimeDir: string;
-  candidateRoots: string[];
-}): Promise<void> {
-  for (const fileName of REQUIRED_RUNTIME_MODULES) {
-    const targetPath = join(params.runtimeDir, fileName);
-    const exists = await stat(targetPath)
-      .then(() => true)
-      .catch(() => false);
-    if (exists) continue;
-
-    for (const root of params.candidateRoots) {
-      const sourcePath = join(root, fileName);
-      const sourceExists = await stat(sourcePath)
-        .then(() => true)
-        .catch(() => false);
-      if (!sourceExists) continue;
-      await cp(sourcePath, targetPath, { force: true });
-      break;
-    }
   }
 }
 
@@ -554,7 +516,7 @@ export async function materializeRuntime(
   await rm(runtimeDir, { recursive: true, force: true });
   await mkdir(runtimeDir, { recursive: true });
 
-  await copyTemplateRootContents(template.templateRoot, runtimeDir);
+await copyTemplateRootContents(template.templateRoot, runtimeDir);
   await rm(studioDir, { recursive: true, force: true });
   if (template.studioTemplateDir) {
     await cp(template.studioTemplateDir, studioDir, { recursive: true }).catch(() => undefined);
@@ -564,32 +526,6 @@ export async function materializeRuntime(
   } else {
     await ensureStudioIndex(studioDir);
   }
-  await ensureRuntimeWorkerModules({
-    runtimeDir,
-    candidateRoots: [
-      template.templateRoot,
-      resolve(dirname(template.workerEntryPath), "..", "runtime-template"),
-    ],
-  });
-
-  // Bundle worker-entry.js to bake in dependencies (hono, jose, etc.)
-  // We mark generated/dynamic files as external so they are resolved at runtime in the same dir.
-  await build({
-    entryPoints: [workerEntrypointPath],
-    bundle: true,
-    outfile: workerEntrypointPath,
-    allowOverwrite: true,
-    platform: "browser",
-    format: "esm",
-    target: "es2022",
-    external: [
-      "cloudflare:workers",
-      "./agents.snapshot.json",
-      "./identity.config.json",
-      "./identity.map.mjs",
-    ],
-    logLevel: "error",
-  });
 
   await writeRuntimeAgentsSnapshot({ cwd, runtimeDir, mode });
   const identity = await materializeRuntimeIdentity({ cwd, runtimeDir });

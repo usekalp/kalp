@@ -139,7 +139,7 @@ export async function createRuntime(options: CreateRuntimeOptions): Promise<Runt
     async startWatcher() {
       if (!runtimePaths) throw new Error("Runtime not started");
 
-      const runtimeTemplateDir = join(runtimePaths.runtimeDir, "..", "..", "runtime-template");
+      const runtimeTemplateDir = join(runtimePaths.runtimeDir, "..", "..", "..", "packages", "cloudflare", "src");
 
       watcher = new RuntimeWatcher({
         paths: [

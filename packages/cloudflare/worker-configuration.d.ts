@@ -3,13 +3,13 @@
 // Runtime types generated with workerd@1.20260507.1 2026-05-10 nodejs_compat
 declare namespace Cloudflare {
 	interface GlobalProps {
-		mainModule: typeof import("./src/runtime/worker");
-		durableNamespaces: "AgentDurableObject";
+		mainModule: typeof import("./src/worker");
+		durableNamespaces: "KalpAgent";
 	}
 	interface Env {
 		KALP_MANIFESTS: KVNamespace;
 		ASSETS: Fetcher;
-		KALP_RUNTIME_CLOUDFLARE: DurableObjectNamespace<import("./src/runtime/worker").AgentDurableObject>;
+		KALP_RUNTIME_CLOUDFLARE: DurableObjectNamespace<import("./src/agent/kalp-agent").KalpAgent>;
 	}
 }
 interface Env extends Cloudflare.Env {}

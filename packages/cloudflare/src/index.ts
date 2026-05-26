@@ -1,33 +1,69 @@
-/**
- * @kalphq/cloudflare — Cloudflare Workers + Durable Objects adapter.
- *
- * This package provides the Cloudflare-specific runtime binding for the
- * Kalp orchestration engine. It contains:
- * - DO-backed persistence, scheduler, and transport adapters
- * - AgentDurableObject lifecycle shell
- * - Worker fetch entrypoint (dumb router)
- * - Platform wiring (adapter creation → core factory)
- *
- * @module
- */
+export { KalpAgent } from "@/agent/kalp-agent";
+export type { AgentRuntimeContext } from "@/agent/kalp-agent";
 
-// Runtime
-export { AgentDurableObject } from "./runtime/durable-object";
+export { wireRuntime } from "@/wiring";
 
-// Wiring
-export { wireRuntime } from "./wiring";
-export type { CloudflareProviders } from "./adapters/effect-resolver";
+export type { CloudflareProviders } from "@/effects";
+export { CloudflareEffectResolver } from "@/effects";
 
-// DO Adapters
 export {
-  DurableObjectPersistence,
-  DurableObjectScheduler,
-  DurableObjectTransport,
-  DOStateStore,
-  DOEventStore,
-  DOIdempotencyStore,
-  DOThreadStore,
-} from "./adapters/durable-object";
+  AgentPersistence,
+  AgentStateStore,
+  AgentEventStore,
+  AgentIdempotencyStore,
+  AgentThreadStore,
+  ensureSchema,
+} from "@/persistence";
 
-// Worker entrypoint (default export for wrangler)
-export { default } from "./runtime/worker";
+export {
+  handleChatMessage,
+  ensureChatSession,
+  appendChatMessage,
+  touchChatSession,
+} from "@/studio/chat";
+export { recordExecution, readExecutionBundle } from "@/studio/executions";
+export {
+  resolveRuntimeSystemStatus,
+  resolveAgentMetadata,
+  resolveRoutingTable,
+  resolveContracts,
+  resolveEntrypoints,
+  resolveTriggers,
+  resolveListeners,
+  resolveAgentChatCapabilities,
+  resolveAgentState,
+  resolveExecutionSummaries,
+  resolveExecutionEvents,
+  resolveChatSessions,
+  resolveAgentDetails,
+} from "@/studio/resolvers";
+export {
+  verifyGatewayAuth,
+  handleStudioLogin,
+  handleStudioLogout,
+  readSession as readStudioSession,
+  requireSession as requireStudioSession,
+  loadIdentityConfig,
+  extractBearerToken,
+} from "@/studio/auth";
+export {
+  listAgentNamesFromKv,
+  readAgentIndex,
+  readLatestHash,
+  readSemanticIr,
+  readSchemas,
+  kvGetJson,
+  kvPutJson,
+} from "@/kv-storage";
+export { KV_KEYS } from "@/shared/constants";
+export {
+  normalizeHeaderRecord,
+  withCors,
+  safeJsonParse,
+  toIsoDate,
+  summarizeValue,
+  inferTextFromAgentResponse,
+  makeId,
+} from "@/shared";
+
+export { default } from "@/worker";
