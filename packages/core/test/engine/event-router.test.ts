@@ -5,7 +5,6 @@ import type { IRGraph } from "@kalphq/sdk";
 function createTestIR(): IRGraph {
   return {
     schemaVersion: 3,
-    requirements: {},
     agent: { name: "test" },
     nodes: {
       n_msg: { id: "n_msg", stableName: "hook.message", kind: "message", trigger: { type: "message" } },

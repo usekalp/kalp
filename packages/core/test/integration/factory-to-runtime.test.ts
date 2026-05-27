@@ -20,7 +20,6 @@ describe("factory-to-runtime integration", () => {
     const runtime = new KalpRuntime(
       {
         schemaVersion: 3,
-        requirements: { "kalp/state": 1, "kalp/listeners": 1 },
         agent: { name: "test" },
         nodes: {
           n_msg: {

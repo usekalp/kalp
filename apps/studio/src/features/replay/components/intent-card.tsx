@@ -25,6 +25,11 @@ function formatType(type: string) {
   return type.replace(/_/g, ' ')
 }
 
+function sourceLabel(location: { file: string; line: number }): string {
+  const file = location.file.replace(/^\.\//, '')
+  return `${file}:${location.line}`
+}
+
 export function IntentCard({ event, index, onClick }: IntentCardProps) {
   return (
     <TooltipProvider>
@@ -41,6 +46,11 @@ export function IntentCard({ event, index, onClick }: IntentCardProps) {
                 <Badge variant={resolveVariant(event.type)}>
                   {formatType(event.type)}
                 </Badge>
+                {event.sourceLocation && (
+                  <span className="font-mono text-[10px] text-primary/80">
+                    {sourceLabel(event.sourceLocation)}
+                  </span>
+                )}
               </div>
               <span className="text-xs text-muted-foreground">
                 {new Date(event.timestamp).toLocaleTimeString()}
@@ -59,6 +69,11 @@ export function IntentCard({ event, index, onClick }: IntentCardProps) {
         </TooltipTrigger>
         <TooltipContent side="right" className="max-w-xs">
           <p className="text-xs font-medium">{event.type}</p>
+          {event.sourceLocation && (
+            <p className="mt-1 font-mono text-[10px] text-primary/80">
+              {sourceLabel(event.sourceLocation)}
+            </p>
+          )}
           <pre className="mt-2 whitespace-pre-wrap text-3xs text-zinc-200">
             {JSON.stringify(event.payload, null, 2)}
           </pre>

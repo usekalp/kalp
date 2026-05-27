@@ -37,7 +37,7 @@ export interface AgentIntrospection {
    * @example
    * ```typescript
    * const dynamicPrompt = ctx.agent.systemPrompt +
-   *   "\n\nContext: " + await ctx.storage.get("status");
+   *   "\n\nContext: " + await ctx.cache.get("status");
    * ```
    */
   systemPrompt: string;

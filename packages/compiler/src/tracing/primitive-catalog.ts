@@ -1,6 +1,6 @@
 export const PRIMITIVE_CATALOG: Record<string, string[]> = {
   ai: ["generate", "stream", "classify"],
-  storage: ["get", "put", "delete", "increment", "transaction"],
+  cache: ["get", "set", "delete"],
   memory: ["list", "append", "summarize"],
   log: ["info", "warn", "error", "debug"],
   vault: ["get"],

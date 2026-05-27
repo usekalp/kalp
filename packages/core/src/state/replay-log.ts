@@ -22,7 +22,7 @@ export interface SerializedError {
 export interface PersistedEffect {
   /** Position within the execution's sequence counter. Deterministic replay replays effects in strict seq order. */
   seq: number;
-  /** The effect type string (e.g. "ai.generate", "storage.get"). */
+  /** The effect type string (e.g. "ai.generate", "cache.get"). */
   type: string;
   /** The handler invocation that produced this effect. */
   executionId: string;

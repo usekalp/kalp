@@ -42,11 +42,6 @@ export async function resolveAgentMetadata(
     ? await readSemanticIr(env, agentName, latestHash)
     : null;
   const metadata = (semantic?.semanticIr?.agent ?? {}) as Record<string, unknown>;
-  const requirements =
-    semantic?.semanticIr?.requirements &&
-    typeof semantic.semanticIr.requirements === "object"
-      ? semantic.semanticIr.requirements
-      : {};
   return {
     name: agentName,
     label:
@@ -94,7 +89,6 @@ export async function resolveAgentMetadata(
         ? ((indexedEntry as Record<string, unknown>).updatedAt as string)
         : null,
     public: Boolean(metadata.skipAuth),
-    requirements,
     systemPrompt:
       typeof metadata.systemPrompt === "string"
         ? metadata.systemPrompt

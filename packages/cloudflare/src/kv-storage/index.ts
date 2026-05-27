@@ -42,3 +42,7 @@ export {
   readChatMessages,
   writeChatMessages,
 } from "./chat";
+
+export {
+  readSourceMetadata,
+} from "./source-metadata";

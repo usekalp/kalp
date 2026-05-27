@@ -4,7 +4,7 @@
 
 /**
  * Maps external effect type strings to their payload and result types.
- * External effects are resolved by the runtime environment (e.g. storage, AI, vault, MCP).
+ * External effects are resolved by the runtime environment (e.g. cache, AI, vault, MCP).
  */
 export interface ExternalEffectMap {
   "ai.generate": {
@@ -19,35 +19,16 @@ export interface ExternalEffectMap {
     payload: { prompt: string; classes: string[]; system?: string; model?: string; confidenceThreshold?: number };
     result: string;
   };
-  "storage.get": {
+  "cache.get": {
     payload: { key: string };
     result: unknown;
   };
-  "storage.put": {
-    payload: { key: string; value: unknown; options?: unknown };
+  "cache.set": {
+    payload: { key: string; value: unknown };
     result: void;
   };
-  "storage.delete": {
+  "cache.delete": {
     payload: { key: string };
-    result: void;
-  };
-  "storage.increment": {
-    payload: { key: string; amount?: number };
-    result: number;
-  };
-  "storage.list": {
-    payload: { prefix?: string };
-    result: string[];
-  };
-  "storage.batch": {
-    payload: {
-      operations: Array<
-        | { op: "put"; key: string; value: unknown }
-        | { op: "delete"; key: string }
-        | { op: "increment"; key: string; amount: number }
-        | { op: "cas"; key: string; expected: unknown; next: unknown }
-      >;
-    };
     result: void;
   };
   "memory.append": {

@@ -4,8 +4,6 @@
  * @module
  */
 
-export type RequirementDescriptor = Record<string, number>;
-
 export type TriggerDescriptor =
   | { type: "lifecycle"; event: "init" | "tick" }
   | { type: "message" }
@@ -57,7 +55,6 @@ export type SchemaRegistry = Record<string, SchemaDescriptor>;
 
 export interface IRGraph {
   schemaVersion: 3;
-  requirements: RequirementDescriptor;
   agent: {
     name: string;
     label?: string;
@@ -102,6 +99,7 @@ export interface ArtifactManifest {
     semanticIr: string;
     schemas: string;
     bundleManifest: string;
+    sourceMetadata?: string;
   };
   targets: Record<string, ArtifactTargetManifest>;
 }

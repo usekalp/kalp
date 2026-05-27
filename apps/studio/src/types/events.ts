@@ -10,6 +10,12 @@ export interface ExecutionSummary {
   outputText?: string
 }
 
+export interface SourceLocation {
+  file: string
+  line: number
+  column: number
+}
+
 export interface ExecutionEvent {
   id: string
   executionId: string
@@ -30,6 +36,7 @@ export interface ExecutionEvent {
     | 'token'
   timestamp: string
   payload: unknown
+  sourceLocation?: SourceLocation
 }
 
 export interface ReplayState {

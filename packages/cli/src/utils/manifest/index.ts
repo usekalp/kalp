@@ -7,6 +7,7 @@ import type {
   IRGraph,
   SchemaRegistry,
 } from "@kalphq/sdk";
+import type { SourceMetadataManifest } from "@kalphq/compiler";
 import type { AgentManifestV3 } from "@/utils/manifest/types";
 import { buildAgent } from "@kalphq/compiler";
 
@@ -55,6 +56,15 @@ export async function readAgentManifest(params: {
       join(artifactsDir, "bundle-manifest.json"),
     );
 
+    let sourceMetadata: SourceMetadataManifest | undefined;
+    try {
+      sourceMetadata = await loadJson<SourceMetadataManifest>(
+        join(artifactsDir, "source-metadata.json"),
+      );
+    } catch {
+      // source-metadata.json is optional — only present when source analysis ran
+    }
+
     const bundles: AgentManifestV3["bundles"] = {};
     const targetBundles = bundleManifest.targets.default?.nodes ?? {};
 
@@ -83,6 +93,7 @@ export async function readAgentManifest(params: {
       schemas,
       bundleManifest,
       bundles,
+      sourceMetadata,
       metadata: {
         generatedAt: new Date().toISOString(),
       },

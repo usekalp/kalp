@@ -34,6 +34,14 @@ export async function exportCompiledIrForDebug(params: {
     "utf-8",
   );
 
+  if (manifest.sourceMetadata) {
+    await writeFile(
+      join(outDir, "source-metadata.json"),
+      `${JSON.stringify(manifest.sourceMetadata, null, 2)}\n`,
+      "utf-8",
+    );
+  }
+
   for (const [bundleHash, bundle] of Object.entries(manifest.bundles)) {
     const fileName = bundle.file.split("/").pop() ?? `${bundleHash}.js`;
     await writeFile(join(bundlesDir, fileName), bundle.code, "utf-8");
@@ -41,4 +49,3 @@ export async function exportCompiledIrForDebug(params: {
 
   return outDir;
 }
-

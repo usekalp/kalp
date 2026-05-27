@@ -15,10 +15,7 @@ function createMockArtifacts(): {
   return {
     ir: {
       schemaVersion: 3,
-      requirements: {
-        "kalp/state": 1,
-        "kalp/listeners": 1,
-      },
+
       agent: {
         name: "test-runtime-agent",
         stateSchema: "schema_state",

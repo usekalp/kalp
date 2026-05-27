@@ -35,7 +35,6 @@ import {
 } from "./utils";
 import {
   createAgentManifest,
-  createRequirementsManifest,
   createSemanticIr,
 } from "./manifest";
 import { buildSchemaIR } from "./ir-generator";
@@ -288,10 +287,6 @@ async function registerNode(node: {
     const semanticIr: IRGraph = createSemanticIr({
       agent: createAgentManifest(agentConfig, stateSchemaId),
       nodes: state.nodes,
-      requirements: createRequirementsManifest({
-        hasState: Boolean(stateSchemaId),
-        hasListeners: Object.values(state.nodes).some((node) => node.kind === "listener"),
-      }),
     });
 
     const semanticHash = calculateSemanticHash(semanticIr, state.schemas);
@@ -306,6 +301,7 @@ async function registerNode(node: {
         semanticIr: "./semantic-ir.json",
         schemas: "./schemas.json",
         bundleManifest: "./bundle-manifest.json",
+        ...(state.sourceAnalysis.length > 0 ? { sourceMetadata: "./source-metadata.json" } : {}),
       },
       targets: {
         [DEFAULT_TARGET]: {

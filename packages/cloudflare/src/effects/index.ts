@@ -2,13 +2,10 @@ import type { PersistenceAdapter, EffectResolver, Effect, EffectType, EffectMap 
 import type { McpServerRuntimeConfig } from "@kalphq/sdk";
 import { resolveAiGenerate, resolveAiStream, resolveAiClassify, type AiProviders } from "./ai.resolver";
 import {
-  resolveStorageGet,
-  resolveStoragePut,
-  resolveStorageDelete,
-  resolveStorageIncrement,
-  resolveStorageList,
-  resolveStorageBatch,
-} from "./storage.resolver";
+  resolveCacheGet,
+  resolveCacheSet,
+  resolveCacheDelete,
+} from "./cache.resolver";
 import {
   resolveMemoryAppend,
   resolveMemoryList,
@@ -43,18 +40,12 @@ export class CloudflareEffectResolver implements EffectResolver {
         return resolveAiStream(p, this.providers) as Promise<EffectMap[T]["result"]>;
       case "ai.classify":
         return resolveAiClassify(p, this.providers) as Promise<EffectMap[T]["result"]>;
-      case "storage.get":
-        return resolveStorageGet(p, this.persistence) as Promise<EffectMap[T]["result"]>;
-      case "storage.put":
-        return resolveStoragePut(p, this.persistence) as Promise<EffectMap[T]["result"]>;
-      case "storage.delete":
-        return resolveStorageDelete(p, this.persistence) as Promise<EffectMap[T]["result"]>;
-      case "storage.increment":
-        return resolveStorageIncrement(p, this.persistence) as Promise<EffectMap[T]["result"]>;
-      case "storage.list":
-        return resolveStorageList(p, this.persistence) as Promise<EffectMap[T]["result"]>;
-      case "storage.batch":
-        return resolveStorageBatch(p, this.persistence) as Promise<EffectMap[T]["result"]>;
+      case "cache.get":
+        return resolveCacheGet(p, this.persistence) as Promise<EffectMap[T]["result"]>;
+      case "cache.set":
+        return resolveCacheSet(p, this.persistence) as Promise<EffectMap[T]["result"]>;
+      case "cache.delete":
+        return resolveCacheDelete(p, this.persistence) as Promise<EffectMap[T]["result"]>;
       case "memory.append":
         return resolveMemoryAppend(p, this.persistence) as Promise<EffectMap[T]["result"]>;
       case "memory.list":

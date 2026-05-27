@@ -12,7 +12,6 @@ export type {
   BundleTargetManifest,
   NodeDescriptor,
   NodeKind,
-  RequirementDescriptor,
   SchemaDescriptor,
   SchemaRegistry,
   TriggerDescriptor,

@@ -25,29 +25,19 @@ export class FakeEffectResolver implements EffectResolver {
     let result: unknown = undefined;
 
     switch (effect.type as string) {
-      case "storage.put": {
+      case "cache.set": {
         const { key, value } = effect.payload as any;
         await this.state.set(key, value);
         break;
       }
-      case "storage.batch": {
-        const { operations } = effect.payload as any;
-        await this.state.batch(operations);
-        break;
-      }
-      case "storage.get": {
+      case "cache.get": {
         const { key } = effect.payload as any;
         result = await this.state.get(key);
         break;
       }
-      case "storage.delete": {
+      case "cache.delete": {
         const { key } = effect.payload as any;
         await this.state.delete(key);
-        break;
-      }
-      case "storage.list": {
-        const { prefix } = effect.payload as any;
-        result = await this.state.list(prefix);
         break;
       }
       case "action.waitUntil": {

@@ -12,11 +12,6 @@ import {
 import { loadAgentState, persistValidatedState } from "./state-manager";
 import { resolveSchema, applyStateDefaults } from "./schema-utils";
 
-const RUNTIME_CAPABILITIES: Record<string, number> = {
-  "kalp/state": 1,
-  "kalp/listeners": 1,
-};
-
 function calculateStartingSeq(
   log: ReplayLog,
   executionId: string,
@@ -84,15 +79,6 @@ export class KalpRuntime {
       throw new Error(
         `Unsupported runtime ABI ${String(bundleManifest.targets.default.abiVersion)}. Expected ABI 1.`,
       );
-    }
-
-    for (const [requirement, version] of Object.entries(ir.requirements ?? {})) {
-      const supported = RUNTIME_CAPABILITIES[requirement];
-      if (supported === undefined || supported < version) {
-        throw new Error(
-          `Runtime capability mismatch for ${requirement}. Required v${version}, available v${supported ?? 0}.`,
-        );
-      }
     }
   }
 

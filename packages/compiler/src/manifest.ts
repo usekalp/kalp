@@ -1,4 +1,4 @@
-import type { IRGraph, RequirementDescriptor, SchemaRegistry } from "@kalphq/sdk";
+import type { IRGraph, SchemaRegistry } from "@kalphq/sdk";
 import { deriveLabelFromName } from "./utils";
 
 export function createAgentManifest(
@@ -20,31 +20,12 @@ export function createAgentManifest(
   };
 }
 
-export function createRequirementsManifest(input: {
-  hasState: boolean;
-  hasListeners: boolean;
-}): RequirementDescriptor {
-  const requirements: RequirementDescriptor = {};
-
-  if (input.hasState) {
-    requirements["kalp/state"] = 1;
-  }
-
-  if (input.hasListeners) {
-    requirements["kalp/listeners"] = 1;
-  }
-
-  return requirements;
-}
-
 export function createSemanticIr(input: {
   agent: IRGraph["agent"];
   nodes: IRGraph["nodes"];
-  requirements: RequirementDescriptor;
 }): IRGraph {
   return {
     schemaVersion: 3,
-    requirements: input.requirements,
     agent: input.agent,
     nodes: input.nodes,
   };
@@ -53,4 +34,3 @@ export function createSemanticIr(input: {
 export function createEmptySchemas(): SchemaRegistry {
   return {};
 }
-

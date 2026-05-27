@@ -92,7 +92,6 @@ export class HotReloadCoordinator {
       }),
       runtimeHash: hashJson({
         nodes: manifest.semanticIr.nodes,
-        requirements: manifest.semanticIr.requirements,
       }),
       bundleHash: hashJson(manifest.bundleManifest),
       semanticHash: manifest.artifactManifest.semanticHash,
@@ -189,7 +188,7 @@ export class HotReloadCoordinator {
     const nodes = Object.values(manifest.semanticIr.nodes);
     return {
       hasMessage: nodes.some(n => n.kind === "message"),
-      hasState: Boolean(manifest.semanticIr.requirements?.hasState),
+      hasState: Boolean(manifest.semanticIr.agent?.stateSchema),
       hasListeners: nodes.some(n => n.kind === "listener"),
       routeCount: nodes.filter(n => n.kind === "route").length,
       contractCount: nodes.filter(n => n.kind === "contract").length,

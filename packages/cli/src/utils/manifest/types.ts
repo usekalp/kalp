@@ -4,6 +4,7 @@ import type {
   IRGraph,
   SchemaRegistry,
 } from "@kalphq/sdk";
+import type { SourceMetadataManifest } from "@kalphq/compiler";
 
 export interface BundledArtifactFile {
   file: string;
@@ -20,6 +21,7 @@ export interface AgentManifestV3 {
   schemas: SchemaRegistry;
   bundleManifest: BundleManifest;
   bundles: Record<string, BundledArtifactFile>;
+  sourceMetadata?: SourceMetadataManifest;
   metadata?: {
     generatedAt?: string;
   };

@@ -106,6 +106,29 @@ export interface ChatMessage {
   status?: string
 }
 
+export interface HandlerLocationEntry {
+  file: string
+  line: number
+  column: number
+  exportName: string
+  stableName: string
+  nodeId: string
+}
+
+export interface SourceLocationEntry {
+  file: string
+  line: number
+  column: number
+  handlerId: string
+  primitiveType: string
+}
+
+export interface SourceMetadataManifest {
+  schemaVersion: 1
+  primitiveLocations: Record<string, SourceLocationEntry>
+  handlerLocations: Record<string, HandlerLocationEntry>
+}
+
 export interface RuntimeAgentExecutionStats {
   total: number
   running: number
@@ -128,6 +151,7 @@ export interface RuntimeAgentDetails extends RuntimeAgent {
   state: RuntimeAgentState
   chat: RuntimeChatCapabilities
   chatSessions: ChatSession[]
+  sourceMetadata: SourceMetadataManifest | null
   executionStats: RuntimeAgentExecutionStats
 }
 

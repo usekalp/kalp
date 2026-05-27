@@ -16,12 +16,7 @@ export type {
   KalpAI,
 } from "@/primitives/ai";
 
-export type {
-  StoragePutOptions,
-  StorageTransaction,
-  TransactionOptions,
-  StoragePrimitive,
-} from "@/primitives/storage";
+export type { KalpCache } from "@/primitives/cache";
 
 export type { LogLevel, KalpLog } from "@/primitives/log";
 

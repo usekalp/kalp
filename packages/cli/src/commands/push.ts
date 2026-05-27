@@ -294,6 +294,14 @@ async function pushRemoteManifest(params: {
       value: bundle.code,
     });
   }
+
+  if (manifest.sourceMetadata) {
+    values.push({
+      key: `${agentName}:${hash}:source-metadata`,
+      value: JSON.stringify(manifest.sourceMetadata),
+    });
+  }
+
   values.push({
     key: `${agentName}:latest`,
     value: hash,

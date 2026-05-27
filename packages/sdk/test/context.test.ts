@@ -25,14 +25,12 @@ describe("KalpContext", () => {
     expect(secret).toBe("secret-value");
   });
 
-  it("exposes storage primitive", () => {
+  it("exposes cache primitive", () => {
     const ctx = createMockContext();
 
-    expect(typeof ctx.storage.get).toBe("function");
-    expect(typeof ctx.storage.put).toBe("function");
-    expect(typeof ctx.storage.delete).toBe("function");
-    expect(typeof ctx.storage.increment).toBe("function");
-    expect(typeof ctx.storage.transaction).toBe("function");
+    expect(typeof ctx.cache.get).toBe("function");
+    expect(typeof ctx.cache.set).toBe("function");
+    expect(typeof ctx.cache.delete).toBe("function");
   });
 
   it("exposes auth primitive", () => {

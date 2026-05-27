@@ -17,7 +17,7 @@ describe("ast-normalizer", () => {
   it("should truncate long arg values", () => {
     const longValue = "x".repeat(100);
     const normalized = normalizeCallForHash({
-      callee: "storage.get",
+      callee: "cache.get",
       args: [{ type: "StringLiteral", value: longValue }],
     });
     expect(normalized.args[0]!.value).toBeUndefined();

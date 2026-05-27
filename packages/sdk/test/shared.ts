@@ -5,8 +5,7 @@ import type {
   KalpMemory,
   KalpVault,
   KalpAuth,
-  KalpLog,
-  StoragePrimitive,
+  KalpCache,
   asUserId,
   WakeReason,
   KalpMcp,
@@ -23,6 +22,12 @@ export const createMockContext = (): KalpContext => ({
     classify: vi.fn(),
   } as unknown as KalpAI,
 
+  cache: {
+    get: vi.fn().mockResolvedValue(null),
+    set: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
+  } as unknown as KalpCache,
+
   memory: {
     list: vi.fn(),
     append: vi.fn(),
@@ -32,23 +37,6 @@ export const createMockContext = (): KalpContext => ({
   vault: {
     get: vi.fn().mockResolvedValue("secret-value"),
   } as unknown as KalpVault,
-
-  storage: {
-    get: vi.fn().mockResolvedValue(null),
-    put: vi.fn().mockResolvedValue(undefined),
-    delete: vi.fn().mockResolvedValue(undefined),
-    increment: vi.fn().mockResolvedValue(1),
-    transaction: vi.fn((callback) =>
-      callback({
-        get: vi.fn().mockResolvedValue(null),
-        put: vi.fn(),
-        delete: vi.fn(),
-        increment: vi.fn().mockResolvedValue(1),
-        list: vi.fn().mockResolvedValue([]),
-      }),
-    ),
-    list: vi.fn().mockResolvedValue([]),
-  } as unknown as StoragePrimitive,
 
   auth: {
     userId: "u-1" as ReturnType<typeof asUserId>,

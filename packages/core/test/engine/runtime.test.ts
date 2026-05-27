@@ -38,7 +38,6 @@ const mockIR: IRGraph = {
   schemaVersion: 3 as const,
   agent: { name: "test" },
   nodes: {},
-  requirements: {},
 };
 
 function mockBundleLoader() {
@@ -48,7 +47,7 @@ function mockBundleLoader() {
 describe("KalpRuntime constructor", () => {
   it("throws on schemaVersion !== 3", () => {
     expect(() => new KalpRuntime(
-      { schemaVersion: 2 as const, agent: { name: "test" }, nodes: {}, requirements: {} } as unknown as IRGraph,
+      { schemaVersion: 2 as const, agent: { name: "test" }, nodes: {} } as unknown as IRGraph,
       {},
       mockManifest(),
       mockBundleLoader(),
@@ -77,17 +76,6 @@ describe("KalpRuntime constructor", () => {
       mockPersistence(),
       mockResolver(),
     )).toThrow("Unsupported runtime ABI");
-  });
-
-  it("throws on requirement mismatch", () => {
-    expect(() => new KalpRuntime(
-      { ...mockIR, requirements: { "kalp/state": 999 } },
-      {},
-      mockManifest(),
-      mockBundleLoader(),
-      mockPersistence(),
-      mockResolver(),
-    )).toThrow("Runtime capability mismatch");
   });
 });
 

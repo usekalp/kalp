@@ -76,10 +76,6 @@ export function validateIR(ir: any): { valid: boolean; errors: string[] } {
     errors.push("IR agent must have a 'name' property.");
   }
 
-  if (!ir.requirements || typeof ir.requirements !== "object" || Array.isArray(ir.requirements)) {
-    errors.push("IR must have a namespaced 'requirements' object.");
-  }
-
   if (!ir.nodes || typeof ir.nodes !== "object" || Array.isArray(ir.nodes)) {
     errors.push("Missing 'nodes' object in IR.");
   }

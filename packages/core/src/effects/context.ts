@@ -10,7 +10,7 @@ import type { ExecutionFrame } from "../execution/frame";
 
 import {
   createAIContext,
-  createStorageContext,
+  createCacheContext,
   createMathContext,
   createTimeContext,
   createMemoryContext,
@@ -30,7 +30,7 @@ import {
 
 /**
  * Create the full agent execution context by wiring all primitives to the effect resolution pipeline.
- * Assembles AI, storage, time, memory, MCP, log, vault, actions, schedules, and runtime into a single
+ * Assembles AI, cache, time, memory, MCP, log, vault, actions, schedules, and runtime into a single
  * {@link KalpContext} used throughout agent execution.
  *
  * @param resolver - Effect resolver that processes each effect.
@@ -62,7 +62,7 @@ export function createProxyContext(
 
   return {
     ai: createAIContext(interceptEffect),
-    storage: createStorageContext(interceptEffect),
+    cache: createCacheContext(interceptEffect),
     state,
     math: createMathContext(interceptSync),
     time: createTimeContext(baseTime),

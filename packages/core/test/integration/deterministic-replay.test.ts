@@ -26,12 +26,11 @@ describe("deterministic replay", () => {
 
   it("should not call resolver on replay (cache hit)", async () => {
     const bundleLoader = async () =>
-      "export default async (p, ctx) => { await ctx.storage.get('key'); return 'ok'; }";
+      "export default async (p, ctx) => { await ctx.cache.get('key'); return 'ok'; }";
 
     const runtime = new KalpRuntime(
       {
         schemaVersion: 3,
-        requirements: { "kalp/state": 1, "kalp/listeners": 1 },
         agent: { name: "test" },
         nodes: {
           n_msg: {

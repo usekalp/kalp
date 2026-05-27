@@ -32,4 +32,7 @@ export const KV_KEYS = {
   schemas(agentName: string, hash: string): string {
     return `${agentName}:${hash}:schemas`;
   },
+  sourceMetadata(agentName: string, hash: string): string {
+    return `${agentName}:${hash}:source-metadata`;
+  },
 };

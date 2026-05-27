@@ -133,8 +133,8 @@ export const myTool = {
     expect(detections).toEqual([]);
   });
 
-  it("should detect ctx.storage.get call", () => {
-    const source = `const data = await ctx.storage.get("my-key");`;
+  it("should detect ctx.cache.get call", () => {
+    const source = `const data = await ctx.cache.get("my-key");`;
     const fullSpan = makeSpan(0, source.length);
     (parseSync as any).mockReturnValue({
       type: "Module",

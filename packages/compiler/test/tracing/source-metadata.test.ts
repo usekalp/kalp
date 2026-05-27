@@ -108,14 +108,14 @@ describe("source-metadata", () => {
         handlerColumn: 0,
         primitives: [
           {
-            namespace: "storage",
+            namespace: "cache",
             method: "get",
-            primitiveType: "storage.get",
+            primitiveType: "cache.get",
             line: 17,
             column: 15,
             semanticName: "cached",
             inferenceSource: "variable",
-            primitiveId: "tool.handler_b.storage.get.cached",
+            primitiveId: "tool.handler_b.cache.get.cached",
             argPreview: { argsCount: 1, firstArgType: "StringLiteral" },
           },
         ],

@@ -1,4 +1,4 @@
-import { readSemanticIr, readSchemas, readExecutionIndex, readExecutionSummary, readChatSessions as readChatSessionsFromKv, readExecutionEvents } from "@/kv-storage";
+import { readSemanticIr, readSchemas, readExecutionIndex, readExecutionSummary, readChatSessions as readChatSessionsFromKv, readExecutionEvents, readSourceMetadata } from "@/kv-storage";
 import { normalizeNodeCollection } from "./models";
 import { resolveAgentMetadata } from "./system";
 import { resolveRoutingTable, resolveEntrypoints, resolveTriggers, resolveContracts, resolveListeners } from "./topology";
@@ -125,6 +125,7 @@ export async function resolveAgentDetails(
     chat,
     chatSessions,
     executions,
+    sourceMetadata,
   ] = await Promise.all([
     resolveAgentMetadata(env, agentName, requestUrl),
     resolveRoutingTable(env, agentName),
@@ -136,6 +137,7 @@ export async function resolveAgentDetails(
     resolveAgentChatCapabilities(env, agentName),
     resolveChatSessions(env, agentName),
     resolveExecutionSummaries(env, agentName),
+    readSourceMetadata(env, agentName),
   ]);
 
   return {
@@ -148,6 +150,7 @@ export async function resolveAgentDetails(
     state,
     chat,
     chatSessions,
+    sourceMetadata,
     executionStats: {
       total: (executions as Record<string, unknown>[]).length,
       latest: (executions as Record<string, unknown>[])[0] ?? null,

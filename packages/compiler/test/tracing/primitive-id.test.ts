@@ -47,12 +47,12 @@ describe("primitive-id", () => {
     it("should use fallback hash when no semantic name", () => {
       const id = generatePrimitiveId({
         handlerStableName: "route.get.api_data",
-        namespace: "storage",
+        namespace: "cache",
         method: "get",
         semanticName: null,
         fallbackHash: "abc123",
       });
-      expect(id).toBe("route.get.api_data.storage.get.abc123");
+      expect(id).toBe("route.get.api_data.cache.get.abc123");
     });
 
     it("should ignore semantic name if it sanitizes to empty string", () => {

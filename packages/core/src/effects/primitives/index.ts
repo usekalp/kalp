@@ -1,5 +1,5 @@
 export { createAIContext } from "./ai";
-export { createStorageContext } from "./storage";
+export { createCacheContext } from "./cache";
 export { createMathContext } from "./math";
 export { createTimeContext } from "./time";
 export { createMemoryContext } from "./memory";
@@ -9,6 +9,7 @@ export { createVaultContext } from "./vault";
 export { createActionsContext } from "./actions";
 export { createRuntimeContext } from "./runtime";
 export { createSchedulesContext } from "./schedules";
-export type { ListenerRef, StorageOperation, TransactionAdapter } from "./shared";
+export type { ListenerRef } from "./shared";
+export type { StorageOperation, TransactionAdapter } from "../../persistence/types";
 export type { LocalActions } from "./actions";
 export type { JsonSchema } from "./shared";

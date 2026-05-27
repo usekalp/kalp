@@ -22,10 +22,10 @@ describe("suspension resume", () => {
           effect.payload as EffectMap["action.waitUntil"]["payload"];
         throw new SuspensionException(until, "timer-wake", {}, effect.seq);
       }
-      if (effect.type === "storage.get") {
+      if (effect.type === "cache.get") {
         return undefined as EffectMap[T]["result"];
       }
-      if (effect.type === "storage.put") {
+      if (effect.type === "cache.set") {
         return undefined as EffectMap[T]["result"];
       }
       return undefined as EffectMap[T]["result"];
@@ -49,7 +49,6 @@ describe("suspension resume", () => {
     const runtime = new KalpRuntime(
       {
         schemaVersion: 3,
-        requirements: { "kalp/state": 1, "kalp/listeners": 1 },
         agent: { name: "test" },
         nodes: {
           n_msg: {
