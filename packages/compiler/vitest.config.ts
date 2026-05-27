@@ -10,5 +10,10 @@ export default defineConfig({
   test: {
     include: ["test/**/*.test.ts"],
     watch: false,
+    server: {
+      deps: {
+        external: ["@swc/core"],
+      },
+    },
   },
 });

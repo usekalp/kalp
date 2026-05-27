@@ -39,6 +39,9 @@ import {
   createSemanticIr,
 } from "./manifest";
 import { buildSchemaIR } from "./ir-generator";
+import { analyzeHandlerFile, buildManifest } from "./tracing";
+import { findExportPosition } from "./tracing/source-locations";
+import type { HandlerSourceAnalysis } from "./tracing/types";
 
 const require = createRequire(import.meta.url);
 const DEFAULT_TARGET = "default";
@@ -53,26 +56,6 @@ export interface BuildAgentResult {
   semanticHash: string;
   artifactHash: string;
   deploymentHash: string;
-}
-
-function resolveWorkspaceSdkSource() {
-  try {
-    const sdkPackageJsonPath = require.resolve("@kalphq/sdk/package.json");
-    const sdkPackageDir = path.dirname(sdkPackageJsonPath);
-    const sdkSourceDir = path.join(sdkPackageDir, "src");
-    const sdkSourceEntry = path.join(sdkSourceDir, "index.ts");
-
-    if (!fs.existsSync(sdkSourceEntry)) {
-      return null;
-    }
-
-    return {
-      sdkSourceDir,
-      sdkSourceEntry,
-    };
-  } catch {
-    return null;
-  }
 }
 
 function collectExportedRegistryEntries(mod: any) {
@@ -114,6 +97,8 @@ function createCompilerState() {
       },
     },
   };
+  const sourceAnalysis: HandlerSourceAnalysis[] = [];
+  const sourceCache = new Map<string, string>();
 
   return {
     nodes,
@@ -121,6 +106,8 @@ function createCompilerState() {
     debug,
     bundleManifest,
     stableNames: new Set<string>(),
+    sourceAnalysis,
+    sourceCache,
   };
 }
 
@@ -203,7 +190,7 @@ export async function buildAgent(
       return schemaId;
     }
 
-    async function registerNode(node: {
+async function registerNode(node: {
       kind: IRNodeKind;
       name?: string;
       stableName: string;
@@ -228,6 +215,22 @@ export async function buildAgent(
 
       const bundleBinding = await createBundleBinding(node.filePath, bundlesDir, node.exportName);
 
+      const absoluteFile = path.resolve(node.filePath);
+      let sourceLine: number | undefined;
+      let sourceColumn: number | undefined;
+      try {
+        let source = state.sourceCache.get(absoluteFile);
+        if (!source) {
+          source = fs.readFileSync(absoluteFile, "utf-8");
+          state.sourceCache.set(absoluteFile, source);
+        }
+        const pos = findExportPosition(source, node.exportName);
+        if (pos) {
+          sourceLine = pos.line;
+          sourceColumn = pos.column;
+        }
+      } catch {}
+
       state.nodes[nodeId] = {
         id: nodeId,
         stableName: node.stableName,
@@ -242,11 +245,26 @@ export async function buildAgent(
       };
       state.bundleManifest.targets[DEFAULT_TARGET]!.nodes[nodeId] = bundleBinding;
       state.debug[nodeId] = {
-        absoluteFile: path.resolve(node.filePath),
+        absoluteFile,
         relativeModule,
         export: node.exportName,
+        line: sourceLine,
+        column: sourceColumn,
       };
       state.stableNames.add(node.stableName);
+
+      try {
+        const analysis = analyzeHandlerFile(
+          absoluteFile,
+          relativeModule,
+          node.exportName,
+          node.stableName,
+          nodeId,
+        );
+        if (analysis) {
+          state.sourceAnalysis.push(analysis);
+        }
+      } catch {}
     }
 
     const compilerContext: CompilerContext = {
@@ -257,6 +275,7 @@ export async function buildAgent(
       registerSchema,
       registerNode,
       stableNames: state.stableNames,
+      sourceAnalysis: state.sourceAnalysis,
     };
 
     await processRegistryNodes(registry, compilerContext);
@@ -306,6 +325,11 @@ export async function buildAgent(
 
     if (includeDebug) {
       writes.push([path.join(artifactsDir, "debug.json"), state.debug]);
+    }
+
+    if (state.sourceAnalysis.length > 0) {
+      const sourceMetadata = buildManifest(state.sourceAnalysis);
+      writes.push([path.join(artifactsDir, "source-metadata.json"), sourceMetadata]);
     }
 
     for (const [filePath, value] of writes) {

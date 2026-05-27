@@ -1,6 +1,7 @@
 import type { BundleNodeBinding, NodeDescriptor, IRNodeKind } from "@kalphq/sdk";
 import { bundleHandler } from "./bundler";
 import { assertCronExpression, isSdkInternalPath, normalizeStableRouteName } from "./utils";
+import type { HandlerSourceAnalysis } from "./tracing/types";
 
 export interface DebugNodeMetadata {
   absoluteFile: string;
@@ -31,6 +32,7 @@ export interface CompilerContext {
     exportName: string;
   }) => Promise<void>;
   stableNames: Set<string>;
+  sourceAnalysis: HandlerSourceAnalysis[];
 }
 
 async function resolveExportName(
