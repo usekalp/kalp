@@ -87,13 +87,20 @@ export interface MaterializeRuntimeOptions {
   studioMode?: "bundled-artifact" | "live-workspace";
 }
 
+interface WranglerMigration {
+  tag: string;
+  new_sqlite_classes?: string[];
+  renamed_classes?: Array<{ from: string; to: string }>;
+  deleted_classes?: string[];
+}
+
 interface WranglerConfig {
   $schema: string;
   name: string;
   main: string;
   compatibility_date: string;
   compatibility_flags: string[];
-  migrations: Array<{ tag: string; new_sqlite_classes: string[] }>;
+  migrations: WranglerMigration[];
   durable_objects: {
     bindings: Array<{ name: string; class_name: string }>;
   };
@@ -169,6 +176,10 @@ function createRuntimeConfig(
       {
         tag: "v1",
         new_sqlite_classes: ["KalpAgent"],
+      },
+      {
+        tag: "v2",
+        renamed_classes: [{ from: "AgentDurableObject", to: "KalpAgent" }],
       },
     ],
     durable_objects: {
