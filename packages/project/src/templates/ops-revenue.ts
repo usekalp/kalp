@@ -35,7 +35,7 @@ export const scoreOpportunity = defineToolFor<AgentState>()({
   async handler({ transcript }, ctx) {
     // Business intent: create a consistent, explainable lead score.
     const summary = await ctx.ai.generate({
-      model: "gpt-4o-mini",
+      tier: "low",
       system: "Summarize sales call.",
       prompt: transcript,
     });
@@ -85,7 +85,7 @@ export const revenueContract = defineContractFor<AgentState>()({
   async handler(input, ctx) {
     // Business intent: public capability for downstream orchestrators.
     const policy = await ctx.ai.generate({
-      model: "gpt-4o-mini",
+      tier: "low",
       system: "Return concise revenue policy.",
       prompt: input.opportunityId,
     });

@@ -1,7 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import pc from "picocolors";
-import * as p from "@clack/prompts";
 
 export interface GeneratorResult {
   updated: boolean;

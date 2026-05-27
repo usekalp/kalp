@@ -20,7 +20,7 @@ export default defineCommand({
   subCommands: {
     generate: () => import("./generate").then((r) => r.default),
   },
-  run({ args }) {
+  run() {
     const subcommand = process.argv[3];
     if (subcommand && subcommand !== "--help" && subcommand !== "-h") {
       return;

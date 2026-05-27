@@ -21,7 +21,7 @@ export default defineCommand({
     list: () => import("./list").then((r) => r.default),
     delete: () => import("./delete").then((r) => r.default),
   },
-  run({ args }) {
+  run() {
     const subcommand = process.argv[3];
     if (subcommand && subcommand !== "--help" && subcommand !== "-h") {
       return;

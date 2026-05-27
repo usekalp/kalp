@@ -34,7 +34,7 @@ export const draftReply = defineToolFor<AgentState>()({
   async handler({ issue, priority }, ctx) {
     // Business intent: draft a customer-facing answer in consistent tone.
     const reply = await ctx.ai.generate({
-      model: "gpt-4o-mini",
+      tier: "low",
       system: "Draft concise support reply.",
       prompt: \`Priority: \${priority}\\nIssue: \${issue}\`,
     });
@@ -74,7 +74,7 @@ export const supportContract = defineContractFor<AgentState>()({
   async handler(input, ctx) {
     // Business intent: external systems can register a new support intake.
     const note = await ctx.ai.generate({
-      model: "gpt-4o-mini",
+      tier: "low",
       system: "Generate short support intake note.",
       prompt: input.ticketId,
     });

@@ -3,7 +3,7 @@ import { validateCompiledIR } from "@/utils/validate";
 import type { RuntimeRegistry } from "../registry/runtime-registry";
 import type { MiniflareServer } from "../server/miniflare-server";
 import type { CompiledDeployment } from "../deployment/types";
-import { detectChangeType, type ChangeType } from "./change-detector";
+import { detectChangeType } from "./change-detector";
 import { resolveAffectedAgents } from "./affected-agents";
 import { hashJson } from "../utils/hashing";
 import type { ReloadPlan } from "./reload-plan";
@@ -177,8 +177,8 @@ export class HotReloadCoordinator {
       .map(node => ({
         id: node.id,
         stableName: node.stableName,
-        method: (node as any).http?.method ?? (node as any).trigger?.method ?? "GET",
-        path: (node as any).http?.path ?? (node as any).trigger?.path ?? "/",
+        method: node.http?.method ?? "GET",
+        path: node.http?.path ?? "/",
         nodeId: node.id,
         kind: node.kind === "cron" ? "hook" as const : node.kind as CompiledDeployment["routingTable"][number]["kind"],
       }));

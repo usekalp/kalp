@@ -1,5 +1,4 @@
 import type { IdentityConfig } from "@/identity";
-import type { AIProvider, ProviderModelMap } from "@/primitives/ai";
 
 /**
  * MCP (Model Context Protocol) server configuration.
@@ -82,7 +81,7 @@ export interface McpServerRuntimeConfig {
 export interface KalpProjectConfig<
   TSecrets extends readonly string[] = readonly string[],
   TIdentity extends IdentityConfig = IdentityConfig,
-  TProvider extends AIProvider = AIProvider,
+  TAIConfig = undefined,
 > {
   /**
    * Environment variable names that should be treated as secrets.
@@ -160,11 +159,7 @@ export interface KalpProjectConfig<
   mcp?: Record<string, McpServerInput>;
 
   /**
-   * AI provider configuration used by primitives for model typing and defaults.
+   * AI configuration using the cloudflare() helper.
    */
-  ai?: {
-    provider: TProvider;
-    defaultModel?: ProviderModelMap[TProvider];
-    customModels?: readonly string[];
-  };
+  ai?: TAIConfig;
 }

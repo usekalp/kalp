@@ -6,7 +6,7 @@ import type {
   SchemaRegistry,
   NodeDescriptor,
 } from "@kalphq/sdk";
-import type { McpServerRuntimeConfig } from "@kalphq/sdk";
+import type { CloudflareAIConfig, McpServerRuntimeConfig } from "@kalphq/sdk";
 import type { RuntimeEventType } from "@kalphq/core";
 import { wireRuntime } from "@/wiring";
 import { AgentPersistence } from "@/persistence";
@@ -32,16 +32,21 @@ export class KalpAgent extends Agent<Env, AgentState> {
   private mcpConfig: Record<string, McpServerRuntimeConfig> | undefined;
   private schemaReady = false;
 
+  private aiConfig: CloudflareAIConfig | undefined;
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     try {
       const envRecord = env as unknown as Record<string, unknown>;
-      const raw = envRecord.KALP_MCP_CONFIG as string | undefined;
-      if (raw) {
-        this.mcpConfig = JSON.parse(raw);
-      }
+
+      const mcpRaw = envRecord.KALP_MCP_CONFIG as string | undefined;
+      if (mcpRaw) this.mcpConfig = JSON.parse(mcpRaw);
+
+      const aiRaw = envRecord.KALP_AI_CONFIG as string | undefined;
+      if (aiRaw) this.aiConfig = JSON.parse(aiRaw);
     } catch {
       this.mcpConfig = undefined;
+      this.aiConfig = undefined;
     }
   }
 
@@ -86,6 +91,10 @@ export class KalpAgent extends Agent<Env, AgentState> {
       };
       const mcpConfig = await this.loadMcpConfig(kvStorage);
 
+      const envRecord = this.env as unknown as Record<string, unknown>;
+      const cfApiToken = envRecord.CLOUDFLARE_API_TOKEN as string | undefined;
+      const cfAccountId = envRecord.CLOUDFLARE_ACCOUNT_ID as string | undefined;
+
       const persistence = new AgentPersistence(this.ctx.storage.sql);
       persistence.ensureReady();
 
@@ -95,7 +104,12 @@ export class KalpAgent extends Agent<Env, AgentState> {
         ctx.schemas,
         ctx.bundleManifest,
         bundleLoader,
-        { mcp: mcpConfig },
+        {
+          ai: this.aiConfig,
+          mcp: mcpConfig,
+          cloudflareApiToken: cfApiToken,
+          cloudflareAccountId: cfAccountId,
+        },
       );
 
       const eventType = this.deriveEventType(request, url.pathname, ctx.ir);

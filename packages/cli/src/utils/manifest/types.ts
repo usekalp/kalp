@@ -1,10 +1,10 @@
+import { type SourceMetadataManifest } from "@kalphq/compiler";
 import type {
   ArtifactManifest,
   BundleManifest,
   IRGraph,
   SchemaRegistry,
 } from "@kalphq/sdk";
-import type { SourceMetadataManifest } from "@kalphq/compiler";
 
 export interface BundledArtifactFile {
   file: string;
@@ -40,4 +40,3 @@ export function asString(value: unknown): string | undefined {
 export function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
-

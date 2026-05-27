@@ -16,11 +16,13 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsup && pnpm run build:studio",
+    "build": "tsup && pnpm run build:studio && pnpm run build:copy-template",
     "build:studio": "pnpm --filter=@kalphq/studio build",
+    "build:copy-template": "node scripts/copy-studio-assets.mjs",
     "dev": "tsup --watch",
     "lint": "tsc --noEmit",
-    "prepublishOnly": "pnpm build"
+    "prepublishOnly": "pnpm build",
+    "test": "vitest"
   },
   "dependencies": {
     "@antfu/ni": "24.4.0",
@@ -46,7 +48,10 @@
   "devDependencies": {
     "@types/json-stable-stringify": "1.2.0",
     "@types/node": "^22.15.3",
+    "@vitest/coverage-v8": "^1.6.1",
     "tsup": "^8.3.5",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "1.6.1"
   }
 }

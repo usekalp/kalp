@@ -29,12 +29,6 @@ export type { AgentContract } from "@/contracts";
 export { defineContract, defineContractFor } from "@/contracts";
 
 export type {
-  AIProvider,
-  ProviderModelMap,
-  ConfiguredModel,
-  ProviderName,
-  KalpModelId,
-  AIParams,
   MemoryListParams,
   MemoryListResult,
   SecretsRegistry,
@@ -43,6 +37,9 @@ export type {
   KalpLog,
   LogLevel,
   KalpAI,
+  KalpAITierRegistry,
+  ModelTier,
+  KnownTier,
   KalpMemory,
   KalpVault,
   KalpCache,
@@ -199,6 +196,16 @@ export type {
   McpServerRuntimeConfig,
   KalpAIEnvironment,
 } from "@/project";
+
+export { cloudflare, RECOMMENDED_MODELS } from "@/cloudflare";
+export type {
+  CloudflareAIConfig,
+  CloudflareSystemConfig,
+  CloudflareFallbackConfig,
+  ModelTierMap,
+  CloudflareModelId,
+  CloudflareRecommendedModelId,
+} from "@/cloudflare";
 
 export { getRegistry, clearRegistry } from "@/registry";
 export type { RegistryEntry } from "@/registry";

@@ -5,26 +5,23 @@ import { requireAuth } from "@/utils/auth";
 import { ensureStudioSecrets } from "@/utils/secret";
 import { readProjectState, writeProjectState } from "@/utils/project-state";
 import { materializeRuntime } from "@/utils/runtime";
-import {
-  getRequiredSecretForProvider,
-  readDotEnv,
-  resolveProviderFromConfig,
-} from "@/utils/ai";
+import { getRequiredAiSecrets, readDotEnv } from "@/utils/ai";
 import {
   loadProjectConfig,
   resolveIdentityAuthRequirements,
   resolveRuntimeIdentityConfig,
+  type RuntimeIdentityConfig,
 } from "@/utils/project-config";
 import { resolveProvider } from "@/utils/providers";
+import type {
+  RuntimeProvider,
+  DeployResult,
+} from "@/utils/providers/types";
+import { injectRuntimeConfigs } from "@/utils/runtime-config-inject";
 
 interface RuntimeWranglerConfig {
   name?: string;
   kv_namespaces?: Array<{ binding: string; id?: string }>;
-}
-
-interface KvNamespaceInfo {
-  id: string;
-  title: string;
 }
 
 async function readWranglerConfig(
@@ -45,18 +42,6 @@ function deriveKvNamespaceTitle(workerName: string, binding: string): string {
   return `${workerName}-${binding.toLowerCase().replace(/_/g, "-")}`;
 }
 
-async function listKvNamespaces(
-  cwd: string,
-  configPath: string,
-): Promise<KvNamespaceInfo[]> {
-  const provider = resolveProvider();
-  const namespaces = await provider.listNamespaces({ cwd, configPath });
-  return namespaces.map((item) => ({
-    id: item.id,
-    title: item.title,
-  }));
-}
-
 export async function ensureKvNamespaceBindingId(
   cwd: string,
   configPath: string,
@@ -65,13 +50,10 @@ export async function ensureKvNamespaceBindingId(
   const binding = config.kv_namespaces?.find(
     (item) => item.binding === "KALP_MANIFESTS",
   );
-
   if (!binding || !config.name) return null;
   if (binding.id) return binding.id;
 
   const expectedTitle = deriveKvNamespaceTitle(config.name, binding.binding);
-
-  // List namespaces using wrangler directly
   const listResult = await execa(
     "npx",
     ["wrangler", "kv", "namespace", "list", "--config", configPath],
@@ -80,22 +62,30 @@ export async function ensureKvNamespaceBindingId(
 
   if (listResult) {
     try {
-      const namespaces = JSON.parse(listResult.stdout) as Array<{ id: string; title: string }>;
+      const namespaces = JSON.parse(listResult.stdout) as Array<{
+        id: string;
+        title: string;
+      }>;
       const existing = namespaces.find((item) => item.title === expectedTitle);
       if (existing) {
         binding.id = existing.id;
         await writeWranglerConfig(configPath, config);
         return existing.id;
       }
-    } catch {
-      // JSON parse failed, fall through to create
-    }
+    } catch {}
   }
 
-  // Create the namespace if it doesn't exist
   const createResult = await execa(
     "npx",
-    ["wrangler", "kv", "namespace", "create", expectedTitle, "--config", configPath],
+    [
+      "wrangler",
+      "kv",
+      "namespace",
+      "create",
+      expectedTitle,
+      "--config",
+      configPath,
+    ],
     { cwd },
   );
   const idMatch = createResult.stdout.match(/"id":\s*"([^"]+)"/);
@@ -106,8 +96,109 @@ export async function ensureKvNamespaceBindingId(
   return idMatch[1];
 }
 
-function isNamespaceAlreadyExistsError(output: string): boolean {
+export function isNamespaceAlreadyExistsError(output: string): boolean {
   return output.includes("[code: 10014]") && output.includes("already exists");
+}
+
+type SecretEntry = [string, string];
+
+function collectSecretEntries(params: {
+  studioSecrets: Awaited<ReturnType<typeof ensureStudioSecrets>>;
+  envMap: Record<string, string>;
+  identityConfig: RuntimeIdentityConfig;
+}): SecretEntry[] {
+  const { studioSecrets, envMap, identityConfig } = params;
+
+  const aiSecrets = getRequiredAiSecrets();
+  const aiEntries: SecretEntry[] = [];
+  for (const secret of aiSecrets) {
+    const value = envMap[secret]?.trim();
+    if (value) aiEntries.push([secret, value]);
+  }
+
+  const identityRequirements = resolveIdentityAuthRequirements(identityConfig);
+  const identityEntries = identityRequirements.map((req) => {
+    const value = envMap[req.envKey]?.trim();
+    if (!value) {
+      throw new Error(
+        `Missing required secret ${req.envKey} for ${req.reason}. Add it to .env before deploy.`,
+      );
+    }
+    return [req.envKey, value] as [string, string];
+  });
+
+  const entries: SecretEntry[] = [
+    ["KALP_SECRET_KEY", studioSecrets.key],
+    ["KALP_STUDIO_PASSWORD", studioSecrets.studioPassword],
+    ["KALP_STUDIO_ADMIN_USER", studioSecrets.studioAdminUser],
+    ["KALP_SERVICE_KEY", studioSecrets.serviceKey],
+    ...aiEntries,
+    ...identityEntries,
+  ];
+
+  const deduped = new Map<string, string>();
+  for (const [name, value] of entries) deduped.set(name, value);
+  return [...deduped.entries()];
+}
+
+async function syncSecrets(
+  provider: RuntimeProvider,
+  cwd: string,
+  configPath: string,
+  secrets: SecretEntry[],
+): Promise<boolean> {
+  for (const [name, value] of secrets) {
+    try {
+      await provider.putSecret({ cwd, configPath, name, value });
+    } catch {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function deployWithRetry(
+  provider: RuntimeProvider,
+  cwd: string,
+  configPath: string,
+  useSecretsFile: boolean,
+): Promise<DeployResult> {
+  let result = await provider
+    .deployRuntime({ cwd, configPath, useSecretsFile })
+    .catch((error) => error);
+  if (result instanceof Error) {
+    if (isNamespaceAlreadyExistsError(result.message)) {
+      await ensureKvNamespaceBindingId(cwd, configPath);
+      result = await provider.deployRuntime({
+        cwd,
+        configPath,
+        useSecretsFile,
+      });
+    } else {
+      throw result;
+    }
+  }
+  return result;
+}
+
+interface CredentialsState {
+  credentialsFingerprint: string;
+  serviceKeyFingerprint: string;
+}
+
+function resolveFingerprints(
+  adminUser: string,
+  adminPassword: string,
+  serviceKey: string,
+): CredentialsState {
+  return {
+    credentialsFingerprint: createHash("sha256")
+      .update(`${adminUser}:${adminPassword}`)
+      .digest("hex"),
+    serviceKeyFingerprint: createHash("sha256")
+      .update(serviceKey)
+      .digest("hex"),
+  };
 }
 
 export async function runInitialDeploy(cwd: string): Promise<{
@@ -121,117 +212,72 @@ export async function runInitialDeploy(cwd: string): Promise<{
   serviceKeyChanged: boolean;
 }> {
   const auth = await requireAuth();
-  const loadedConfig = await loadProjectConfig(cwd);
-  const identityConfig = resolveRuntimeIdentityConfig(loadedConfig.raw);
-  const identitySecretRequirements = resolveIdentityAuthRequirements(identityConfig);
-  const aiProvider = await resolveProviderFromConfig(cwd);
-  const requiredProviderSecret = getRequiredSecretForProvider(aiProvider);
-  const secrets = await ensureStudioSecrets(cwd);
+  const { raw } = await loadProjectConfig(cwd);
+  const identityConfig = resolveRuntimeIdentityConfig(raw);
+  const studioSecrets = await ensureStudioSecrets(cwd);
   const envMap = await readDotEnv(cwd);
-  const providerSecretValue = envMap[requiredProviderSecret]?.trim();
-  if (!providerSecretValue) {
-    throw new Error(
-      `Missing required secret ${requiredProviderSecret} for provider "${aiProvider}". Add it to .env before deploy.`,
-    );
-  }
 
-  const resolvedIdentitySecrets = identitySecretRequirements.map((requirement) => {
-    const value = envMap[requirement.envKey]?.trim();
-    if (!value) {
-      throw new Error(
-        `Missing required secret ${requirement.envKey} for ${requirement.reason}. Add it to .env before deploy.`,
-      );
-    }
-    return { name: requirement.envKey, value };
+  const secretEntries = collectSecretEntries({
+    studioSecrets,
+    envMap,
+    identityConfig,
   });
 
-  const runtimeProvider = resolveProvider();
+  const provider = resolveProvider();
   const runtime = await materializeRuntime(cwd);
-  let secretSyncFailed = false;
-  const secretEntries = [
-    ["KALP_SECRET_KEY", secrets.key],
-    ["KALP_STUDIO_PASSWORD", secrets.studioPassword],
-    ["KALP_STUDIO_ADMIN_USER", secrets.studioAdminUser],
-    ["KALP_SERVICE_KEY", secrets.serviceKey],
-    [requiredProviderSecret, providerSecretValue],
-    ...resolvedIdentitySecrets.map((item) => [item.name, item.value] as const),
-  ];
-  const dedupedSecrets = new Map<string, string>();
-  for (const [name, value] of secretEntries) {
-    dedupedSecrets.set(name, value);
-  }
-
-  for (const [name, value] of dedupedSecrets.entries()) {
-    try {
-      await runtimeProvider.putSecret({
-        cwd,
-        configPath: runtime.wranglerConfigPath,
-        name,
-        value,
-      });
-    } catch {
-      secretSyncFailed = true;
-      break;
-    }
-  }
-
-  await ensureKvNamespaceBindingId(cwd, runtime.wranglerConfigPath).catch(
-    () => null,
+  const secretSyncFailed = await syncSecrets(
+    provider,
+    cwd,
+    runtime.wranglerConfigPath,
+    secretEntries,
   );
 
-  let deploy = await runtimeProvider
-    .deployRuntime({
-      cwd,
-      configPath: runtime.wranglerConfigPath,
-      useSecretsFile: secretSyncFailed,
-    })
-    .catch((error) => error);
-  if (deploy instanceof Error) {
-    const combined = deploy.message;
-    if (isNamespaceAlreadyExistsError(combined)) {
-      await ensureKvNamespaceBindingId(cwd, runtime.wranglerConfigPath);
-      deploy = await runtimeProvider.deployRuntime({
-        cwd,
-        configPath: runtime.wranglerConfigPath,
-        useSecretsFile: secretSyncFailed,
-      });
-    } else {
-      throw deploy;
-    }
-  }
+  await ensureKvNamespaceBindingId(cwd, runtime.wranglerConfigPath).catch(() => null);
 
-  const workerUrl = deploy.workerUrl;
-  const customDomains = deploy.customDomains ?? [];
+  await injectRuntimeConfigs({
+    wranglerConfigPath: runtime.wranglerConfigPath,
+    aiRaw: raw.ai,
+    identityConfig,
+    mcpRaw: raw.mcp,
+    envMap,
+    cloudflareAccountId: auth.accountId,
+  });
+
+  const deploy = await deployWithRetry(
+    provider,
+    cwd,
+    runtime.wranglerConfigPath,
+    secretSyncFailed,
+  );
+
+  const fingerprints = resolveFingerprints(
+    studioSecrets.studioAdminUser,
+    studioSecrets.studioPassword,
+    studioSecrets.serviceKey,
+  );
 
   const existingState = await readProjectState(cwd);
-
-  const credentialsFingerprint = createHash("sha256")
-    .update(`${secrets.studioAdminUser}:${secrets.studioPassword}`)
-    .digest("hex");
   const credentialsChanged =
-    existingState?.studioCredentialsFingerprint !== credentialsFingerprint;
-  const serviceKeyFingerprint = createHash("sha256")
-    .update(secrets.serviceKey)
-    .digest("hex");
+    existingState?.studioCredentialsFingerprint !== fingerprints.credentialsFingerprint;
   const serviceKeyChanged =
-    existingState?.serviceKeyFingerprint !== serviceKeyFingerprint;
+    existingState?.serviceKeyFingerprint !== fingerprints.serviceKeyFingerprint;
 
   await writeProjectState(cwd, {
-    workerUrl,
+    workerUrl: deploy.workerUrl,
     deployedAt: new Date().toISOString(),
     accountId: auth.accountId,
-    studioCredentialsFingerprint: credentialsFingerprint,
-    serviceKeyFingerprint,
+    studioCredentialsFingerprint: fingerprints.credentialsFingerprint,
+    serviceKeyFingerprint: fingerprints.serviceKeyFingerprint,
     agents: existingState?.agents ?? {},
   });
 
   return {
-    workerUrl,
-    customDomains,
+    workerUrl: deploy.workerUrl,
+    customDomains: deploy.customDomains ?? [],
     accountId: auth.accountId,
-    studioAdminUser: secrets.studioAdminUser,
-    studioPassword: secrets.studioPassword,
-    serviceKey: secrets.serviceKey,
+    studioAdminUser: studioSecrets.studioAdminUser,
+    studioPassword: studioSecrets.studioPassword,
+    serviceKey: studioSecrets.serviceKey,
     credentialsChanged,
     serviceKeyChanged,
   };

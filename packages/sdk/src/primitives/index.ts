@@ -7,13 +7,10 @@
  */
 
 export type {
-  AIProvider,
-  ProviderModelMap,
-  ConfiguredModel,
-  ProviderName,
-  KalpModelId,
-  AIParams,
   KalpAI,
+  KalpAITierRegistry,
+  ModelTier,
+  KnownTier,
 } from "@/primitives/ai";
 
 export type { KalpCache } from "@/primitives/cache";

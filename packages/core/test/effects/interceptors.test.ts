@@ -39,7 +39,7 @@ describe("createInterceptEffect", () => {
     const ctx = createTestContext();
     const intercept = createInterceptEffect(ctx.resolver, ctx.log, ctx.frame, ctx.onEffectResolved);
 
-    const result = await intercept("ai.generate", { prompt: "hi" });
+    const result = await intercept("ai.generate", { tier: "low", prompt: "hi" });
     expect(result).toEqual({ text: "hello" });
     expect(ctx.resolver.resolve).toHaveBeenCalledTimes(1);
     expect(ctx.onEffectResolved).toHaveBeenCalledTimes(1);
@@ -50,7 +50,7 @@ describe("createInterceptEffect", () => {
     ctx.log.append({
       seq: 0,
       type: "ai.generate",
-      payload: { prompt: "hi" },
+      payload: { tier: "low", prompt: "hi" },
       executionId: "exec-1",
       traceId: "t1",
       threadId: "th1",
@@ -58,7 +58,7 @@ describe("createInterceptEffect", () => {
       result: { text: "hello" },
     });
     const intercept = createInterceptEffect(ctx.resolver, ctx.log, ctx.frame, ctx.onEffectResolved);
-    const result = await intercept("ai.generate", { prompt: "hi" });
+    const result = await intercept("ai.generate", { tier: "low", prompt: "hi" });
     expect(result).toEqual({ text: "hello" });
     expect(ctx.resolver.resolve).not.toHaveBeenCalled();
   });
@@ -68,7 +68,7 @@ describe("createInterceptEffect", () => {
     ctx.log.append({
       seq: 0,
       type: "ai.generate",
-      payload: { prompt: "hi" },
+      payload: { tier: "low", prompt: "hi" },
       executionId: "exec-1",
       traceId: "t1",
       threadId: "th1",
@@ -77,7 +77,7 @@ describe("createInterceptEffect", () => {
     });
     const intercept = createInterceptEffect(ctx.resolver, ctx.log, ctx.frame, ctx.onEffectResolved);
 
-    await expect(intercept("ai.generate", { prompt: "hi" })).rejects.toThrow("cached error");
+    await expect(intercept("ai.generate", { tier: "low", prompt: "hi" })).rejects.toThrow("cached error");
   });
 
   it("should propagate error and persist it", async () => {
@@ -85,7 +85,7 @@ describe("createInterceptEffect", () => {
     ctx.resolver.resolve = vi.fn().mockRejectedValue(new Error("effect failed"));
     const intercept = createInterceptEffect(ctx.resolver, ctx.log, ctx.frame, ctx.onEffectResolved);
 
-    await expect(intercept("ai.generate", { prompt: "hi" })).rejects.toThrow("effect failed");
+    await expect(intercept("ai.generate", { tier: "low", prompt: "hi" })).rejects.toThrow("effect failed");
     expect(ctx.onEffectResolved).toHaveBeenCalledWith(
       expect.objectContaining({ error: expect.objectContaining({ message: "effect failed" }) }),
     );

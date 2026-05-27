@@ -32,7 +32,7 @@ export const summarizeTool = defineToolFor<AgentState>()({
   async handler({ text }, ctx) {
     // Business intent: transform raw user text into a concise actionable summary.
     const summary = await ctx.ai.generate({
-      model: "gpt-4o-mini",
+      tier: "low",
       system: "Summarize this in one sentence.",
       prompt: text,
     });
@@ -68,7 +68,7 @@ export const exampleContract = defineContractFor<AgentState>()({
   async handler(input, ctx) {
     // Business intent: expose a public API for external automation requests.
     const recommendation = await ctx.ai.generate({
-      model: "gpt-4o-mini",
+      tier: "low",
       system: "Generate a short operational recommendation.",
       prompt: input.action,
     });

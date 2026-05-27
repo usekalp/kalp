@@ -28,7 +28,8 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "lint": "tsc --noEmit",
-    "prepublishOnly": "pnpm build",
+    "prepublishOnly": "pnpm sync:models && pnpm build",
+    "sync:models": "npx tsx scripts/sync-cloudflare-models.ts",
     "test": "vitest"
   },
   "dependencies": {

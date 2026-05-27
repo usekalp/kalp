@@ -7,9 +7,8 @@ import type {
   IRGraph,
   SchemaRegistry,
 } from "@kalphq/sdk";
-import type { SourceMetadataManifest } from "@kalphq/compiler";
 import type { AgentManifestV3 } from "@/utils/manifest/types";
-import { buildAgent } from "@kalphq/compiler";
+import { buildAgent, type SourceMetadataManifest } from "@kalphq/compiler";
 
 export type { AgentManifestV3 } from "@/utils/manifest/types";
 export { computePushHash } from "@/utils/ir/hashIR";

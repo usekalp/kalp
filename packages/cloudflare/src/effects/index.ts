@@ -1,6 +1,6 @@
 import type { PersistenceAdapter, EffectResolver, Effect, EffectType, EffectMap } from "@kalphq/core";
-import type { McpServerRuntimeConfig } from "@kalphq/sdk";
-import { resolveAiGenerate, resolveAiStream, resolveAiClassify, type AiProviders } from "./ai.resolver";
+import type { CloudflareAIConfig, McpServerRuntimeConfig } from "@kalphq/sdk";
+import { resolveAiGenerate, resolveAiStream, resolveAiClassify, type AiTransportConfig } from "./ai.transport";
 import {
   resolveCacheGet,
   resolveCacheSet,
@@ -15,18 +15,33 @@ import { resolveVaultGet, type VaultProviders } from "./vault.resolver";
 import { McpRegistry } from "./mcp.resolver";
 import { resolveFetch } from "./fetch.resolver";
 
-export type { AiProviders, VaultProviders };
-export type McpProviders = { mcp?: Record<string, McpServerRuntimeConfig> };
-export type CloudflareProviders = AiProviders & VaultProviders & McpProviders;
+export type { AiTransportConfig, VaultProviders };
+
+export type CloudflareProviders = {
+  ai?: CloudflareAIConfig;
+  mcp?: Record<string, McpServerRuntimeConfig>;
+  vault?: Record<string, string>;
+  cloudflareApiToken?: string;
+  cloudflareAccountId?: string;
+};
 
 export class CloudflareEffectResolver implements EffectResolver {
   private mcpRegistry: McpRegistry;
+  private aiTransport: AiTransportConfig;
+  private providers: CloudflareProviders;
 
   constructor(
-    private providers: CloudflareProviders = {},
+    providers: CloudflareProviders = {},
     private persistence?: PersistenceAdapter,
   ) {
+    this.providers = providers;
     this.mcpRegistry = new McpRegistry({ mcp: providers.mcp });
+    this.aiTransport = {
+      modelTiers: providers.ai?.models,
+      cloudflareAccountId: providers.cloudflareAccountId,
+      cloudflareApiToken: providers.cloudflareApiToken,
+      cloudflareGatewayId: providers.ai?.gatewayId,
+    };
   }
 
   async resolve<T extends EffectType>(
@@ -35,11 +50,11 @@ export class CloudflareEffectResolver implements EffectResolver {
     const p = effect.payload as Record<string, unknown>;
     switch (effect.type) {
       case "ai.generate":
-        return resolveAiGenerate(p, this.providers) as Promise<EffectMap[T]["result"]>;
+        return resolveAiGenerate(p, this.aiTransport) as Promise<EffectMap[T]["result"]>;
       case "ai.stream":
-        return resolveAiStream(p, this.providers) as Promise<EffectMap[T]["result"]>;
+        return resolveAiStream(p, this.aiTransport) as Promise<EffectMap[T]["result"]>;
       case "ai.classify":
-        return resolveAiClassify(p, this.providers) as Promise<EffectMap[T]["result"]>;
+        return resolveAiClassify(p, this.aiTransport) as Promise<EffectMap[T]["result"]>;
       case "cache.get":
         return resolveCacheGet(p, this.persistence) as Promise<EffectMap[T]["result"]>;
       case "cache.set":

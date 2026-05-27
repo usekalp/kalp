@@ -35,13 +35,13 @@ export const summarizeResearch = defineToolFor<AgentState>()({
   async handler({ topic }, ctx) {
     // Business intent: synthesize research topic and suggest next exploration step.
     const summary = await ctx.ai.generate({
-      model: "gpt-4o-mini",
+      tier: "low",
       system: "Summarize research topic.",
       prompt: topic,
     });
 
     const nextQuestion = await ctx.ai.generate({
-      model: "gpt-4o-mini",
+      tier: "low",
       system: "Propose one next research question.",
       prompt: summary,
     });
@@ -81,7 +81,7 @@ export const researchContract = defineContractFor<AgentState>()({
   async handler(input, ctx) {
     // Business intent: expose research brief generation to external orchestrators.
     const brief = await ctx.ai.generate({
-      model: "gpt-4o-mini",
+      tier: "low",
       system: "Create short research brief.",
       prompt: input.topic,
     });

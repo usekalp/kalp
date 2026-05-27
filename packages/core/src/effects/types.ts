@@ -8,15 +8,15 @@
  */
 export interface ExternalEffectMap {
   "ai.generate": {
-    payload: { prompt: string; schema?: unknown; system?: string };
-    result: { text: string; parsed?: unknown };
+    payload: { tier: string; prompt: string; system?: string; schema?: unknown };
+    result: { text: string; parsed?: unknown; tier: string; resolvedModel: string };
   };
   "ai.stream": {
-    payload: { prompt: string; schema?: unknown; system?: string };
+    payload: { tier: string; prompt: string; system?: string };
     result: string;
   };
   "ai.classify": {
-    payload: { prompt: string; classes: string[]; system?: string; model?: string; confidenceThreshold?: number };
+    payload: { tier: string; input: string; classes: string[]; confidenceThreshold?: number };
     result: string;
   };
   "cache.get": {

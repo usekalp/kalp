@@ -2,7 +2,11 @@
   "extends": "../typescript-config/base.json",
   "compilerOptions": {
     "noEmit": true,
+    "rootDir": "..",
     "outDir": "./dist",
+    "composite": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "paths": {
       "@/*": ["./src/*"],
       "@kalphq/compiler": ["../compiler/src/index.ts"],
@@ -13,6 +17,6 @@
     "resolveJsonModule": true,
     "esModuleInterop": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"]
 }

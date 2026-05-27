@@ -14,7 +14,6 @@ export function classifyChange(
   cwd: string,
 ): ClassifiedChange {
   const normalized = changedPath.replace(/\\/g, "/");
-  const normalizedCwd = cwd.replace(/\\/g, "/");
 
   if (normalized.endsWith(".env") || normalized.endsWith(".dev.vars")) {
     return { domain: "env", restartReason: "env-change", requiresRematerialize: false };

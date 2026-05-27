@@ -6,8 +6,8 @@ describe("createAIContext", () => {
   it("should call ai.generate with prompt and schema", async () => {
     const { interceptEffect, calls } = createInterceptorMock();
     const ai = createAIContext(interceptEffect);
-    const result = await ai.generate({ prompt: "hello", model: "gpt-4o" as any });
-    expect(calls[0]).toMatchObject({ type: "ai.generate", payload: { prompt: "hello" } });
+    const result = await ai.generate({ prompt: "hello" });
+    expect(calls[0]).toMatchObject({ type: "ai.generate", payload: { prompt: "hello", tier: "low" } });
     expect(result).toBeUndefined();
   });
 
@@ -17,7 +17,7 @@ describe("createAIContext", () => {
     await ai.classify({ input: "test", labels: ["a", "b"] });
     expect(calls[0]).toMatchObject({
       type: "ai.classify",
-      payload: { prompt: "test", classes: ["a", "b"] },
+      payload: { input: "test", tier: "low", classes: ["a", "b"] },
     });
   });
 
@@ -26,7 +26,7 @@ describe("createAIContext", () => {
       "ai.stream": () => "streamed result",
     });
     const ai = createAIContext(interceptEffect);
-    const gen = ai.stream({ prompt: "hello", model: "gpt-4o" as any });
+    const gen = ai.stream({ prompt: "hello" });
     const chunks = [];
     for await (const chunk of gen) {
       chunks.push(chunk);

@@ -22,3 +22,5 @@ export {
   collectMcpSecretRequirements,
   extractEnvName,
 } from "@/project/normalize";
+
+export type { CloudflareModelId } from "@/cloudflare/models";

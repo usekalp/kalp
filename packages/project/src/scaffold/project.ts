@@ -12,68 +12,57 @@ import pkg from "../../package.json";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// dist/index.js -> templates is at ../templates
 const TEMPLATES_ROOT = resolve(__dirname, "..", "templates");
 
-// Get version from bundled package.json
 const CLI_VERSION = pkg.version;
 
 export interface ScaffoldProjectOptions {
   projectName: string;
   targetDir: string;
-  aiProvider?: "openai" | "anthropic" | "openrouter" | "custom";
 }
 
-/**
- * Scaffolds a new Kalp project with configuration files.
- */
 export async function scaffoldProject(
   opts: ScaffoldProjectOptions,
 ): Promise<void> {
   const { projectName, targetDir } = opts;
-  const aiProvider = opts.aiProvider ?? "openai";
-  const providerSecretMap = {
-    openai: "OPENAI_API_KEY",
-    anthropic: "ANTHROPIC_API_KEY",
-    openrouter: "OPENROUTER_API_KEY",
-    custom: "CUSTOM_AI_API_KEY",
-  } as const;
-  const providerSecret = providerSecretMap[aiProvider];
 
   const projectTemplateDir = join(TEMPLATES_ROOT, "project");
 
-  // Copy template files
   await copyDir(projectTemplateDir, targetDir);
 
-  // Handle gitignore renaming (npm ignores .gitignore, so we store it as gitignore in templates)
   const gitignorePath = join(targetDir, "gitignore");
   try {
     await rename(gitignorePath, join(targetDir, ".gitignore"));
   } catch {
-    // Ignore if template didn't have it
   }
 
-  // Replace placeholders in the entire project
   await replacePlaceholders(targetDir, {
     __PROJECT_NAME__: projectName,
     __CLI_VERSION__: CLI_VERSION,
   });
 
-  // Create .temp for version tracking (if not in template)
   const tempDir = join(targetDir, ".temp");
   await ensureDir(tempDir);
 
-  // kalp.config.ts is usually not in template to allow better customization
-  const kalpConfig = `import { defineConfig, UserId } from "@kalphq/sdk";
+  const kalpConfig = `import { defineConfig, cloudflare, UserId } from "@kalphq/sdk";
 
 export default defineConfig({
-  secrets: ["${providerSecret}"],
-  ai: {
-    provider: "${aiProvider}",
-  },
+  secrets: [],
 
-  // Clerk authentication example (optional)
-  // Remove or replace with your own identity provider
+  ai: cloudflare({
+    models: {
+      low: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      high: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      reasoning: "@cf/deepseek/deepseek-r1-distill-qwen-32b",
+      vision: "@cf/meta/llama-3.2-11b-vision-instruct",
+      moderation: "@cf/meta/llama-guard-3-8b",
+      extraction: "@cf/meta/llama-3.1-8b-instruct",
+      classification: "@cf/meta/llama-3.1-8b-instruct",
+      coding: "@cf/deepseek/deepseek-coder-6.7b-instruct",
+      longContext: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    },
+  }),
+
   identity: {
     id: "clerk",
     strategy: {
@@ -81,7 +70,6 @@ export default defineConfig({
       jwksUrl: "https://your-clerk-domain.clerk.accounts.dev/.well-known/jwks.json",
     },
     mapIdentity: (payload, headers) => {
-      // Handle both JWT users and API key bots
       if (headers?.["x-bot-key"]) {
         return {
           userId: "service-bot-001" as UserId,
@@ -106,66 +94,54 @@ export default defineConfig({
 `;
   await writeFileIfNotExists(join(targetDir, "kalp.config.ts"), kalpConfig);
 
-  const kalpTypesDir = join(targetDir, ".kalp");
-  await ensureDir(kalpTypesDir);
-  const generatedTypes = `// 🦋 Kalp Generated Types
+  const kalpGeneratedDir = join(targetDir, ".kalp", "generated");
+  await ensureDir(kalpGeneratedDir);
+  const generatedTypes = `// \u{1F98B} Kalp Generated Types
 // This file is auto-generated. Do not edit manually.
 /**
  * Registered secrets from kalp.config.ts
  * @generated
  */
-export type RegisteredSecretKeys = readonly [${JSON.stringify(providerSecret)}];
+export type RegisteredSecretKeys = readonly [];
 
 /**
- * AI provider resolved from kalp.config.ts
+ * AI model tier keys resolved from cloudflare config
  * @generated
  */
-export type ConfiguredAIProvider = ${JSON.stringify(aiProvider)};
-
-/**
- * Custom model suggestions resolved from kalp.config.ts
- * @generated
- */
-export type ConfiguredAICustomModels = readonly [];
-`;
-  await writeFileIfNotExists(
-    join(kalpTypesDir, "types.d.ts"),
-    generatedTypes,
-  );
-
-  const kalpDts = `import "@kalphq/sdk";
-import type {
-  RegisteredSecretKeys,
-  ConfiguredAIProvider,
-  ConfiguredAICustomModels,
-} from "./.kalp/types";
+export type ConfiguredAIModelTiers = readonly ["low", "high", "reasoning", "vision", "moderation", "extraction", "classification", "coding", "longContext"];
 
 declare module "@kalphq/sdk" {
   interface SecretsRegistry {
     keys: RegisteredSecretKeys;
   }
 
-  interface KalpAIEnvironment {
-    provider: ConfiguredAIProvider;
-    customModels: ConfiguredAICustomModels;
+  interface KalpAITierNames {
+    [key in ConfiguredAIModelTiers[number]]: true;
   }
 }
 `;
-  await writeFileIfNotExists(join(targetDir, "kalp.d.ts"), kalpDts);
+  await writeFileIfNotExists(
+    join(kalpGeneratedDir, "project.d.ts"),
+    generatedTypes,
+  );
 
-  // Generate Studio authentication secrets
   const secretKey = randomBytes(32).toString("hex");
   const studioPassword = randomBytes(24).toString("base64url");
   const serviceKey = `kalp_sk_live_${randomBytes(32).toString("base64url")}`;
-  const customExtra = aiProvider === "custom" ? "CUSTOM_AI_BASE_URL=\n" : "";
-  const envContent = `# Kalp Studio Authentication Secret
-# Used to sign and validate Studio sessions
+  const envContent = `# Secret key used to encrypt Studio session cookies and sign auth tokens.
+# Auto-generated during scaffolding. Keep this value secret.
 KALP_SECRET_KEY=${secretKey}
+
+# Password for the Studio admin account used to log into the dashboard.
+# Combine with KALP_STUDIO_ADMIN_USER to authenticate.
 KALP_STUDIO_PASSWORD=${studioPassword}
+
+# Admin username for Studio dashboard login.
 KALP_STUDIO_ADMIN_USER=admin
+
+# Service key used for server-to-server API authentication.
+# Required when making authenticated requests between Kalp services.
 KALP_SERVICE_KEY=${serviceKey}
-${providerSecret}=
-${customExtra}
 `;
 
   await writeFileIfNotExists(join(targetDir, ".env"), envContent);

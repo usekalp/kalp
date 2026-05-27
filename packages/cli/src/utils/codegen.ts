@@ -3,19 +3,12 @@ import { join } from "node:path";
 import { loadProjectConfig } from "@/utils/project-config";
 import type { ProjectGenerator, GeneratorResult } from "./sync";
 
-const GENERATED_HEADER = `// 🦋 Kalp Generated Types
-// This file is auto-generated. Do not edit manually.
-`;
-
-type AIProvider = string;
+const GENERATED_HEADER = "// \u{1F98B} Kalp Generated Types\n// This file is auto-generated. Do not edit manually.\n";
 
 interface GeneratedTypeConfig {
   secrets: string[];
-  provider: AIProvider;
-  customModels: string[];
+  modelTierKeys: string[];
 }
-
-const DEFAULT_PROVIDER: AIProvider = "openai";
 
 function sanitizeSecrets(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
@@ -26,20 +19,13 @@ function sanitizeSecrets(input: unknown): string[] {
     .sort((a, b) => a.localeCompare(b));
 }
 
-function sanitizeCustomModels(input: unknown): string[] {
-  if (!Array.isArray(input)) return [];
-  return input
-    .filter((value): value is string => typeof value === "string")
-    .map((value) => value.trim())
+function sanitizeModelTierKeys(input: unknown): string[] {
+  if (!input || typeof input !== "object") return [];
+  const keys = Object.keys(input as Record<string, unknown>);
+  return keys
+    .map((k) => k.trim())
     .filter(Boolean)
     .sort((a, b) => a.localeCompare(b));
-}
-
-function sanitizeProvider(input: unknown): string {
-  if (typeof input === "string" && input.trim()) {
-    return input.trim();
-  }
-  return DEFAULT_PROVIDER;
 }
 
 async function readConfigForTypes(cwd: string): Promise<GeneratedTypeConfig> {
@@ -49,10 +35,11 @@ async function readConfigForTypes(cwd: string): Promise<GeneratedTypeConfig> {
       ? (raw.ai as Record<string, unknown>)
       : {};
 
+  const models = aiConfig.models;
+
   return {
     secrets: sanitizeSecrets(raw.secrets),
-    provider: sanitizeProvider(aiConfig.provider),
-    customModels: sanitizeCustomModels(aiConfig.customModels),
+    modelTierKeys: sanitizeModelTierKeys(models),
   };
 }
 
@@ -71,33 +58,23 @@ function buildKalpGeneratedTypes(config: GeneratedTypeConfig): string {
 export type RegisteredSecretKeys = ${toStringTuple(config.secrets)};
 
 /**
- * AI provider resolved from kalp.config.ts
+ * AI model tier keys resolved from cloudflare config
  * @generated
  */
-export type ConfiguredAIProvider = ${JSON.stringify(config.provider)};
-
-/**
- * Custom model suggestions resolved from kalp.config.ts
- * @generated
- */
-export type ConfiguredAICustomModels = ${toStringTuple(config.customModels)};
+export type ConfiguredAIModelTiers = ${toStringTuple(config.modelTierKeys)};
 
 declare module "@kalphq/sdk" {
   interface SecretsRegistry {
     keys: RegisteredSecretKeys;
   }
 
-  interface KalpAIEnvironment {
-    provider: ConfiguredAIProvider;
-    customModels: ConfiguredAICustomModels;
+  interface KalpAITierRegistry {
+    keys: ConfiguredAIModelTiers;
   }
 }
 `;
 }
 
-/**
- * Generator for core project types (AI, Secrets, Models).
- */
 export class ProjectTypesGenerator implements ProjectGenerator {
   id = "project";
   name = "Project Types";
@@ -111,7 +88,6 @@ export class ProjectTypesGenerator implements ProjectGenerator {
     const config = await readConfigForTypes(cwd);
     const content = buildKalpGeneratedTypes(config);
 
-    // Check if update is needed
     const existing = await readFile(typesPath, "utf-8").catch(() => null);
     if (existing === content) {
       return { updated: false };
@@ -122,10 +98,6 @@ export class ProjectTypesGenerator implements ProjectGenerator {
   }
 }
 
-/**
- * Legacy export for backward compatibility during refactor.
- * @deprecated Use ProjectSynchronizer instead.
- */
 export async function generateTypes(cwd: string): Promise<void> {
   const gen = new ProjectTypesGenerator();
   await gen.generate(cwd);
